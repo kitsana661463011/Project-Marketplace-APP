@@ -1,0 +1,133 @@
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
+import '../config/api_config.dart';
+
+class ApiService {
+  static String get baseUrl {
+    if (kIsWeb) {
+      return ApiConfig.webBaseUrl;
+    }
+    return ApiConfig.baseUrl;
+  }
+
+  static String get imageUrl {
+    if (kIsWeb) {
+      return ApiConfig.webImageBaseUrl;
+    }
+    return ApiConfig.imageBaseUrl;
+  }
+
+  static String getImagePath(String? filename) {
+    if (filename == null || filename.isEmpty) return '';
+    return '$imageUrl/$filename';
+  }
+
+  static Future<Map<String, dynamic>> get(String endpoint) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl$endpoint'),
+        headers: {'Accept': 'application/json'},
+      );
+      return _handleResponse(response);
+    } catch (e) {
+      return {'status': false, 'message': 'Connection error: $e', 'data': null};
+    }
+  }
+
+  static Future<Map<String, dynamic>> post(
+    String endpoint,
+    Map<String, dynamic> body,
+  ) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl$endpoint'),
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode(body),
+      );
+      return _handleResponse(response);
+    } catch (e) {
+      return {'status': false, 'message': 'Connection error: $e', 'data': null};
+    }
+  }
+
+  static Future<Map<String, dynamic>> put(
+    String endpoint,
+    Map<String, dynamic> body,
+  ) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$baseUrl$endpoint'),
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode(body),
+      );
+      return _handleResponse(response);
+    } catch (e) {
+      return {'status': false, 'message': 'Connection error: $e', 'data': null};
+    }
+  }
+
+  static Future<Map<String, dynamic>> delete(String endpoint) async {
+    try {
+      final response = await http.delete(
+        Uri.parse('$baseUrl$endpoint'),
+        headers: {'Accept': 'application/json'},
+      );
+      return _handleResponse(response);
+    } catch (e) {
+      return {'status': false, 'message': 'Connection error: $e', 'data': null};
+    }
+  }
+
+  static Future<Map<String, dynamic>> postMultipart(
+    String endpoint,
+    Map<String, String> fields, {
+    String? fileKey,
+    String? filePath,
+    List<int>? fileBytes,
+    String? fileName,
+  }) async {
+    try {
+      final request = http.MultipartRequest('POST', Uri.parse('$baseUrl$endpoint'));
+      request.headers.addAll({'Accept': 'application/json'});
+      request.fields.addAll(fields);
+
+      if (fileKey != null) {
+        if (filePath != null && filePath.isNotEmpty) {
+          request.files.add(await http.MultipartFile.fromPath(fileKey, filePath));
+        } else if (fileBytes != null && fileBytes.isNotEmpty) {
+          request.files.add(http.MultipartFile.fromBytes(
+            fileKey,
+            fileBytes,
+            filename: fileName ?? 'upload.png',
+          ));
+        }
+      }
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+      return _handleResponse(response);
+    } catch (e) {
+      return {'status': false, 'message': 'Connection error: $e', 'data': null};
+    }
+  }
+
+  static Map<String, dynamic> _handleResponse(http.Response response) {
+    try {
+      final body = jsonDecode(response.body);
+      return body;
+    } catch (e) {
+      return {
+        'status': false,
+        'message': 'Failed to parse response',
+        'data': null,
+      };
+    }
+  }
+}
