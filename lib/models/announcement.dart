@@ -3,6 +3,7 @@ class Announcement {
   final String title;
   final String? announcementType;
   final String? description;
+  final String? image;
   final String? publishDate;
   final String? status;
   final int? userId;
@@ -13,6 +14,7 @@ class Announcement {
     required this.title,
     this.announcementType,
     this.description,
+    this.image,
     this.publishDate,
     this.status,
     this.userId,
@@ -25,6 +27,7 @@ class Announcement {
       title: json['title'] ?? '',
       announcementType: json['announcement_type'],
       description: json['description'],
+      image: json['image'],
       publishDate: json['publish_date'],
       status: json['status'],
       userId: json['user_id'],

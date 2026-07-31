@@ -41,4 +41,19 @@ class BookingService {
     }
     return null;
   }
+
+  static Future<Map<String, dynamic>> requestRefund({
+    required int bookingId,
+    required String refundReason,
+    required String bankName,
+    required String accountNumber,
+    required String accountName,
+  }) async {
+    return await ApiService.put('${ApiConfig.bookings}/$bookingId/request-refund', {
+      'refund_reason': refundReason,
+      'refund_bank_name': bankName,
+      'refund_account_number': accountNumber,
+      'refund_account_name': accountName,
+    });
+  }
 }

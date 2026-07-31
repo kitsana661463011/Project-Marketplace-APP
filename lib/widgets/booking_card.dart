@@ -1,11 +1,139 @@
 import 'package:flutter/material.dart';
+import '../config/api_config.dart';
 import '../models/booking.dart';
+import '../services/booking_service.dart';
 
 class BookingCard extends StatelessWidget {
   final Booking booking;
   final VoidCallback? onTap;
+  final VoidCallback? onRefundSuccess;
 
-  const BookingCard({super.key, required this.booking, this.onTap});
+  const BookingCard({
+    super.key,
+    required this.booking,
+    this.onTap,
+    this.onRefundSuccess,
+  });
+
+  void _showRefundDialog(BuildContext context) {
+    final bankController = TextEditingController();
+    final accountNumberController = TextEditingController();
+    final accountNameController = TextEditingController();
+    final reasonController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.currency_exchange, color: Colors.purple),
+            SizedBox(width: 8),
+            Text('ยื่นคำขอคืนเงิน', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'กรุณากรอกข้อมูลบัญชีธนาคารสำหรับรับเงินโอนคืน',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: bankController,
+                  decoration: const InputDecoration(
+                    labelText: 'ชื่อธนาคาร (เช่น กสิกรไทย, ไทยพาณิชย์)',
+                    prefixIcon: Icon(Icons.account_balance),
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  validator: (v) => (v == null || v.trim().isEmpty) ? 'กรุณากรอกชื่อธนาคาร' : null,
+                ),
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: accountNumberController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'เลขที่บัญชี',
+                    prefixIcon: Icon(Icons.numbers),
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  validator: (v) => (v == null || v.trim().isEmpty) ? 'กรุณากรอกเลขที่บัญชี' : null,
+                ),
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: accountNameController,
+                  decoration: const InputDecoration(
+                    labelText: 'ชื่อบัญชีผู้รับเงิน',
+                    prefixIcon: Icon(Icons.person),
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  validator: (v) => (v == null || v.trim().isEmpty) ? 'กรุณากรอกชื่อบัญชี' : null,
+                ),
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: reasonController,
+                  maxLines: 2,
+                  decoration: const InputDecoration(
+                    labelText: 'เหตุผลในการขอคืนเงิน',
+                    prefixIcon: Icon(Icons.notes),
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  validator: (v) => (v == null || v.trim().isEmpty) ? 'กรุณาระบุเหตุผล' : null,
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('ยกเลิก'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.purple,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () async {
+              if (formKey.currentState!.validate() && booking.bookingId != null) {
+                Navigator.pop(ctx);
+                final res = await BookingService.requestRefund(
+                  bookingId: booking.bookingId!,
+                  refundReason: reasonController.text.trim(),
+                  bankName: bankController.text.trim(),
+                  accountNumber: accountNumberController.text.trim(),
+                  accountName: accountNameController.text.trim(),
+                );
+
+                if (context.mounted) {
+                  if (res['status'] == true) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('ส่งคำขอคืนเงินเรียบร้อยแล้ว')),
+                    );
+                    onRefundSuccess?.call();
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(res['message'] ?? 'เกิดข้อผิดพลาดในการยื่นขอคืนเงิน')),
+                    );
+                  }
+                }
+              }
+            },
+            child: const Text('ยืนยันส่งคำขอ'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -108,6 +236,109 @@ class BookingCard extends StatelessWidget {
                   '฿${booking.amount!.toStringAsFixed(0)}',
                 ),
               ],
+              if (booking.status == 'cancelled' || booking.rejectReason != null) ...[
+                const SizedBox(height: 6),
+                _buildInfoRow(
+                  theme,
+                  Icons.error_outline,
+                  'เหตุผลที่ไม่อนุมัติ',
+                  booking.rejectReason != null && booking.rejectReason!.isNotEmpty
+                      ? booking.rejectReason!
+                      : 'ไม่ได้ระบุเหตุผล',
+                  textColor: Colors.red.shade700,
+                ),
+              ],
+              if (booking.status == 'refund_requested') ...[
+                const SizedBox(height: 6),
+                _buildInfoRow(
+                  theme,
+                  Icons.info_outline,
+                  'สถานะคืนเงิน',
+                  'กำลังรอแอดมินดำเนินการโอนเงินคืน',
+                  textColor: Colors.purple.shade700,
+                ),
+              ],
+              if (booking.status == 'refunded') ...[
+                const SizedBox(height: 6),
+                _buildInfoRow(
+                  theme,
+                  Icons.check_circle_outline,
+                  'สถานะคืนเงิน',
+                  'โอนเงินคืนเข้าบัญชีสำเร็จแล้ว',
+                  textColor: Colors.cyan.shade800,
+                ),
+                if (booking.refundSlip != null && booking.refundSlip!.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.cyan.shade700,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      ),
+                      onPressed: () {
+                        final imageUrl = '${ApiConfig.apiImageUrl}/${booking.refundSlip}';
+                        showDialog(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            title: const Text('หลักฐานการโอนเงินคืน', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                            content: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Image.network(
+                                    imageUrl,
+                                    fit: BoxFit.contain,
+                                    errorBuilder: (context, error, stackTrace) => const Padding(
+                                      padding: EdgeInsets.all(16.0),
+                                      child: Column(
+                                        children: [
+                                          Icon(Icons.broken_image, size: 48, color: Colors.grey),
+                                          SizedBox(height: 8),
+                                          Text('ไม่สามารถโหลดภาพสลิปได้', style: TextStyle(color: Colors.grey)),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(ctx),
+                                child: const Text('ปิด'),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.receipt_long, size: 16),
+                      label: const Text('ดูสลิปโอนเงินคืน', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ],
+              ],
+              // Refund Button Action
+              if (booking.status == 'approved' || booking.status == 'pending') ...[
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.purple,
+                      side: const BorderSide(color: Colors.purple),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    ),
+                    onPressed: () => _showRefundDialog(context),
+                    icon: const Icon(Icons.currency_exchange, size: 16),
+                    label: const Text('ขอคืนเงิน', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -119,16 +350,17 @@ class BookingCard extends StatelessWidget {
     ThemeData theme,
     IconData icon,
     String label,
-    String value,
-  ) {
+    String value, {
+    Color? textColor,
+  }) {
     return Row(
       children: [
-        Icon(icon, size: 16, color: theme.colorScheme.onSurface.withValues(alpha: 0.5)),
+        Icon(icon, size: 16, color: textColor ?? theme.colorScheme.onSurface.withValues(alpha: 0.5)),
         const SizedBox(width: 6),
         Text(
           '$label: ',
           style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+            color: textColor ?? theme.colorScheme.onSurface.withValues(alpha: 0.5),
           ),
         ),
         Expanded(
@@ -136,6 +368,7 @@ class BookingCard extends StatelessWidget {
             value,
             style: theme.textTheme.bodySmall?.copyWith(
               fontWeight: FontWeight.w500,
+              color: textColor,
             ),
             overflow: TextOverflow.ellipsis,
           ),
@@ -164,6 +397,16 @@ class BookingCard extends StatelessWidget {
         bgColor = const Color(0xFF00C853).withValues(alpha: 0.2);
         textColor = const Color(0xFF00C853);
         text = 'อนุมัติแล้ว';
+        break;
+      case 'refund_requested':
+        bgColor = Colors.purple.withValues(alpha: 0.2);
+        textColor = Colors.purple.shade700;
+        text = 'รออนุมัติคืนเงิน';
+        break;
+      case 'refunded':
+        bgColor = Colors.cyan.withValues(alpha: 0.2);
+        textColor = Colors.cyan.shade800;
+        text = 'คืนเงินสำเร็จ';
         break;
       case 'cancelled':
         bgColor = Colors.red.withValues(alpha: 0.2);

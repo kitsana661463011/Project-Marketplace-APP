@@ -5,8 +5,10 @@ class ReviewService {
   static Future<List<Map<String, dynamic>>> getReviewsByShop(int shopId) async {
     try {
       final response = await ApiService.get('${ApiConfig.shopReviews}?shop_id=$shopId');
-      if (response['status'] == true && response['data'] != null) {
-        return List<Map<String, dynamic>>.from(response['data']);
+      if (response['status'] == true && response['data'] is List) {
+        return (response['data'] as List)
+            .whereType<Map<String, dynamic>>()
+            .toList();
       }
     } catch (e) {
       // Silently catch and return empty list on failure

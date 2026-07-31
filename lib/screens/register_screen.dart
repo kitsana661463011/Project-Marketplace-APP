@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../widgets/app_dialog.dart';
 
@@ -11,12 +12,15 @@ class RegisterScreen extends StatefulWidget {
   State<RegisterScreen> createState() => _RegisterScreenState();
 }
 
-class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProviderStateMixin {
+class _RegisterScreenState extends State<RegisterScreen>
+    with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _usernameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final List<String> _interests = ['อาหาร', 'เครื่องดื่ม', 'ขนม', 'สตรีทฟู้ด', 'อื่นๆ'];
+  static const int _maxInterests = 5;
+  List<String> _interests = [];
+  bool _isLoadingInterests = true;
   final Set<String> _selectedInterests = {};
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
@@ -28,10 +32,47 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
       vsync: this,
       duration: const Duration(milliseconds: 1000),
     );
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _fadeController, curve: Curves.easeOut),
-    );
+    _fadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _fadeController, curve: Curves.easeOut));
     _fadeController.forward();
+
+    _fetchInterestsFromDb();
+  }
+
+  void _sortInterestsWithOthersAtEnd(List<String> list) {
+    final others = list.where((e) => e == 'อื่นๆ' || e.contains('อื่นๆ')).toList();
+    final normal = list.where((e) => e != 'อื่นๆ' && !e.contains('อื่นๆ')).toList();
+    _interests = [...normal, ...others];
+  }
+
+  Future<void> _fetchInterestsFromDb() async {
+    try {
+      final response = await ApiService.get('/v1/user-interests');
+      if (response['status'] == true && response['data'] is List) {
+        final List<dynamic> list = response['data'] as List<dynamic>;
+        if (mounted) {
+          setState(() {
+            final List<String> items = list.where((e) => e != null).map((e) => e.toString()).toList();
+            _sortInterestsWithOthersAtEnd(items);
+            _isLoadingInterests = false;
+          });
+          return;
+        }
+      }
+    } catch (e) {
+      debugPrint('Failed to load interests from DB: $e');
+    }
+
+    if (mounted) {
+      setState(() {
+        if (_interests.isEmpty) {
+          _sortInterestsWithOthersAtEnd(['อาหาร', 'เครื่องดื่ม', 'ขนม', 'สตรีทฟู้ด', 'อื่นๆ']);
+        }
+        _isLoadingInterests = false;
+      });
+    }
   }
 
   @override
@@ -51,7 +92,8 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
       username: _usernameController.text.trim(),
       email: _emailController.text.trim(),
       password: _passwordController.text,
-      role: 'buyer', // Default to buyer as per mockup
+      role: 'buyer',
+      interests: _selectedInterests.join(','),
     );
 
     if (!mounted) return;
@@ -83,15 +125,16 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
         elevation: 0,
         centerTitle: true,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Color(0xFF0F172A), size: 20),
+          icon: const Icon(
+            Icons.arrow_back_ios_new,
+            color: Color(0xFF0F172A),
+            size: 20,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1.0),
-          child: Container(
-            color: const Color(0xFFE2E8F0),
-            height: 1.0,
-          ),
+          child: Container(color: const Color(0xFFE2E8F0), height: 1.0),
         ),
         title: Text(
           'Sign Up',
@@ -146,8 +189,14 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
                   const SizedBox(height: 8),
                   TextFormField(
                     controller: _usernameController,
-                    style: GoogleFonts.outfit(color: Colors.black, fontWeight: FontWeight.w500),
-                    decoration: _buildInputDecoration('กรอกชื่อ-นามสกุล', Icons.person_outline),
+                    style: GoogleFonts.outfit(
+                      color: Colors.black,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    decoration: _buildInputDecoration(
+                      'กรอกชื่อ-นามสกุล',
+                      Icons.person_outline,
+                    ),
                     validator: (v) =>
                         v == null || v.isEmpty ? 'กรุณากรอกชื่อ-นามสกุล' : null,
                   ),
@@ -166,8 +215,14 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
                   TextFormField(
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
-                    style: GoogleFonts.outfit(color: Colors.black, fontWeight: FontWeight.w500),
-                    decoration: _buildInputDecoration('กรอกอีเมล', Icons.mail_outline),
+                    style: GoogleFonts.outfit(
+                      color: Colors.black,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    decoration: _buildInputDecoration(
+                      'กรอกอีเมล',
+                      Icons.mail_outline,
+                    ),
                     validator: (v) {
                       if (v == null || v.isEmpty) return 'กรุณากรอกอีเมล';
                       if (!v.contains('@')) return 'อีเมลไม่ถูกต้อง';
@@ -189,88 +244,195 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
                   TextFormField(
                     controller: _passwordController,
                     obscureText: true,
-                    style: GoogleFonts.outfit(color: Colors.black, fontWeight: FontWeight.w500),
-                    decoration: _buildInputDecoration('กรอกรหัสผ่าน', Icons.lock_outline),
+                    style: GoogleFonts.outfit(
+                      color: Colors.black,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    decoration: _buildInputDecoration(
+                      'กรอกรหัสผ่าน',
+                      Icons.lock_outline,
+                    ),
                     validator: (v) {
                       if (v == null || v.isEmpty) return 'กรุณากรอกรหัสผ่าน';
-                      if (v.length < 6) return 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร';
+                      if (v.length < 6) {
+                        return 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร';
+                      }
                       return null;
                     },
                   ),
                   const SizedBox(height: 32),
 
-                  // Interest Section
-                  Text(
-                    'คุณสนใจอะไรเป็นพิเศษ',
-                    style: GoogleFonts.outfit(
-                      color: const Color(0xFF0F172A),
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  // Interest Section Header with Selection Counter Badge
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Text(
+                        'คุณสนใจอะไรเป็นพิเศษ',
+                        style: GoogleFonts.outfit(
+                          color: const Color(0xFF0F172A),
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: _selectedInterests.length == _maxInterests
+                              ? const Color(0xFFFEF2F2)
+                              : const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: _selectedInterests.length == _maxInterests
+                                ? const Color(0xFFFCA5A5)
+                                : const Color(0xFFE2E8F0),
+                          ),
+                        ),
+                        child: Text(
+                          'เลือกแล้ว ${_selectedInterests.length}/$_maxInterests',
+                          style: GoogleFonts.outfit(
+                            color: _selectedInterests.length == _maxInterests
+                                ? const Color(0xFFDC2626)
+                                : const Color(0xFF475569),
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'เลือกหมวดหมู่ที่คุณสนใจเพื่อรับข้อมูลที่ตรงใจคุณ',
+                    'เลือกหมวดหมู่ที่คุณสนใจเพื่อรับข้อมูลที่ตรงใจคุณ (สูงสุด $_maxInterests หมวดหมู่)',
                     style: GoogleFonts.outfit(
                       color: const Color(0xFF64748B),
-                      fontSize: 14,
+                      fontSize: 13.5,
                       fontWeight: FontWeight.w400,
                     ),
                   ),
                   const SizedBox(height: 16),
 
-                  // Interest Chips Wrap
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: _interests.map((interest) {
-                      final isSelected = _selectedInterests.contains(interest);
-                      return ChoiceChip(
-                        label: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (isSelected) ...[
-                              const Icon(
-                                Icons.check,
-                                size: 16,
+                  // Interest Chips Wrap with Micro-Animations
+                  _isLoadingInterests
+                      ? const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 20),
+                          child: Center(
+                            child: SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
                                 color: Color(0xFF1E88E5),
                               ),
-                              const SizedBox(width: 6),
-                            ],
-                            Text(
-                              interest,
-                              style: GoogleFonts.outfit(
-                                color: isSelected ? const Color(0xFF1E88E5) : const Color(0xFF64748B),
-                                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                                fontSize: 14.5,
-                              ),
                             ),
-                          ],
-                        ),
-                        selected: isSelected,
-                        onSelected: (selected) {
-                          setState(() {
-                            if (selected) {
-                              _selectedInterests.add(interest);
-                            } else {
-                              _selectedInterests.remove(interest);
-                            }
-                          });
-                        },
-                        backgroundColor: const Color(0xFFF8FAFC),
-                        selectedColor: const Color(0xFFE3F2FD),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(24),
-                          side: BorderSide(
-                            color: isSelected ? const Color(0xFF1E88E5) : const Color(0xFFE2E8F0),
-                            width: 1.5,
                           ),
+                        )
+                      : Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: _interests.map((interest) {
+                            final isSelected = _selectedInterests.contains(interest);
+                            return GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  if (!isSelected) {
+                                    if (_selectedInterests.length >= _maxInterests) {
+                                      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            'เลือกหมวดหมู่ได้สูงสุด $_maxInterests หมวดหมู่',
+                                            style: GoogleFonts.outfit(
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                          backgroundColor: const Color(0xFFDC2626),
+                                          behavior: SnackBarBehavior.floating,
+                                          margin: const EdgeInsets.all(16),
+                                          duration: const Duration(seconds: 2),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                        ),
+                                      );
+                                      return;
+                                    }
+                                    _selectedInterests.add(interest);
+                                  } else {
+                                    _selectedInterests.remove(interest);
+                                  }
+                                });
+                              },
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                curve: Curves.easeOutCubic,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 10,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? const Color(0xFFE3F2FD)
+                                      : const Color(0xFFF8FAFC),
+                                  borderRadius: BorderRadius.circular(24),
+                                  border: Border.all(
+                                    color: isSelected
+                                        ? const Color(0xFF1E88E5)
+                                        : const Color(0xFFE2E8F0),
+                                    width: isSelected ? 2.0 : 1.5,
+                                  ),
+                                  boxShadow: isSelected
+                                      ? [
+                                          BoxShadow(
+                                            color: const Color(0xFF1E88E5)
+                                                .withValues(alpha: 0.18),
+                                            blurRadius: 8,
+                                            offset: const Offset(0, 3),
+                                          )
+                                        ]
+                                      : [],
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    AnimatedSwitcher(
+                                      duration: const Duration(milliseconds: 200),
+                                      transitionBuilder: (child, anim) =>
+                                          ScaleTransition(scale: anim, child: child),
+                                      child: isSelected
+                                          ? const Padding(
+                                              key: ValueKey('check'),
+                                              padding: EdgeInsets.only(right: 6),
+                                              child: Icon(
+                                                Icons.check_circle_rounded,
+                                                size: 17,
+                                                color: Color(0xFF1E88E5),
+                                              ),
+                                            )
+                                          : const SizedBox.shrink(
+                                              key: ValueKey('empty'),
+                                            ),
+                                    ),
+                                    Text(
+                                      interest,
+                                      style: GoogleFonts.outfit(
+                                        color: isSelected
+                                            ? const Color(0xFF1E88E5)
+                                            : const Color(0xFF475569),
+                                        fontWeight: isSelected
+                                            ? FontWeight.bold
+                                            : FontWeight.w500,
+                                        fontSize: 14.5,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }).toList(),
                         ),
-                        showCheckmark: false,
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                      );
-                    }).toList(),
-                  ),
                   const SizedBox(height: 48),
 
                   // Login Link
@@ -311,7 +473,9 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
                             backgroundColor: const Color(0xFF1E88E5),
                             foregroundColor: Colors.white,
                             elevation: 2,
-                            shadowColor: const Color(0xFF1E88E5).withValues(alpha: 0.3),
+                            shadowColor: const Color(
+                              0xFF1E88E5,
+                            ).withValues(alpha: 0.3),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(14),
                             ),
@@ -350,7 +514,10 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
   InputDecoration _buildInputDecoration(String hint, IconData prefixIcon) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: GoogleFonts.outfit(color: const Color(0xFF94A3B8), fontSize: 15),
+      hintStyle: GoogleFonts.outfit(
+        color: const Color(0xFF94A3B8),
+        fontSize: 15,
+      ),
       prefixIcon: Icon(prefixIcon, color: const Color(0xFF94A3B8), size: 20),
       filled: true,
       fillColor: const Color(0xFFF8FAFC),

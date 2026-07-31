@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -15,28 +17,14 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
   final _nameController = TextEditingController();
   final _descriptionController = TextEditingController();
   String _selectedCategoryTag = 'อาหาร';
-  String? _selectedAvatarImage;
+  Uint8List? _pickedShopImageBytes;
+  String? _pickedShopImageName;
   bool _isSubmitting = false;
 
   final List<Map<String, dynamic>> _categoryTags = [
     {'name': 'อาหาร', 'icon': Icons.restaurant},
     {'name': 'เครื่องดื่ม', 'icon': Icons.local_cafe},
     {'name': 'ขนม', 'icon': Icons.cookie},
-  ];
-
-  final List<Map<String, String>> _mockShopAvatars = [
-    {
-      'title': 'ครัวคุณอร',
-      'filename': 'shop1.png',
-    },
-    {
-      'title': 'บุญมีแฟชั่น',
-      'filename': 'shop2.png',
-    },
-    {
-      'title': 'ร้านกาแฟดอยหลวง',
-      'filename': 'shop3.png',
-    },
   ];
 
   @override
@@ -46,96 +34,32 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
     super.dispose();
   }
 
-  void _showAvatarSelector() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'เลือกรูปภาพโปรไฟล์ร้านค้า',
-                      style: GoogleFonts.outfit(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: const Color(0xFF0F172A),
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close, color: Color(0xFF64748B)),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: _mockShopAvatars.length,
-                  separatorBuilder: (context, index) => const SizedBox(height: 10),
-                  itemBuilder: (context, index) {
-                    final item = _mockShopAvatars[index];
-                    final isSelected = _selectedAvatarImage == item['filename'];
-                    return InkWell(
-                      onTap: () {
-                        setState(() {
-                          _selectedAvatarImage = item['filename'];
-                        });
-                        Navigator.pop(context);
-                      },
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: isSelected ? const Color(0xFFF0F7FF) : const Color(0xFFF8FAFC),
-                          border: Border.all(
-                            color: isSelected ? const Color(0xFF3B82F6) : const Color(0xFFE2E8F0),
-                            width: isSelected ? 1.5 : 1,
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        padding: const EdgeInsets.all(12),
-                        child: Row(
-                          children: [
-                            CircleAvatar(
-                              radius: 20,
-                              backgroundColor: Colors.white,
-                              backgroundImage: AssetImage('assets/${item['filename']}'),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                item['title']!,
-                                style: GoogleFonts.outfit(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  color: const Color(0xFF0F172A),
-                                ),
-                              ),
-                            ),
-                            if (isSelected)
-                              const Icon(Icons.check_circle, color: Color(0xFF3B82F6))
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ],
-            ),
+  Future<void> _pickShopImageFromFilePicker() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: false,
+        withData: true,
+      );
+      if (result != null && result.files.isNotEmpty) {
+        final file = result.files.first;
+        if (file.bytes != null) {
+          setState(() {
+            _pickedShopImageBytes = file.bytes;
+            _pickedShopImageName = file.name;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('ไม่สามารถเลือกรูปภาพได้: $e', style: GoogleFonts.outfit()),
+            backgroundColor: const Color(0xFFDC2626),
           ),
         );
-      },
-    );
+      }
+    }
   }
 
   Future<void> _handleSubmit(String stallNum, int? stallId) async {
@@ -150,7 +74,10 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
     if (name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('กรุณาระบุชื่อร้านค้าของคุณก่อนค่ะ', style: GoogleFonts.outfit()),
+          content: Text(
+            'กรุณาระบุชื่อร้านค้าของคุณก่อนค่ะ',
+            style: GoogleFonts.outfit(),
+          ),
           backgroundColor: Colors.orangeAccent,
         ),
       );
@@ -162,7 +89,9 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const Center(child: CircularProgressIndicator(color: Color(0xFF1E88E5))),
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(color: Color(0xFF1E88E5)),
+      ),
     );
 
     // Create the shop using ShopService
@@ -172,7 +101,8 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
       description: _descriptionController.text.trim(),
       shopPhone: currentUser.phone ?? '0812345678',
       userId: currentUser.userId!,
-      fileName: _selectedAvatarImage ?? 'shop1.png',
+      fileName: _pickedShopImageName ?? 'shop1.png',
+      fileBytes: _pickedShopImageBytes,
     );
 
     if (mounted) {
@@ -188,12 +118,18 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
           barrierDismissible: false,
           builder: (context) => AlertDialog(
             backgroundColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 const SizedBox(height: 12),
-                const Icon(Icons.check_circle_outline, color: Color(0xFF10B981), size: 64),
+                const Icon(
+                  Icons.check_circle_outline,
+                  color: Color(0xFF10B981),
+                  size: 64,
+                ),
                 const SizedBox(height: 16),
                 Text(
                   'สร้างร้านค้าสำเร็จ',
@@ -207,7 +143,10 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
                 Text(
                   'ระบบทำการเปิดร้านค้าและสร้างโปรไฟล์ให้แก่คุณเรียบร้อยแล้ว เริ่มจัดการอาหารของคุณได้เลยค่ะ',
                   textAlign: TextAlign.center,
-                  style: GoogleFonts.outfit(fontSize: 13.5, color: const Color(0xFF64748B)),
+                  style: GoogleFonts.outfit(
+                    fontSize: 13.5,
+                    color: const Color(0xFF64748B),
+                  ),
                 ),
                 const SizedBox(height: 24),
                 SizedBox(
@@ -220,10 +159,15 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF2563EB),
                       foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
-                    child: Text('ตกลง', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                    child: Text(
+                      'ตกลง',
+                      style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+                    ),
                   ),
                 ),
               ],
@@ -235,7 +179,10 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('ไม่สามารถสร้างร้านค้าได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง', style: GoogleFonts.outfit()),
+            content: Text(
+              'ไม่สามารถสร้างร้านค้าได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง',
+              style: GoogleFonts.outfit(),
+            ),
             backgroundColor: Colors.redAccent,
           ),
         );
@@ -245,7 +192,8 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
+    final args =
+        ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
     final String stallNum = args['stall_number'] ?? 'A3';
     final int? stallId = args['stall_id'];
 
@@ -255,7 +203,11 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Color(0xFF0F172A), size: 20),
+          icon: const Icon(
+            Icons.arrow_back_ios_new,
+            color: Color(0xFF0F172A),
+            size: 20,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
@@ -281,46 +233,71 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
               children: [
                 // 1. Avatar Uploader
                 Center(
-                  child: Stack(
+                  child: Column(
                     children: [
-                      Container(
-                        width: 110,
-                        height: 110,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: const Color(0xFFFFB74D).withOpacity(0.2), // Light yellow tint matching Screenshot 2
-                          border: Border.all(color: const Color(0xFFFFB74D), width: 1.5),
-                        ),
-                        child: ClipOval(
-                          child: _selectedAvatarImage != null
-                              ? Image.asset(
-                                  'assets/$_selectedAvatarImage',
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) => const Icon(
-                                    Icons.storefront,
-                                    size: 52,
-                                    color: Color(0xFFFFB74D),
-                                  ),
-                                )
-                              : const Icon(
-                                  Icons.storefront,
-                                  size: 52,
-                                  color: Color(0xFFFFB74D),
+                      GestureDetector(
+                        onTap: _pickShopImageFromFilePicker,
+                        child: Stack(
+                          children: [
+                            Container(
+                              width: 110,
+                              height: 110,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: const Color(0xFFFFB74D).withValues(
+                                  alpha: 0.2,
                                 ),
+                                border: Border.all(
+                                  color: const Color(0xFFFFB74D),
+                                  width: 1.5,
+                                ),
+                              ),
+                              child: ClipOval(
+                                child: _pickedShopImageBytes != null
+                                    ? Image.memory(
+                                        _pickedShopImageBytes!,
+                                        fit: BoxFit.cover,
+                                        width: 110,
+                                        height: 110,
+                                      )
+                                    : const Icon(
+                                        Icons.storefront,
+                                        size: 52,
+                                        color: Color(0xFFFFB74D),
+                                      ),
+                              ),
+                            ),
+                            Positioned(
+                              right: 0,
+                              bottom: 0,
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFF2563EB),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.add_a_photo,
+                                  color: Colors.white,
+                                  size: 18,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      Positioned(
-                        right: 0,
-                        bottom: 0,
-                        child: GestureDetector(
-                          onTap: _showAvatarSelector,
-                          child: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: const BoxDecoration(
-                              color: Color(0xFF2563EB),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(Icons.add, color: Colors.white, size: 18),
+                      const SizedBox(height: 8),
+                      TextButton.icon(
+                        onPressed: _pickShopImageFromFilePicker,
+                        icon: const Icon(Icons.upload_file, size: 18, color: Color(0xFF2563EB)),
+                        label: Text(
+                          _pickedShopImageName != null
+                              ? 'เลือกแล้ว: $_pickedShopImageName'
+                              : 'คลิกเพื่อเลือกรูปภาพร้านค้าจากอุปกรณ์',
+                          style: GoogleFonts.outfit(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF2563EB),
                           ),
                         ),
                       ),
@@ -347,9 +324,18 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
                   controller: _nameController,
                   decoration: InputDecoration(
                     hintText: 'ระบุชื่อร้านค้าของคุณ',
-                    hintStyle: GoogleFonts.outfit(color: const Color(0xFF94A3B8), fontSize: 14),
-                    suffixIcon: const Icon(Icons.storefront, color: Color(0xFF94A3B8)),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    hintStyle: GoogleFonts.outfit(
+                      color: const Color(0xFF94A3B8),
+                      fontSize: 14,
+                    ),
+                    suffixIcon: const Icon(
+                      Icons.storefront,
+                      color: Color(0xFF94A3B8),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 14,
+                    ),
                     filled: true,
                     fillColor: const Color(0xFFF8FAFC),
                     border: OutlineInputBorder(
@@ -362,10 +348,16 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(16),
-                      borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.5),
+                      borderSide: const BorderSide(
+                        color: Color(0xFF2563EB),
+                        width: 1.5,
+                      ),
                     ),
                   ),
-                  style: GoogleFonts.outfit(fontSize: 14, color: const Color(0xFF0F172A)),
+                  style: GoogleFonts.outfit(
+                    fontSize: 14,
+                    color: const Color(0xFF0F172A),
+                  ),
                 ),
                 const SizedBox(height: 24),
 
@@ -392,16 +384,23 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
                         },
                         child: Container(
                           margin: const EdgeInsets.only(right: 12),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 10,
+                          ),
                           decoration: BoxDecoration(
-                            color: isSelected ? const Color(0xFF2563EB) : const Color(0xFFF1F5F9),
+                            color: isSelected
+                                ? const Color(0xFF2563EB)
+                                : const Color(0xFFF1F5F9),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Row(
                             children: [
                               Icon(
                                 tag['icon'] as IconData,
-                                color: isSelected ? Colors.white : const Color(0xFF64748B),
+                                color: isSelected
+                                    ? Colors.white
+                                    : const Color(0xFF64748B),
                                 size: 16,
                               ),
                               const SizedBox(width: 6),
@@ -409,8 +408,12 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
                                 tag['name']!,
                                 style: GoogleFonts.outfit(
                                   fontSize: 13,
-                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                  color: isSelected ? Colors.white : const Color(0xFF64748B),
+                                  fontWeight: isSelected
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                  color: isSelected
+                                      ? Colors.white
+                                      : const Color(0xFF64748B),
                                 ),
                               ),
                             ],
@@ -435,7 +438,9 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFEFF6FF), // Light blue tint matching Screenshot 2
+                    color: const Color(
+                      0xFFEFF6FF,
+                    ), // Light blue tint matching Screenshot 2
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(color: const Color(0xFFBFDBFE)),
                   ),
@@ -481,8 +486,12 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
                   controller: _descriptionController,
                   maxLines: 4,
                   decoration: InputDecoration(
-                    hintText: 'ระบุข้อมูลอธิบายรายละเอียดจุดเด่นของร้านค้าคุณ...',
-                    hintStyle: GoogleFonts.outfit(color: const Color(0xFF94A3B8), fontSize: 13.5),
+                    hintText:
+                        'ระบุข้อมูลอธิบายรายละเอียดจุดเด่นของร้านค้าคุณ...',
+                    hintStyle: GoogleFonts.outfit(
+                      color: const Color(0xFF94A3B8),
+                      fontSize: 13.5,
+                    ),
                     contentPadding: const EdgeInsets.all(16),
                     filled: true,
                     fillColor: const Color(0xFFF8FAFC),
@@ -496,10 +505,16 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(16),
-                      borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.5),
+                      borderSide: const BorderSide(
+                        color: Color(0xFF2563EB),
+                        width: 1.5,
+                      ),
                     ),
                   ),
-                  style: GoogleFonts.outfit(fontSize: 14, color: const Color(0xFF0F172A)),
+                  style: GoogleFonts.outfit(
+                    fontSize: 14,
+                    color: const Color(0xFF0F172A),
+                  ),
                 ),
                 const SizedBox(height: 36),
 
@@ -508,8 +523,14 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
                   width: double.infinity,
                   height: 48,
                   child: ElevatedButton.icon(
-                    onPressed: _isSubmitting ? null : () => _handleSubmit(stallNum, stallId),
-                    icon: const Icon(Icons.check_circle_outline, color: Colors.white, size: 18),
+                    onPressed: _isSubmitting
+                        ? null
+                        : () => _handleSubmit(stallNum, stallId),
+                    icon: const Icon(
+                      Icons.check_circle_outline,
+                      color: Colors.white,
+                      size: 18,
+                    ),
                     label: Text(
                       'ยืนยันการสร้างร้านค้า',
                       style: GoogleFonts.outfit(

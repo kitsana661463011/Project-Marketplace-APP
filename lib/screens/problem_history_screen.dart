@@ -15,7 +15,8 @@ class _ProblemHistoryScreenState extends State<ProblemHistoryScreen> {
   List<Map<String, dynamic>> _allReports = [];
   List<Map<String, dynamic>> _filteredReports = [];
   bool _isLoading = true;
-  String _activeTab = 'ทั้งหมด'; // 'ทั้งหมด', 'เสร็จสิ้น', 'กำลังแก้ไข', 'รอดำเนินการ'
+  String _activeTab =
+      'ทั้งหมด'; // 'ทั้งหมด', 'เสร็จสิ้น', 'กำลังแก้ไข', 'รอดำเนินการ'
   DateTimeRange? _selectedDateRange;
 
   @override
@@ -28,31 +29,74 @@ class _ProblemHistoryScreenState extends State<ProblemHistoryScreen> {
     final authService = Provider.of<AuthService>(context, listen: false);
     final currentUser = authService.currentUser;
 
-    if (currentUser == null || currentUser.userId == null) {
-      setState(() {
-        _isLoading = false;
-      });
-      return;
+    List<Map<String, dynamic>> allReports =
+        await ProblemService.getAllProblemReports();
+    List<Map<String, dynamic>> userReports = [];
+    if (currentUser?.userId != null) {
+      userReports = await ProblemService.getUserProblemReports(
+        currentUser!.userId!,
+      );
     }
 
-    final reports = await ProblemService.getUserProblemReports(currentUser.userId!);
-    setState(() {
-      _allReports = reports;
-      _isLoading = false;
-      _filterReports();
+    // Combine user reports and all reports, avoiding duplicates
+    final Map<int, Map<String, dynamic>> reportMap = {};
+
+    for (var r in userReports) {
+      final id = r['problem_id'] ?? r['id'];
+      if (id != null) {
+        final key = id is int ? id : int.tryParse(id.toString()) ?? 0;
+        reportMap[key] = r;
+      }
+    }
+
+    for (var r in allReports) {
+      final id = r['problem_id'] ?? r['id'];
+      if (id != null) {
+        final key = id is int ? id : int.tryParse(id.toString()) ?? 0;
+        if (!reportMap.containsKey(key)) {
+          reportMap[key] = r;
+        }
+      }
+    }
+
+    final combined = reportMap.values.toList();
+    combined.sort((a, b) {
+      final dateA = DateTime.tryParse(a['report_date']?.toString() ?? '') ??
+          DateTime(2000);
+      final dateB = DateTime.tryParse(b['report_date']?.toString() ?? '') ??
+          DateTime(2000);
+      return dateB.compareTo(dateA);
     });
+
+    if (mounted) {
+      setState(() {
+        _allReports = combined;
+        _isLoading = false;
+        _filterReports();
+      });
+    }
   }
 
   void _filterReports() {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final currentUser = authService.currentUser;
+
     List<Map<String, dynamic>> temp = [];
     if (_activeTab == 'ทั้งหมด') {
       temp = _allReports;
-    } else if (_activeTab == 'เสร็จสิ้น') {
-      temp = _allReports.where((r) => r['status'] == 'resolved').toList();
+    } else if (_activeTab == 'รอดำเนินการ') {
+      temp = _allReports
+          .where((r) => r['status'] == 'pending' || r['status'] == null)
+          .toList();
     } else if (_activeTab == 'กำลังแก้ไข') {
       temp = _allReports.where((r) => r['status'] == 'progress').toList();
-    } else if (_activeTab == 'รอดำเนินการ') {
-      temp = _allReports.where((r) => r['status'] == 'pending' || r['status'] == null).toList();
+    } else if (_activeTab == 'เสร็จสิ้น') {
+      temp = _allReports.where((r) => r['status'] == 'resolved').toList();
+    } else if (_activeTab == 'ปัญหาที่คุณแจ้ง') {
+      temp = _allReports.where((r) {
+        if (currentUser?.userId == null) return false;
+        return r['user_id']?.toString() == currentUser!.userId!.toString();
+      }).toList();
     }
 
     if (_selectedDateRange != null) {
@@ -60,8 +104,19 @@ class _ProblemHistoryScreenState extends State<ProblemHistoryScreen> {
         if (r['report_date'] == null) return false;
         final reportDate = DateTime.tryParse(r['report_date'].toString());
         if (reportDate == null) return false;
-        final start = DateTime(_selectedDateRange!.start.year, _selectedDateRange!.start.month, _selectedDateRange!.start.day);
-        final end = DateTime(_selectedDateRange!.end.year, _selectedDateRange!.end.month, _selectedDateRange!.end.day, 23, 59, 59);
+        final start = DateTime(
+          _selectedDateRange!.start.year,
+          _selectedDateRange!.start.month,
+          _selectedDateRange!.start.day,
+        );
+        final end = DateTime(
+          _selectedDateRange!.end.year,
+          _selectedDateRange!.end.month,
+          _selectedDateRange!.end.day,
+          23,
+          59,
+          59,
+        );
         return reportDate.isAfter(start) && reportDate.isBefore(end);
       }).toList();
     }
@@ -112,12 +167,12 @@ class _ProblemHistoryScreenState extends State<ProblemHistoryScreen> {
   Color _getStatusColor(String status) {
     switch (status) {
       case 'resolved':
-        return const Color(0xFF10B981); // Green
+        return const Color(0xFF047857); // Deep Emerald Green
       case 'progress':
-        return const Color(0xFF2563EB); // Blue
+        return const Color(0xFF1D4ED8); // Bold Royal Blue
       case 'pending':
       default:
-        return const Color(0xFFD97706); // Orange/Brown
+        return const Color(0xFFB45309); // Bold Amber Brown
     }
   }
 
@@ -130,6 +185,18 @@ class _ProblemHistoryScreenState extends State<ProblemHistoryScreen> {
       case 'pending':
       default:
         return const Color(0xFFFEF3C7); // Light Yellow
+    }
+  }
+
+  Color _getStatusBorderColor(String status) {
+    switch (status) {
+      case 'resolved':
+        return const Color(0xFFA7F3D0);
+      case 'progress':
+        return const Color(0xFF93C5FD);
+      case 'pending':
+      default:
+        return const Color(0xFFFDE68A);
     }
   }
 
@@ -149,11 +216,15 @@ class _ProblemHistoryScreenState extends State<ProblemHistoryScreen> {
     final desc = description.toLowerCase();
     if (desc.contains('ไฟฟ้า') || desc.contains('electricity')) {
       return Icons.bolt_outlined;
-    } else if (desc.contains('ประปา') || desc.contains('plumbing') || desc.contains('น้ำ')) {
+    } else if (desc.contains('ประปา') ||
+        desc.contains('plumbing') ||
+        desc.contains('น้ำ')) {
       return Icons.water_drop_outlined;
     } else if (desc.contains('โครงสร้าง') || desc.contains('structure')) {
       return Icons.corporate_fare_outlined;
-    } else if (desc.contains('ความสะอาด') || desc.contains('cleanliness') || desc.contains('ขยะ')) {
+    } else if (desc.contains('ความสะอาด') ||
+        desc.contains('cleanliness') ||
+        desc.contains('ขยะ')) {
       return Icons.cleaning_services_outlined;
     }
     return Icons.report_problem_outlined;
@@ -179,17 +250,24 @@ class _ProblemHistoryScreenState extends State<ProblemHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final authService = Provider.of<AuthService>(context);
+    final currentUser = authService.currentUser;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Color(0xFF0F172A), size: 20),
+          icon: const Icon(
+            Icons.arrow_back_ios_new,
+            color: Color(0xFF0F172A),
+            size: 20,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          'ประวัติการแจ้งปัญหา',
+          'แจ้งปัญหา / ประวัติ',
           style: GoogleFonts.outfit(
             color: const Color(0xFF0F172A),
             fontWeight: FontWeight.bold,
@@ -205,7 +283,7 @@ class _ProblemHistoryScreenState extends State<ProblemHistoryScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // Status Tabs Filter (Horizontal Scrollable Selection Header)
+            // Status Tabs Filter
             Container(
               color: Colors.white,
               width: double.infinity,
@@ -217,106 +295,88 @@ class _ProblemHistoryScreenState extends State<ProblemHistoryScreen> {
                   children: [
                     const SizedBox(width: 16),
                     _buildTabItem('ทั้งหมด'),
-                    _buildTabItem('เสร็จสิ้น'),
-                    _buildTabItem('กำลังแก้ไข'),
                     _buildTabItem('รอดำเนินการ'),
+                    _buildTabItem('กำลังแก้ไข'),
+                    _buildTabItem('เสร็จสิ้น'),
+                    _buildTabItem('ปัญหาที่คุณแจ้ง'),
                     const SizedBox(width: 16),
                   ],
                 ),
               ),
             ),
-            // Date Filter Row Card
+            // Date Filter Row
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              margin: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.01),
-                    blurRadius: 4,
-                    offset: const Offset(0, 1),
-                  ),
-                ],
-              ),
+              color: Colors.white,
+              padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
               child: Row(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFEFF6FF),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.calendar_today_outlined,
-                      color: Color(0xFF2563EB),
-                      size: 16,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'กรองตามวันที่แจ้ง',
-                          style: GoogleFonts.outfit(
-                            fontSize: 11,
-                            color: const Color(0xFF94A3B8),
-                            fontWeight: FontWeight.w500,
+                    child: InkWell(
+                      onTap: _selectDateRange,
+                      borderRadius: BorderRadius.circular(14),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEFF6FF),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: const Color(0xFF2563EB).withValues(alpha: 0.3),
+                            width: 1.5,
                           ),
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          _selectedDateRange == null
-                              ? 'ทั้งหมด'
-                              : '${_formatDate(_selectedDateRange!.start)} - ${_formatDate(_selectedDateRange!.end)}',
-                          style: GoogleFonts.outfit(
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                            color: const Color(0xFF1E293B),
-                          ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Icons.calendar_month_rounded,
+                              size: 20,
+                              color: Color(0xFF2563EB),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              _selectedDateRange == null
+                                  ? 'เลือกช่วงวันที่รายงาน'
+                                  : '${_formatDate(_selectedDateRange!.start)} - ${_formatDate(_selectedDateRange!.end)}',
+                              style: GoogleFonts.outfit(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: const Color(0xFF1E293B),
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
                   if (_selectedDateRange != null) ...[
-                    IconButton(
-                      icon: const Icon(Icons.cancel, color: Color(0xFFEF4444), size: 18),
-                      onPressed: () {
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () {
                         setState(() {
                           _selectedDateRange = null;
                           _filterReports();
                         });
                       },
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
+                      child: Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEE2E2),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: const Color(0xFFEF4444).withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: const Icon(
+                          Icons.close,
+                          color: Color(0xFFEF4444),
+                          size: 18,
+                        ),
+                      ),
                     ),
-                    const SizedBox(width: 12),
                   ],
-                  ElevatedButton(
-                    onPressed: _selectDateRange,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF2563EB),
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      minimumSize: const Size(0, 0),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    child: Text(
-                      'เลือกวัน',
-                      style: GoogleFonts.outfit(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -324,205 +384,363 @@ class _ProblemHistoryScreenState extends State<ProblemHistoryScreen> {
             // Main List Content
             Expanded(
               child: _isLoading
-                  ? const Center(child: CircularProgressIndicator(color: Color(0xFF1E88E5)))
+                  ? const Center(
+                      child: CircularProgressIndicator(
+                        color: Color(0xFF1E88E5),
+                      ),
+                    )
                   : _filteredReports.isEmpty
-                      ? Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(32.0),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Icon(
-                                  Icons.assignment_outlined,
-                                  size: 64,
-                                  color: Color(0xFF94A3B8),
-                                ),
-                                const SizedBox(height: 16),
-                                Text(
-                                  'ไม่พบประวัติการแจ้งปัญหา',
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: const Color(0xFF0F172A),
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'ในหมวดหมู่นี้ยังไม่มีรายการประวัติการรายงานค่ะ',
-                                  textAlign: TextAlign.center,
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 13,
-                                    color: const Color(0xFF64748B),
-                                  ),
-                                ),
-                              ],
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(32.0),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Icons.assignment_outlined,
+                              size: 64,
+                              color: Color(0xFF94A3B8),
                             ),
-                          ),
-                        )
-                      : RefreshIndicator(
-                          onRefresh: _loadHistory,
-                          color: const Color(0xFF3B82F6),
-                          child: ListView.builder(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                            itemCount: _filteredReports.length + 1, // +1 for "แสดงรายการทั้งหมดแล้ว" text
-                            itemBuilder: (context, index) {
-                              if (index == _filteredReports.length) {
-                                return Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 24.0),
-                                  child: Center(
-                                    child: Text(
-                                      'แสดงรายการทั้งหมดแล้ว',
-                                      style: GoogleFonts.outfit(
-                                        color: const Color(0xFF94A3B8),
-                                        fontSize: 13,
+                            const SizedBox(height: 16),
+                            Text(
+                              'ไม่พบประวัติการแจ้งปัญหา',
+                              style: GoogleFonts.outfit(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: const Color(0xFF0F172A),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'ยังไม่มีรายการประวัติการรายงานปัญหา หรือปัญหาที่คุณเคยแจ้งไว้ค่ะ',
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.outfit(
+                                fontSize: 13,
+                                color: const Color(0xFF64748B),
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            ElevatedButton.icon(
+                              onPressed: () async {
+                                final result = await Navigator.pushNamed(
+                                  context,
+                                  '/report_problem',
+                                );
+                                if (result == true) {
+                                  _loadHistory();
+                                }
+                              },
+                              icon: const Icon(Icons.add, size: 18),
+                              label: Text(
+                                'แจ้งปัญหาใหม่',
+                                style: GoogleFonts.outfit(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF2563EB),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 20,
+                                  vertical: 12,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: _loadHistory,
+                      color: const Color(0xFF3B82F6),
+                      child: ListView.builder(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        itemCount: _filteredReports.length + 1,
+                        itemBuilder: (context, index) {
+                          if (index == _filteredReports.length) {
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 24.0,
+                              ),
+                              child: Center(
+                                child: Text(
+                                  'แสดงรายการทั้งหมดแล้ว',
+                                  style: GoogleFonts.outfit(
+                                    color: const Color(0xFF475569),
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            );
+                          }
+
+                          final report = _filteredReports[index];
+                          final String descRaw = report['description'] ?? '';
+                          final String cleanDesc = _cleanDescription(descRaw);
+                          final String categoryTitle = _getCategoryName(
+                            descRaw,
+                          );
+                          final IconData categoryIcon = _getCategoryIcon(
+                            descRaw,
+                          );
+                          final String status = report['status'] ?? 'pending';
+                          final String dateStr = report['report_date'] != null
+                              ? report['report_date'].toString().split(' ')[0]
+                              : '-';
+                          final String? stallNumber = report['stall_number'];
+
+                          final bool isMyReport = currentUser != null &&
+                              (report['user_id']?.toString() ==
+                                  currentUser.userId?.toString());
+
+                          String timeStr = '12:00 น.';
+                          if (report['report_date'] != null) {
+                            final parts = report['report_date']
+                                .toString()
+                                .split(' ');
+                            if (parts.length > 1) {
+                              timeStr = '${parts[1].substring(0, 5)} น.';
+                            }
+                          }
+
+                          final String reporterName =
+                              report['user_name'] ??
+                              (report['user'] != null
+                                  ? report['user']['username']
+                                  : null) ??
+                              (isMyReport
+                                  ? currentUser.username
+                                  : 'ผู้ใช้ในตลาด');
+
+                          return GestureDetector(
+                            onTap: () {
+                              Navigator.pushNamed(
+                                context,
+                                '/problem_detail',
+                                arguments: report,
+                              );
+                            },
+                            child: Container(
+                              margin: const EdgeInsets.only(bottom: 14),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: const Color(0xFFE2E8F0),
+                                  width: 1.0,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.03),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              padding: const EdgeInsets.all(16),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    width: 48,
+                                    height: 48,
+                                    decoration: BoxDecoration(
+                                      color: isMyReport
+                                          ? const Color(0xFFEFF6FF)
+                                          : const Color(0xFFF1F5F9),
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: isMyReport
+                                            ? const Color(0xFF93C5FD)
+                                            : const Color(0xFFE2E8F0),
                                       ),
                                     ),
+                                    child: Icon(
+                                      categoryIcon,
+                                      color: const Color(0xFF2563EB),
+                                      size: 22,
+                                    ),
                                   ),
-                                );
-                              }
-
-                              final report = _filteredReports[index];
-                              final String descRaw = report['description'] ?? '';
-                              final String cleanDesc = _cleanDescription(descRaw);
-                              final String categoryTitle = _getCategoryName(descRaw);
-                              final IconData categoryIcon = _getCategoryIcon(descRaw);
-                              final String status = report['status'] ?? 'pending';
-                              final String dateStr = report['report_date'] != null
-                                  ? report['report_date'].toString().split(' ')[0]
-                                  : '-';
-                              final String? stallNumber = report['stall_number'];
-
-                              // Parse time if possible
-                              String timeStr = '12:00 น.';
-                              if (report['report_date'] != null) {
-                                final parts = report['report_date'].toString().split(' ');
-                                if (parts.length > 1) {
-                                  timeStr = parts[1].substring(0, 5) + ' น.';
-                                }
-                              }
-
-                              return GestureDetector(
-                                onTap: () {
-                                  Navigator.pushNamed(
-                                    context,
-                                    '/problem_detail',
-                                    arguments: report,
-                                  );
-                                },
-                                child: Container(
-                                  margin: const EdgeInsets.only(bottom: 14),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(20),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withOpacity(0.02),
-                                        blurRadius: 8,
-                                        offset: const Offset(0, 2),
-                                      ),
-                                    ],
-                                  ),
-                                  padding: const EdgeInsets.all(16),
-                                  child: Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      // Left circle icon
-                                      Container(
-                                        width: 48,
-                                        height: 48,
-                                        decoration: const BoxDecoration(
-                                          color: Color(0xFFEFF6FF),
-                                          shape: BoxShape.circle,
-                                        ),
-                                        child: Icon(
-                                          categoryIcon,
-                                          color: const Color(0xFF2563EB),
-                                          size: 22,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 14),
-
-                                      // Right content
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                  const SizedBox(width: 14),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
                                           children: [
-                                            Text(
-                                              cleanDesc.isNotEmpty ? cleanDesc : categoryTitle,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: GoogleFonts.outfit(
-                                                fontSize: 15,
-                                                fontWeight: FontWeight.bold,
-                                                color: const Color(0xFF0F172A),
-                                              ),
-                                            ),
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              'แจ้งเมื่อ: $dateStr | $timeStr',
-                                              style: GoogleFonts.outfit(
-                                                fontSize: 12.5,
-                                                color: const Color(0xFF94A3B8),
-                                              ),
-                                            ),
-                                            const SizedBox(height: 12),
-                                            Row(
-                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                              children: [
-                                                // Status Badge
-                                                Container(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                                  decoration: BoxDecoration(
-                                                    color: _getStatusBgColor(status),
-                                                    borderRadius: BorderRadius.circular(16),
+                                            Expanded(
+                                              child: Text(
+                                                cleanDesc.isNotEmpty
+                                                    ? cleanDesc
+                                                    : categoryTitle,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: GoogleFonts.outfit(
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: const Color(
+                                                    0xFF0F172A,
                                                   ),
-                                                  child: Text(
-                                                    _getStatusText(status),
-                                                    style: GoogleFonts.outfit(
-                                                      fontSize: 11,
-                                                      fontWeight: FontWeight.bold,
-                                                      color: _getStatusColor(status),
+                                                ),
+                                              ),
+                                            ),
+                                            if (isMyReport) ...[
+                                              const SizedBox(width: 6),
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 3,
+                                                    ),
+                                                decoration: BoxDecoration(
+                                                  color: const Color(
+                                                    0xFFEFF6FF,
+                                                  ),
+                                                  borderRadius:
+                                                      BorderRadius.circular(8),
+                                                  border: Border.all(
+                                                    color: const Color(
+                                                      0xFFBFDBFE,
+                                                    ),
+                                                    width: 1.0,
+                                                  ),
+                                                ),
+                                                child: Text(
+                                                  'ปัญหาที่คุณแจ้ง',
+                                                  style: GoogleFonts.outfit(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: const Color(
+                                                      0xFF1D4ED8,
                                                     ),
                                                   ),
                                                 ),
-
-                                                // Stall Badge if present
-                                                if (stallNumber != null)
-                                                  Container(
-                                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                                    decoration: BoxDecoration(
-                                                      color: const Color(0xFFEEF2F6),
-                                                      borderRadius: BorderRadius.circular(16),
-                                                    ),
-                                                    child: Text(
-                                                      'แผง: $stallNumber',
-                                                      style: GoogleFonts.outfit(
-                                                        fontSize: 11,
-                                                        fontWeight: FontWeight.bold,
-                                                        color: const Color(0xFF475569),
-                                                      ),
-                                                    ),
-                                                  ),
-                                              ],
-                                            ),
+                                              ),
+                                            ],
                                           ],
                                         ),
-                                      ),
-                                    ],
+                                        const SizedBox(height: 5),
+                                        Text(
+                                          'ผู้แจ้ง: คุณ$reporterName | $dateStr $timeStr',
+                                          style: GoogleFonts.outfit(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                            color: const Color(0xFF334155),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 12),
+                                        Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 12,
+                                                    vertical: 6,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: _getStatusBgColor(
+                                                  status,
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(16),
+                                                border: Border.all(
+                                                  color: _getStatusBorderColor(
+                                                    status,
+                                                  ),
+                                                  width: 1.2,
+                                                ),
+                                              ),
+                                              child: Text(
+                                                _getStatusText(status),
+                                                style: GoogleFonts.outfit(
+                                                  fontSize: 11.5,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: _getStatusColor(
+                                                    status,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                            if (stallNumber != null)
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 12,
+                                                      vertical: 6,
+                                                    ),
+                                                decoration: BoxDecoration(
+                                                  color: const Color(
+                                                    0xFFF1F5F9,
+                                                  ),
+                                                  borderRadius:
+                                                      BorderRadius.circular(16),
+                                                  border: Border.all(
+                                                    color: const Color(
+                                                      0xFFCBD5E1,
+                                                    ),
+                                                    width: 1.2,
+                                                  ),
+                                                ),
+                                                child: Text(
+                                                  'แผง: $stallNumber',
+                                                  style: GoogleFonts.outfit(
+                                                    fontSize: 11.5,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: const Color(
+                                                      0xFF0F172A,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
             ),
           ],
+        ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () async {
+          final result = await Navigator.pushNamed(context, '/report_problem');
+          if (result == true) {
+            _loadHistory();
+          }
+        },
+        backgroundColor: const Color(0xFF2563EB),
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: Text(
+          'แจ้งปัญหาใหม่',
+          style: GoogleFonts.outfit(
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
         ),
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: Colors.white,
-          border: Border(top: BorderSide(color: const Color(0xFFF1F5F9), width: 1.0)),
+          border: Border(
+            top: BorderSide(color: const Color(0xFFF1F5F9), width: 1.0),
+          ),
         ),
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Row(
@@ -547,24 +765,35 @@ class _ProblemHistoryScreenState extends State<ProblemHistoryScreen> {
           _filterReports();
         });
       },
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 6),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        margin: const EdgeInsets.symmetric(horizontal: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border(
-            bottom: BorderSide(
-              color: isActive ? const Color(0xFF2563EB) : Colors.transparent,
-              width: 2.0,
-            ),
+          color: isActive ? const Color(0xFF2563EB) : const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: isActive
+                ? const Color(0xFF2563EB)
+                : const Color(0xFFCBD5E1),
+            width: 1.5,
           ),
+          boxShadow: isActive
+              ? [
+                  BoxShadow(
+                    color: const Color(0xFF2563EB).withValues(alpha: 0.3),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
         ),
         child: Text(
           tabName,
           style: GoogleFonts.outfit(
-            fontSize: 14,
-            fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-            color: isActive ? const Color(0xFF2563EB) : const Color(0xFF64748B),
+            fontSize: 14.5,
+            fontWeight: FontWeight.bold,
+            color: isActive ? Colors.white : const Color(0xFF1E293B),
           ),
         ),
       ),
@@ -589,7 +818,9 @@ class _ProblemHistoryScreenState extends State<ProblemHistoryScreen> {
             label,
             style: GoogleFonts.outfit(
               fontSize: 11,
-              color: isActive ? const Color(0xFF2563EB) : const Color(0xFF94A3B8),
+              color: isActive
+                  ? const Color(0xFF2563EB)
+                  : const Color(0xFF94A3B8),
             ),
           ),
         ],

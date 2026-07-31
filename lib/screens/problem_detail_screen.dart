@@ -8,11 +8,15 @@ class ProblemDetailScreen extends StatelessWidget {
     final desc = description.toLowerCase();
     if (desc.contains('ไฟฟ้า') || desc.contains('electricity')) {
       return '⚡ ไฟฟ้า';
-    } else if (desc.contains('ประปา') || desc.contains('plumbing') || desc.contains('น้ำ')) {
+    } else if (desc.contains('ประปา') ||
+        desc.contains('plumbing') ||
+        desc.contains('น้ำ')) {
       return '💧 ประปา';
     } else if (desc.contains('โครงสร้าง') || desc.contains('structure')) {
       return '🏢 โครงสร้าง';
-    } else if (desc.contains('ความสะอาด') || desc.contains('cleanliness') || desc.contains('ขยะ')) {
+    } else if (desc.contains('ความสะอาด') ||
+        desc.contains('cleanliness') ||
+        desc.contains('ขยะ')) {
       return '🧹 ความสะอาด';
     }
     return '⚠️ อื่นๆ';
@@ -24,7 +28,8 @@ class ProblemDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final report = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
+    final report =
+        ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
 
     final String descRaw = report['description'] ?? '';
     final String cleanDesc = _cleanDescription(descRaw);
@@ -33,7 +38,8 @@ class ProblemDetailScreen extends StatelessWidget {
         ? report['report_date'].toString().split(' ')[0]
         : '-';
     final String? imageName = report['image'];
-    final String? adminComment = report['admin_comment'] ?? report['admin_note'];
+    final String? adminComment =
+        report['admin_comment'] ?? report['admin_note'];
     final String stallNumber = report['stall_number'] ?? 'ทั่วไป';
     final String reporterName = report['user_name'] ?? 'นายมั่งมี ศรีสุข';
 
@@ -41,7 +47,7 @@ class ProblemDetailScreen extends StatelessWidget {
     if (report['report_date'] != null) {
       final parts = report['report_date'].toString().split(' ');
       if (parts.length > 1) {
-        timeStr = parts[1].substring(0, 5) + ' น.';
+        timeStr = '${parts[1].substring(0, 5)} น.';
       }
     }
 
@@ -51,7 +57,11 @@ class ProblemDetailScreen extends StatelessWidget {
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Color(0xFF0F172A), size: 20),
+          icon: const Icon(
+            Icons.arrow_back_ios_new,
+            color: Color(0xFF0F172A),
+            size: 20,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
@@ -83,7 +93,7 @@ class ProblemDetailScreen extends StatelessWidget {
                         borderRadius: BorderRadius.circular(20),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.04),
+                            color: Colors.black.withValues(alpha: 0.04),
                             blurRadius: 10,
                             offset: const Offset(0, 4),
                           ),
@@ -111,18 +121,32 @@ class ProblemDetailScreen extends StatelessWidget {
                                         height: 230,
                                         decoration: const BoxDecoration(
                                           gradient: LinearGradient(
-                                            colors: [Color(0xFFE2E8F0), Color(0xFFCBD5E1)],
+                                            colors: [
+                                              Color(0xFFE2E8F0),
+                                              Color(0xFFCBD5E1),
+                                            ],
                                             begin: Alignment.topLeft,
                                             end: Alignment.bottomRight,
                                           ),
                                         ),
                                         child: const Center(
                                           child: Column(
-                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
                                             children: [
-                                              Icon(Icons.broken_image_outlined, size: 48, color: Color(0xFF64748B)),
+                                              Icon(
+                                                Icons.broken_image_outlined,
+                                                size: 48,
+                                                color: Color(0xFF64748B),
+                                              ),
                                               SizedBox(height: 8),
-                                              Text('ไม่สามารถโหลดภาพประกอบจริงได้', style: TextStyle(color: Color(0xFF64748B), fontSize: 13)),
+                                              Text(
+                                                'ไม่สามารถโหลดภาพประกอบจริงได้',
+                                                style: TextStyle(
+                                                  color: Color(0xFF64748B),
+                                                  fontSize: 13,
+                                                ),
+                                              ),
                                             ],
                                           ),
                                         ),
@@ -136,7 +160,10 @@ class ProblemDetailScreen extends StatelessWidget {
                                 height: 200,
                                 decoration: const BoxDecoration(
                                   gradient: LinearGradient(
-                                    colors: [Color(0xFFEFF6FF), Color(0xFFDBEAFE)],
+                                    colors: [
+                                      Color(0xFFEFF6FF),
+                                      Color(0xFFDBEAFE),
+                                    ],
                                     begin: Alignment.topLeft,
                                     end: Alignment.bottomRight,
                                   ),
@@ -145,9 +172,20 @@ class ProblemDetailScreen extends StatelessWidget {
                                   child: Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      Icon(Icons.image_not_supported_outlined, size: 48, color: Color(0xFF3B82F6)),
+                                      Icon(
+                                        Icons.image_not_supported_outlined,
+                                        size: 48,
+                                        color: Color(0xFF3B82F6),
+                                      ),
                                       SizedBox(height: 8),
-                                      Text('ไม่ได้แนบรูปภาพประกอบการแจ้งปัญหา', style: TextStyle(color: Color(0xFF2563EB), fontSize: 13, fontWeight: FontWeight.bold)),
+                                      Text(
+                                        'ไม่ได้แนบรูปภาพประกอบการแจ้งปัญหา',
+                                        style: TextStyle(
+                                          color: Color(0xFF2563EB),
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
                                     ],
                                   ),
                                 ),
@@ -169,7 +207,10 @@ class ProblemDetailScreen extends StatelessWidget {
 
               // 2. Info Cards (Grid of category type & stall place)
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
                 child: Row(
                   children: [
                     // Category Box Card
@@ -230,7 +271,11 @@ class ProblemDetailScreen extends StatelessWidget {
                             const SizedBox(height: 6),
                             Row(
                               children: [
-                                const Icon(Icons.place_outlined, color: Color(0xFF2563EB), size: 18),
+                                const Icon(
+                                  Icons.place_outlined,
+                                  color: Color(0xFF2563EB),
+                                  size: 18,
+                                ),
                                 const SizedBox(width: 4),
                                 Text(
                                   stallNumber,
@@ -252,9 +297,15 @@ class ProblemDetailScreen extends StatelessWidget {
 
               // 3. User Reporter Details Card
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(16),
@@ -318,7 +369,10 @@ class ProblemDetailScreen extends StatelessWidget {
 
               // 4. Problem Description Card (Styled quote container)
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 child: Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(20),
@@ -341,7 +395,11 @@ class ProblemDetailScreen extends StatelessWidget {
                               color: const Color(0xFF0F172A),
                             ),
                           ),
-                          const Icon(Icons.rate_review_outlined, color: Color(0xFF94A3B8), size: 18),
+                          const Icon(
+                            Icons.rate_review_outlined,
+                            color: Color(0xFF94A3B8),
+                            size: 18,
+                          ),
                         ],
                       ),
                       const Divider(height: 24, color: Color(0xFFF1F5F9)),
@@ -368,7 +426,11 @@ class ProblemDetailScreen extends StatelessWidget {
                       const SizedBox(height: 16),
                       Row(
                         children: [
-                          const Icon(Icons.schedule, color: Color(0xFF94A3B8), size: 14),
+                          const Icon(
+                            Icons.schedule,
+                            color: Color(0xFF94A3B8),
+                            size: 14,
+                          ),
                           const SizedBox(width: 6),
                           Text(
                             'วันทีแจ้ง: $dateStr | เวลา: $timeStr',
@@ -387,21 +449,31 @@ class ProblemDetailScreen extends StatelessWidget {
               // 5. Admin Comment Response Box
               if (adminComment != null && adminComment.trim().isNotEmpty) ...[
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
                   child: Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
                       color: const Color(0xFFEFF6FF),
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: const Color(0xFFBFDBFE), width: 1.2),
+                      border: Border.all(
+                        color: const Color(0xFFBFDBFE),
+                        width: 1.2,
+                      ),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
                           children: [
-                            const Icon(Icons.verified_user_outlined, color: Color(0xFF2563EB), size: 18),
+                            const Icon(
+                              Icons.verified_user_outlined,
+                              color: Color(0xFF2563EB),
+                              size: 18,
+                            ),
                             const SizedBox(width: 6),
                             Text(
                               'หมายเหตุและบันทึกจากแอดมิน',
@@ -435,7 +507,9 @@ class ProblemDetailScreen extends StatelessWidget {
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: Colors.white,
-          border: Border(top: BorderSide(color: const Color(0xFFF1F5F9), width: 1.0)),
+          border: Border(
+            top: BorderSide(color: const Color(0xFFF1F5F9), width: 1.0),
+          ),
         ),
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Row(
@@ -451,7 +525,13 @@ class ProblemDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildNavItem(BuildContext context, IconData icon, String label, bool isActive, int index) {
+  Widget _buildNavItem(
+    BuildContext context,
+    IconData icon,
+    String label,
+    bool isActive,
+    int index,
+  ) {
     return GestureDetector(
       onTap: () {
         Navigator.pop(context, index);
@@ -469,7 +549,9 @@ class ProblemDetailScreen extends StatelessWidget {
             label,
             style: GoogleFonts.outfit(
               fontSize: 11,
-              color: isActive ? const Color(0xFF2563EB) : const Color(0xFF94A3B8),
+              color: isActive
+                  ? const Color(0xFF2563EB)
+                  : const Color(0xFF94A3B8),
             ),
           ),
         ],

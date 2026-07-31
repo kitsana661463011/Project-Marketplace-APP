@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -19,20 +21,13 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
   Stall? _selectedStall;
   bool _isLoadingStalls = true;
   String _selectedCategory = 'ไฟฟ้า'; // Default selected category
-  String? _selectedMockImage; // Mock image name e.g. "plug_broken.png"
+  Uint8List? _pickedReportImageBytes;
+  String? _pickedReportImageName;
   bool _isSubmitting = false;
 
   final List<Map<String, dynamic>> _categories = [
-    {
-      'name': 'ไฟฟ้า',
-      'icon': Icons.bolt_outlined,
-      'db_val': 'electricity',
-    },
-    {
-      'name': 'ประปา',
-      'icon': Icons.water_drop_outlined,
-      'db_val': 'plumbing',
-    },
+    {'name': 'ไฟฟ้า', 'icon': Icons.bolt_outlined, 'db_val': 'electricity'},
+    {'name': 'ประปา', 'icon': Icons.water_drop_outlined, 'db_val': 'plumbing'},
     {
       'name': 'โครงสร้าง',
       'icon': Icons.corporate_fare_outlined,
@@ -42,30 +37,6 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
       'name': 'ความสะอาด',
       'icon': Icons.cleaning_services_outlined,
       'db_val': 'cleanliness',
-    },
-  ];
-
-  // Realistic mock problem images for the tester to choose from
-  final List<Map<String, String>> _mockImages = [
-    {
-      'title': 'ปลั๊กไฟชำรุด / เสียหาย',
-      'filename': 'plug_broken.png',
-      'description': 'สายไฟและปลั๊กไฟเสียหาย บริเวณเสาแผงค้ารวม',
-    },
-    {
-      'title': 'ท่อน้ำรั่ว / น้ำเอ่อล้น',
-      'filename': 'water_leak.png',
-      'description': 'ท่อน้ำดีมีรอยรั่วซึม ทำให้มีน้ำเจิ่งนองสะสม',
-    },
-    {
-      'title': 'ขยะสะสม / ไม่ได้รับการเก็บกวาด',
-      'filename': 'trash_pile.png',
-      'description': 'เศษกล่องกระดาษและสิ่งปฏิกูลทับถมบริเวณทางเดิน',
-    },
-    {
-      'title': 'พื้นทางเดินแตกร้าว / หลังคาชำรุด',
-      'filename': 'wall_crack.png',
-      'description': 'วัสดุแผ่นปูนแตกร้าว เป็นหลุมบ่ออาจเกิดอุบัติเหตุ',
     },
   ];
 
@@ -108,14 +79,21 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter setModalState) {
             final filteredStalls = _stalls.where((stall) {
-              final numberMatch = stall.stallNumber.toLowerCase().contains(searchQuery.toLowerCase());
-              final zoneMatch = stall.zoneName.toLowerCase().contains(searchQuery.toLowerCase());
+              final numberMatch = stall.stallNumber.toLowerCase().contains(
+                searchQuery.toLowerCase(),
+              );
+              final zoneMatch = stall.zoneName.toLowerCase().contains(
+                searchQuery.toLowerCase(),
+              );
               return numberMatch || zoneMatch;
             }).toList();
 
             return Container(
               height: MediaQuery.of(context).size.height * 0.75,
-              padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 20.0,
+                vertical: 16.0,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -156,9 +134,18 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
                     },
                     decoration: InputDecoration(
                       hintText: 'ค้นหาด้วยเลขแผง เช่น A01 หรือชื่อโซน...',
-                      hintStyle: GoogleFonts.outfit(color: const Color(0xFF94A3B8), fontSize: 14),
-                      prefixIcon: const Icon(Icons.search, color: Color(0xFF64748B)),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      hintStyle: GoogleFonts.outfit(
+                        color: const Color(0xFF94A3B8),
+                        fontSize: 14,
+                      ),
+                      prefixIcon: const Icon(
+                        Icons.search,
+                        color: Color(0xFF64748B),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
                       filled: true,
                       fillColor: const Color(0xFFF8FAFC),
                       border: OutlineInputBorder(
@@ -171,10 +158,16 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Color(0xFF3B82F6), width: 1.5),
+                        borderSide: const BorderSide(
+                          color: Color(0xFF3B82F6),
+                          width: 1.5,
+                        ),
                       ),
                     ),
-                    style: GoogleFonts.outfit(fontSize: 14, color: const Color(0xFF0F172A)),
+                    style: GoogleFonts.outfit(
+                      fontSize: 14,
+                      color: const Color(0xFF0F172A),
+                    ),
                   ),
                   const SizedBox(height: 16),
                   InkWell(
@@ -186,12 +179,19 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
                     },
                     child: Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 12,
+                        horizontal: 16,
+                      ),
                       decoration: BoxDecoration(
-                        color: _selectedStall == null ? const Color(0xFFF0F7FF) : Colors.transparent,
+                        color: _selectedStall == null
+                            ? const Color(0xFFF0F7FF)
+                            : Colors.transparent,
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                          color: _selectedStall == null ? const Color(0xFF3B82F6) : Colors.transparent,
+                          color: _selectedStall == null
+                              ? const Color(0xFF3B82F6)
+                              : Colors.transparent,
                           width: 1,
                         ),
                       ),
@@ -202,12 +202,20 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
                             'ไม่ใช่แผงค้า / บริเวณทั่วไป',
                             style: GoogleFonts.outfit(
                               fontSize: 14,
-                              fontWeight: _selectedStall == null ? FontWeight.bold : FontWeight.normal,
-                              color: _selectedStall == null ? const Color(0xFF3B82F6) : const Color(0xFF0F172A),
+                              fontWeight: _selectedStall == null
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                              color: _selectedStall == null
+                                  ? const Color(0xFF3B82F6)
+                                  : const Color(0xFF0F172A),
                             ),
                           ),
                           if (_selectedStall == null)
-                            const Icon(Icons.check, color: Color(0xFF3B82F6), size: 18),
+                            const Icon(
+                              Icons.check,
+                              color: Color(0xFF3B82F6),
+                              size: 18,
+                            ),
                         ],
                       ),
                     ),
@@ -218,15 +226,22 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
                         ? Center(
                             child: Text(
                               'ไม่พบข้อมูลแผงค้า',
-                              style: GoogleFonts.outfit(color: const Color(0xFF94A3B8), fontSize: 14),
+                              style: GoogleFonts.outfit(
+                                color: const Color(0xFF94A3B8),
+                                fontSize: 14,
+                              ),
                             ),
                           )
                         : ListView.separated(
                             itemCount: filteredStalls.length,
-                            separatorBuilder: (context, index) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                            separatorBuilder: (context, index) => const Divider(
+                              height: 1,
+                              color: Color(0xFFF1F5F9),
+                            ),
                             itemBuilder: (context, index) {
                               final stall = filteredStalls[index];
-                              final isSelected = _selectedStall?.stallId == stall.stallId;
+                              final isSelected =
+                                  _selectedStall?.stallId == stall.stallId;
                               return InkWell(
                                 onTap: () {
                                   setState(() {
@@ -235,23 +250,34 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
                                   Navigator.pop(context);
                                 },
                                 child: Container(
-                                  padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 14,
+                                    horizontal: 16,
+                                  ),
                                   decoration: BoxDecoration(
-                                    color: isSelected ? const Color(0xFFF0F7FF) : Colors.transparent,
+                                    color: isSelected
+                                        ? const Color(0xFFF0F7FF)
+                                        : Colors.transparent,
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
                                     children: [
                                       Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           Text(
                                             'แผงค้า ${stall.stallNumber}',
                                             style: GoogleFonts.outfit(
                                               fontSize: 14,
-                                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                              color: isSelected ? const Color(0xFF3B82F6) : const Color(0xFF0F172A),
+                                              fontWeight: isSelected
+                                                  ? FontWeight.bold
+                                                  : FontWeight.normal,
+                                              color: isSelected
+                                                  ? const Color(0xFF3B82F6)
+                                                  : const Color(0xFF0F172A),
                                             ),
                                           ),
                                           const SizedBox(height: 2),
@@ -265,7 +291,11 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
                                         ],
                                       ),
                                       if (isSelected)
-                                        const Icon(Icons.check, color: Color(0xFF3B82F6), size: 18),
+                                        const Icon(
+                                          Icons.check,
+                                          color: Color(0xFF3B82F6),
+                                          size: 18,
+                                        ),
                                     ],
                                   ),
                                 ),
@@ -282,123 +312,36 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
     );
   }
 
-  void _showMockImageSelector() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'เลือกรูปภาพจำลองปัญหา',
-                      style: GoogleFonts.outfit(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: const Color(0xFF0F172A),
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close, color: Color(0xFF64748B)),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'กรุณาเลือกรูปภาพจำลองเพื่อส่งเข้าสู่ระบบทดสอบฐานข้อมูล:',
-                  style: GoogleFonts.outfit(fontSize: 14, color: const Color(0xFF64748B)),
-                ),
-                const SizedBox(height: 16),
-                Flexible(
-                  child: ListView.separated(
-                    shrinkWrap: true,
-                    itemCount: _mockImages.length,
-                    separatorBuilder: (context, index) => const SizedBox(height: 10),
-                    itemBuilder: (context, index) {
-                      final item = _mockImages[index];
-                      final isSelected = _selectedMockImage == item['filename'];
-                      return InkWell(
-                        onTap: () {
-                          setState(() {
-                            _selectedMockImage = item['filename'];
-                            if (_descriptionController.text.trim().isEmpty) {
-                              _descriptionController.text = item['description']!;
-                            }
-                          });
-                          Navigator.pop(context);
-                        },
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: isSelected ? const Color(0xFFF0F7FF) : const Color(0xFFF8FAFC),
-                            border: Border.all(
-                              color: isSelected ? const Color(0xFF3B82F6) : const Color(0xFFE2E8F0),
-                              width: isSelected ? 1.5 : 1,
-                            ),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          padding: const EdgeInsets.all(12),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 44,
-                                height: 44,
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: const Color(0xFFE2E8F0)),
-                                ),
-                                child: const Icon(Icons.image_outlined, color: Color(0xFF3B82F6)),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      item['title']!,
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.bold,
-                                        color: const Color(0xFF0F172A),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      item['filename']!,
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 12,
-                                        color: const Color(0xFF64748B),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              if (isSelected)
-                                const Icon(Icons.check_circle, color: Color(0xFF3B82F6))
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
+  Future<void> _pickReportImageFromFilePicker() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: false,
+        withData: true,
+      );
+      if (result != null && result.files.isNotEmpty) {
+        final file = result.files.first;
+        if (file.bytes != null) {
+          setState(() {
+            _pickedReportImageBytes = file.bytes;
+            _pickedReportImageName = file.name;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('ไม่สามารถเลือกรูปภาพได้: $e', style: GoogleFonts.outfit()),
+            backgroundColor: const Color(0xFFDC2626),
           ),
         );
-      },
-    );
+      }
+    }
+  }
+
+  void _showMockImageSelector() {
+    _pickReportImageFromFilePicker();
   }
 
   Future<void> _submitReport() async {
@@ -408,20 +351,28 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
     if (currentUser == null || currentUser.userId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('กรุณาเข้าสู่ระบบก่อนแจ้งปัญหาค่ะ', style: GoogleFonts.outfit()),
+          content: Text(
+            'กรุณาเข้าสู่ระบบก่อนแจ้งปัญหาค่ะ',
+            style: GoogleFonts.outfit(),
+          ),
           backgroundColor: Colors.redAccent,
         ),
       );
       return;
     }
 
-    final String location = _selectedStall != null ? 'แผงค้า ${_selectedStall!.stallNumber}' : 'บริเวณทั่วไป';
+    final String location = _selectedStall != null
+        ? 'แผงค้า ${_selectedStall!.stallNumber}'
+        : 'บริเวณทั่วไป';
     final String description = _descriptionController.text.trim();
 
     if (description.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('กรุณาระบุรายละเอียดปัญหาเพิ่มเติมด้วยค่ะ', style: GoogleFonts.outfit()),
+          content: Text(
+            'กรุณาระบุรายละเอียดปัญหาเพิ่มเติมด้วยค่ะ',
+            style: GoogleFonts.outfit(),
+          ),
           backgroundColor: Colors.orangeAccent,
         ),
       );
@@ -433,7 +384,9 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const Center(child: CircularProgressIndicator(color: Color(0xFF1E88E5))),
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(color: Color(0xFF1E88E5)),
+      ),
     );
 
     final result = await ProblemService.submitProblemReport(
@@ -442,7 +395,8 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
       description: description,
       category: _selectedCategory,
       stallId: _selectedStall?.stallId,
-      fileName: _selectedMockImage, // Send filename directly to be saved in db
+      fileBytes: _pickedReportImageBytes,
+      fileName: _pickedReportImageName,
     );
 
     if (mounted) {
@@ -458,12 +412,18 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
           barrierDismissible: false,
           builder: (context) => AlertDialog(
             backgroundColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 const SizedBox(height: 12),
-                const Icon(Icons.check_circle_outline, color: Color(0xFF10B981), size: 64),
+                const Icon(
+                  Icons.check_circle_outline,
+                  color: Color(0xFF10B981),
+                  size: 64,
+                ),
                 const SizedBox(height: 16),
                 Text(
                   'ส่งข้อมูลแจ้งซ่อมสำเร็จ',
@@ -477,7 +437,10 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
                 Text(
                   'ระบบบันทึกรายงานปัญหาของคุณเรียบร้อยแล้ว แอดมินจะดำเนินการแก้ไขโดยเร็วที่สุดค่ะ',
                   textAlign: TextAlign.center,
-                  style: GoogleFonts.outfit(fontSize: 14, color: const Color(0xFF64748B)),
+                  style: GoogleFonts.outfit(
+                    fontSize: 14,
+                    color: const Color(0xFF64748B),
+                  ),
                 ),
                 const SizedBox(height: 24),
                 SizedBox(
@@ -490,10 +453,15 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF3B82F6),
                       foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
-                    child: Text('ตกลง', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                    child: Text(
+                      'ตกลง',
+                      style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+                    ),
                   ),
                 ),
               ],
@@ -505,7 +473,10 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('ไม่สามารถส่งคำขอแจ้งซ่อมได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง', style: GoogleFonts.outfit()),
+            content: Text(
+              'ไม่สามารถส่งคำขอแจ้งซ่อมได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง',
+              style: GoogleFonts.outfit(),
+            ),
             backgroundColor: Colors.redAccent,
           ),
         );
@@ -521,7 +492,11 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Color(0xFF0F172A), size: 20),
+          icon: const Icon(
+            Icons.arrow_back_ios_new,
+            color: Color(0xFF0F172A),
+            size: 20,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
@@ -541,7 +516,10 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
       body: SafeArea(
         child: SingleChildScrollView(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 24.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 20.0,
+              vertical: 24.0,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -575,12 +553,13 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       itemCount: _categories.length,
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        mainAxisSpacing: 10,
-                        crossAxisSpacing: 10,
-                        childAspectRatio: 1.8,
-                      ),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            mainAxisSpacing: 10,
+                            crossAxisSpacing: 10,
+                            childAspectRatio: 1.8,
+                          ),
                       itemBuilder: (context, index) {
                         final cat = _categories[index];
                         final isSelected = _selectedCategory == cat['name'];
@@ -595,16 +574,20 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(14),
                               border: Border.all(
-                                color: isSelected ? const Color(0xFF3B82F6) : const Color(0xFFE2E8F0),
+                                color: isSelected
+                                    ? const Color(0xFF3B82F6)
+                                    : const Color(0xFFE2E8F0),
                                 width: isSelected ? 1.5 : 1,
                               ),
                               boxShadow: isSelected
                                   ? [
                                       BoxShadow(
-                                        color: const Color(0xFF3B82F6).withOpacity(0.06),
+                                        color: const Color(
+                                          0xFF3B82F6,
+                                        ).withValues(alpha: 0.06),
                                         blurRadius: 8,
                                         offset: const Offset(0, 3),
-                                      )
+                                      ),
                                     ]
                                   : null,
                             ),
@@ -621,7 +604,9 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
                                   ),
                                   child: Icon(
                                     cat['icon'] as IconData,
-                                    color: isSelected ? Colors.white : const Color(0xFF3B82F6),
+                                    color: isSelected
+                                        ? Colors.white
+                                        : const Color(0xFF3B82F6),
                                     size: 18,
                                   ),
                                 ),
@@ -630,8 +615,12 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
                                   cat['name']!,
                                   style: GoogleFonts.outfit(
                                     fontSize: 12.5,
-                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                    color: isSelected ? const Color(0xFF3B82F6) : const Color(0xFF0F172A),
+                                    fontWeight: isSelected
+                                        ? FontWeight.bold
+                                        : FontWeight.normal,
+                                    color: isSelected
+                                        ? const Color(0xFF3B82F6)
+                                        : const Color(0xFF0F172A),
                                   ),
                                 ),
                               ],
@@ -647,7 +636,11 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
                 // 2. บริเวณ (Stall Dropdown Button Picker)
                 Row(
                   children: [
-                    const Icon(Icons.storefront_outlined, color: Color(0xFF3B82F6), size: 20),
+                    const Icon(
+                      Icons.storefront_outlined,
+                      color: Color(0xFF3B82F6),
+                      size: 20,
+                    ),
                     const SizedBox(width: 8),
                     Text(
                       'บริเวณ (แผงค้า)',
@@ -668,30 +661,45 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
                         hintText: _isLoadingStalls
                             ? 'กำลังโหลดข้อมูลแผงค้า...'
                             : (_selectedStall != null
-                                ? 'แผงค้า ${_selectedStall!.stallNumber} (${_selectedStall!.zoneName})'
-                                : 'ไม่ใช่แผงค้า / บริเวณทั่วไป'),
+                                  ? 'แผงค้า ${_selectedStall!.stallNumber} (${_selectedStall!.zoneName})'
+                                  : 'ไม่ใช่แผงค้า / บริเวณทั่วไป'),
                         hintStyle: GoogleFonts.outfit(
                           color: _isLoadingStalls
                               ? const Color(0xFF94A3B8)
                               : const Color(0xFF0F172A),
                           fontSize: 14,
-                          fontWeight: _selectedStall != null ? FontWeight.bold : FontWeight.normal,
+                          fontWeight: _selectedStall != null
+                              ? FontWeight.bold
+                              : FontWeight.normal,
                         ),
-                        suffixIcon: const Icon(Icons.keyboard_arrow_down, color: Color(0xFF64748B)),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        suffixIcon: const Icon(
+                          Icons.keyboard_arrow_down,
+                          color: Color(0xFF64748B),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
                         filled: true,
                         fillColor: const Color(0xFFF8FAFC),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(16),
-                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                          borderSide: const BorderSide(
+                            color: Color(0xFFE2E8F0),
+                          ),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(16),
-                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                          borderSide: const BorderSide(
+                            color: Color(0xFFE2E8F0),
+                          ),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(16),
-                          borderSide: const BorderSide(color: Color(0xFF3B82F6), width: 1.5),
+                          borderSide: const BorderSide(
+                            color: Color(0xFF3B82F6),
+                            width: 1.5,
+                          ),
                         ),
                       ),
                       readOnly: true,
@@ -703,7 +711,11 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
                 // 3. Description Input
                 Row(
                   children: [
-                    const Icon(Icons.description_outlined, color: Color(0xFF3B82F6), size: 20),
+                    const Icon(
+                      Icons.description_outlined,
+                      color: Color(0xFF3B82F6),
+                      size: 20,
+                    ),
                     const SizedBox(width: 8),
                     Text(
                       'รายละเอียด',
@@ -721,7 +733,10 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
                   maxLines: 4,
                   decoration: InputDecoration(
                     hintText: 'ระบุรายละเอียดเพิ่มเติม...',
-                    hintStyle: GoogleFonts.outfit(color: const Color(0xFF94A3B8), fontSize: 14),
+                    hintStyle: GoogleFonts.outfit(
+                      color: const Color(0xFF94A3B8),
+                      fontSize: 14,
+                    ),
                     contentPadding: const EdgeInsets.all(16),
                     filled: true,
                     fillColor: const Color(0xFFF8FAFC),
@@ -735,17 +750,27 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(16),
-                      borderSide: const BorderSide(color: Color(0xFF3B82F6), width: 1.5),
+                      borderSide: const BorderSide(
+                        color: Color(0xFF3B82F6),
+                        width: 1.5,
+                      ),
                     ),
                   ),
-                  style: GoogleFonts.outfit(fontSize: 14, color: const Color(0xFF0F172A)),
+                  style: GoogleFonts.outfit(
+                    fontSize: 14,
+                    color: const Color(0xFF0F172A),
+                  ),
                 ),
                 const SizedBox(height: 24),
 
                 // 4. Photo Attach
                 Row(
                   children: [
-                    const Icon(Icons.camera_alt_outlined, color: Color(0xFF3B82F6), size: 20),
+                    const Icon(
+                      Icons.camera_alt_outlined,
+                      color: Color(0xFF3B82F6),
+                      size: 20,
+                    ),
                     const SizedBox(width: 8),
                     Text(
                       'แนบรูปภาพปัญหา',
@@ -767,7 +792,7 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
                       color: const Color(0xFFF8FAFC),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                        color: _selectedMockImage != null
+                        color: _pickedReportImageBytes != null
                             ? const Color(0xFF3B82F6)
                             : const Color(0xFFCBD5E1),
                         width: 1.5,
@@ -778,7 +803,14 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
                       child: Stack(
                         alignment: Alignment.center,
                         children: [
-                          if (_selectedMockImage == null) ...[
+                          if (_pickedReportImageBytes != null)
+                            Image.memory(
+                              _pickedReportImageBytes!,
+                              fit: BoxFit.cover,
+                              width: double.infinity,
+                              height: 120,
+                            )
+                          else ...[
                             Padding(
                               padding: const EdgeInsets.all(4.0),
                               child: Container(
@@ -827,59 +859,6 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
                                 ),
                               ),
                             ),
-                          ] else ...[
-                            Container(
-                              color: const Color(0xFFF0F7FF),
-                              padding: const EdgeInsets.symmetric(horizontal: 16),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 50,
-                                    height: 50,
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(color: const Color(0xFF3B82F6)),
-                                    ),
-                                    child: const Icon(Icons.image, color: Color(0xFF3B82F6), size: 28),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'เลือกไฟล์เสร็จสมบูรณ์',
-                                          style: GoogleFonts.outfit(
-                                            fontWeight: FontWeight.bold,
-                                            color: const Color(0xFF1E3A8A),
-                                            fontSize: 13,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          _selectedMockImage!,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: GoogleFonts.outfit(
-                                            color: const Color(0xFF2563EB),
-                                            fontSize: 11,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.cancel, color: Color(0xFFEF4444), size: 20),
-                                    onPressed: () {
-                                      setState(() {
-                                        _selectedMockImage = null;
-                                      });
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ),
                           ],
                         ],
                       ),
@@ -894,7 +873,11 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
                   height: 48,
                   child: ElevatedButton.icon(
                     onPressed: _isSubmitting ? null : _submitReport,
-                    icon: const Icon(Icons.send_outlined, color: Colors.white, size: 16),
+                    icon: const Icon(
+                      Icons.send_outlined,
+                      color: Colors.white,
+                      size: 16,
+                    ),
                     label: Text(
                       'ส่งข้อมูลแจ้งซ่อม',
                       style: GoogleFonts.outfit(

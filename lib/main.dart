@@ -22,13 +22,13 @@ import 'screens/create_shop_screen.dart';
 import 'screens/manage_shop_screen.dart';
 import 'screens/add_menu_screen.dart';
 import 'screens/manage_menu_category_screen.dart';
+import 'screens/market_map_screen.dart';
+import 'screens/book_stall_screen.dart';
 
 void main() {
   runApp(
     MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => AuthService()),
-      ],
+      providers: [ChangeNotifierProvider(create: (_) => AuthService())],
       child: const MyApp(),
     ),
   );
@@ -56,13 +56,10 @@ class MyApp extends StatelessWidget {
         scaffoldBackgroundColor: const Color(0xFF0D1B2A),
         textTheme: GoogleFonts.outfitTextTheme(
           ThemeData.dark().textTheme,
-        ).apply(
-          bodyColor: Colors.white,
-          displayColor: Colors.white,
-        ),
+        ).apply(bodyColor: Colors.white, displayColor: Colors.white),
         navigationBarTheme: NavigationBarThemeData(
           backgroundColor: const Color(0xFF1B2838),
-          indicatorColor: const Color(0xFF00BFA5).withOpacity(0.2),
+          indicatorColor: const Color(0xFF00BFA5).withValues(alpha: 0.2),
           labelTextStyle: WidgetStateProperty.all(
             const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
           ),
@@ -89,6 +86,8 @@ class MyApp extends StatelessWidget {
         '/manage_shop': (context) => const ManageShopScreen(),
         '/add_menu': (context) => const AddMenuScreen(),
         '/manage_menu_category': (context) => const ManageMenuCategoryScreen(),
+        '/market_map': (context) => const MarketMapScreen(),
+        '/book_stall': (context) => const BookStallScreen(),
       },
     );
   }

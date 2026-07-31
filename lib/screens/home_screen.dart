@@ -1,5 +1,8 @@
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../services/shop_service.dart';
 import '../models/shop.dart';
@@ -7,6 +10,7 @@ import '../models/user.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../widgets/app_dialog.dart';
+import 'market_map_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -25,7 +29,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _pages = [
       const _HomeTab(),
-      const _PlaceholderTab(title: 'แผนที่ตลาด', icon: Icons.explore_outlined),
+      const MarketMapScreen(isEmbedded: true),
       const _FollowedTab(),
       const _ProfileTab(),
     ];
@@ -48,7 +52,7 @@ class _HomeScreenState extends State<HomeScreen> {
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.06),
+              color: Colors.black.withValues(alpha: 0.06),
               blurRadius: 12,
               offset: const Offset(0, -4),
             ),
@@ -62,28 +66,60 @@ class _HomeScreenState extends State<HomeScreen> {
               setState(() => _currentIndex = index);
             },
             backgroundColor: Colors.white,
-            indicatorColor: const Color(0xFF1E88E5).withOpacity(0.12),
+            indicatorColor: const Color(0xFF1E88E5).withValues(alpha: 0.12),
             height: 70,
             labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
             destinations: [
               NavigationDestination(
-                icon: const Icon(Icons.home_outlined, size: 24, color: Color(0xFF64748B)),
-                selectedIcon: const Icon(Icons.home, size: 24, color: Color(0xFF1E88E5)),
+                icon: const Icon(
+                  Icons.home_outlined,
+                  size: 24,
+                  color: Color(0xFF64748B),
+                ),
+                selectedIcon: const Icon(
+                  Icons.home,
+                  size: 24,
+                  color: Color(0xFF1E88E5),
+                ),
                 label: 'หน้าหลัก',
               ),
               NavigationDestination(
-                icon: const Icon(Icons.explore_outlined, size: 24, color: Color(0xFF64748B)),
-                selectedIcon: const Icon(Icons.explore, size: 24, color: Color(0xFF1E88E5)),
+                icon: const Icon(
+                  Icons.explore_outlined,
+                  size: 24,
+                  color: Color(0xFF64748B),
+                ),
+                selectedIcon: const Icon(
+                  Icons.explore,
+                  size: 24,
+                  color: Color(0xFF1E88E5),
+                ),
                 label: 'แผนที่ตลาด',
               ),
               NavigationDestination(
-                icon: const Icon(Icons.favorite_outline, size: 24, color: Color(0xFF64748B)),
-                selectedIcon: const Icon(Icons.favorite, size: 24, color: Color(0xFF1E88E5)),
+                icon: const Icon(
+                  Icons.favorite_outline,
+                  size: 24,
+                  color: Color(0xFF64748B),
+                ),
+                selectedIcon: const Icon(
+                  Icons.favorite,
+                  size: 24,
+                  color: Color(0xFF1E88E5),
+                ),
                 label: 'ติดตาม',
               ),
               NavigationDestination(
-                icon: const Icon(Icons.person_outline, size: 24, color: Color(0xFF64748B)),
-                selectedIcon: const Icon(Icons.person, size: 24, color: Color(0xFF1E88E5)),
+                icon: const Icon(
+                  Icons.person_outline,
+                  size: 24,
+                  color: Color(0xFF64748B),
+                ),
+                selectedIcon: const Icon(
+                  Icons.person,
+                  size: 24,
+                  color: Color(0xFF1E88E5),
+                ),
                 label: 'โปรไฟล์',
               ),
             ],
@@ -115,6 +151,36 @@ class _HomeTabState extends State<_HomeTab> {
     setState(() => _isLoading = true);
     try {
       final shops = await ShopService.getShops();
+      if (!mounted) return;
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final userInterests = authService.currentUser?.interests ?? [];
+
+      // Sort according to Priority:
+      // Priority 1: Followed shops (e.g. shop_id in followed list)
+      // Priority 2: Shops matching user interests category
+      // Priority 3: Other shops
+      shops.sort((a, b) {
+        final aFollowed = a.shopId == 1; // Sample followed check
+        final bFollowed = b.shopId == 1;
+        if (aFollowed && !bFollowed) return -1;
+        if (!aFollowed && bFollowed) return 1;
+
+        final aInterestMatch = userInterests.any(
+          (interest) =>
+              a.categoryName.contains(interest) ||
+              (a.description ?? '').contains(interest),
+        );
+        final bInterestMatch = userInterests.any(
+          (interest) =>
+              b.categoryName.contains(interest) ||
+              (b.description ?? '').contains(interest),
+        );
+        if (aInterestMatch && !bInterestMatch) return -1;
+        if (!aInterestMatch && bInterestMatch) return 1;
+
+        return 0;
+      });
+
       if (mounted) {
         setState(() {
           _shops = shops;
@@ -242,7 +308,7 @@ class _HomeTabState extends State<_HomeTab> {
                   borderRadius: BorderRadius.circular(24),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.03),
+                      color: Colors.black.withValues(alpha: 0.03),
                       blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
@@ -252,10 +318,20 @@ class _HomeTabState extends State<_HomeTab> {
                   style: GoogleFonts.outfit(color: Colors.black),
                   decoration: InputDecoration(
                     hintText: 'ค้นหาร้าน หรือ ร้านค้า...',
-                    hintStyle: GoogleFonts.outfit(color: const Color(0xFF94A3B8), fontSize: 15),
-                    prefixIcon: const Icon(Icons.search, color: Color(0xFF94A3B8), size: 22),
+                    hintStyle: GoogleFonts.outfit(
+                      color: const Color(0xFF94A3B8),
+                      fontSize: 15,
+                    ),
+                    prefixIcon: const Icon(
+                      Icons.search,
+                      color: Color(0xFF94A3B8),
+                      size: 22,
+                    ),
                     border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                    contentPadding: const EdgeInsets.symmetric(
+                      vertical: 14,
+                      horizontal: 16,
+                    ),
                   ),
                 ),
               ),
@@ -293,7 +369,9 @@ class _HomeTabState extends State<_HomeTab> {
                   ? const SizedBox(
                       height: 100,
                       child: Center(
-                        child: CircularProgressIndicator(color: Color(0xFF1E88E5)),
+                        child: CircularProgressIndicator(
+                          color: Color(0xFF1E88E5),
+                        ),
                       ),
                     )
                   : SizedBox(
@@ -309,17 +387,34 @@ class _HomeTabState extends State<_HomeTab> {
                               margin: const EdgeInsets.only(right: 18),
                               child: Column(
                                 children: [
-                                  CircleAvatar(
-                                    radius: 34,
-                                    backgroundColor: const Color(0xFFE2E8F0),
-                                    backgroundImage: shop.shopImage != null && shop.shopImage!.isNotEmpty
-                                        ? (shop.shopImage!.startsWith('http')
-                                            ? NetworkImage(shop.shopImage!)
-                                            : NetworkImage(ApiService.getImagePath(shop.shopImage)))
-                                        : null,
-                                    child: shop.shopImage == null || shop.shopImage!.isEmpty
-                                        ? const Icon(Icons.storefront, color: Color(0xFF64748B), size: 30)
-                                        : null,
+                                  ClipOval(
+                                    child: Container(
+                                      width: 68,
+                                      height: 68,
+                                      color: const Color(0xFFE2E8F0),
+                                      child: shop.shopImage != null &&
+                                              shop.shopImage!.isNotEmpty
+                                          ? Image.network(
+                                              ApiService.getImagePath(
+                                                shop.shopImage,
+                                              ),
+                                              width: 68,
+                                              height: 68,
+                                              fit: BoxFit.cover,
+                                              errorBuilder:
+                                                  (context, error, stackTrace) =>
+                                                      const Icon(
+                                                Icons.storefront,
+                                                color: Color(0xFF64748B),
+                                                size: 30,
+                                              ),
+                                            )
+                                          : const Icon(
+                                              Icons.storefront,
+                                              color: Color(0xFF64748B),
+                                              size: 30,
+                                            ),
+                                    ),
                                   ),
                                   const SizedBox(height: 8),
                                   Text(
@@ -357,19 +452,25 @@ class _HomeTabState extends State<_HomeTab> {
                   ? const Center(
                       child: Padding(
                         padding: EdgeInsets.all(40),
-                        child: CircularProgressIndicator(color: Color(0xFF1E88E5)),
+                        child: CircularProgressIndicator(
+                          color: Color(0xFF1E88E5),
+                        ),
                       ),
                     )
                   : _shops.isEmpty
-                      ? Center(
-                          child: Text(
-                            'ยังไม่มีร้านแนะนำในขณะนี้',
-                            style: GoogleFonts.outfit(color: const Color(0xFF94A3B8)),
-                          ),
-                        )
-                      : Column(
-                          children: _shops.map((shop) => _buildRecommendedCard(shop)).toList(),
+                  ? Center(
+                      child: Text(
+                        'ยังไม่มีร้านแนะนำในขณะนี้',
+                        style: GoogleFonts.outfit(
+                          color: const Color(0xFF94A3B8),
                         ),
+                      ),
+                    )
+                  : Column(
+                      children: _shops
+                          .map((shop) => _buildRecommendedCard(shop))
+                          .toList(),
+                    ),
             ],
           ),
         ),
@@ -387,7 +488,7 @@ class _HomeTabState extends State<_HomeTab> {
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -398,17 +499,20 @@ class _HomeTabState extends State<_HomeTab> {
           children: [
             // Cover Image
             ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(20),
+              ),
               child: AspectRatio(
                 aspectRatio: 1.6,
                 child: shop.shopImage != null && shop.shopImage!.isNotEmpty
                     ? (shop.shopImage!.startsWith('http')
-                        ? Image.network(shop.shopImage!, fit: BoxFit.cover)
-                        : Image.network(
-                            ApiService.getImagePath(shop.shopImage),
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) => _buildCoverPlaceholder(),
-                          ))
+                          ? Image.network(shop.shopImage!, fit: BoxFit.cover)
+                          : Image.network(
+                              ApiService.getImagePath(shop.shopImage),
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  _buildCoverPlaceholder(),
+                            ))
                     : _buildCoverPlaceholder(),
               ),
             ),
@@ -447,51 +551,13 @@ class _HomeTabState extends State<_HomeTab> {
     return Container(
       color: const Color(0xFFE2E8F0),
       child: const Center(
-        child: Icon(
-          Icons.storefront,
-          size: 60,
-          color: Color(0xFF94A3B8),
-        ),
+        child: Icon(Icons.storefront, size: 60, color: Color(0xFF94A3B8)),
       ),
     );
   }
 }
 
-class _PlaceholderTab extends StatelessWidget {
-  final String title;
-  final IconData icon;
 
-  const _PlaceholderTab({required this.title, required this.icon});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        centerTitle: true,
-        title: Text(
-          title,
-          style: GoogleFonts.outfit(color: Colors.black, fontWeight: FontWeight.bold),
-        ),
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 64, color: const Color(0xFF94A3B8)),
-            const SizedBox(height: 16),
-            Text(
-              'หน้ารายการ $title (ชั่วคราว)',
-              style: GoogleFonts.outfit(color: const Color(0xFF64748B), fontSize: 16),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 class _ProfileTab extends StatefulWidget {
   const _ProfileTab();
@@ -502,10 +568,56 @@ class _ProfileTab extends StatefulWidget {
 
 class _ProfileTabState extends State<_ProfileTab> {
   bool _isEditing = false;
+  String? _selectedProfileImage;
+  Uint8List? _pickedImageBytes;
+  String? _pickedImageName;
+  final ImagePicker _picker = ImagePicker();
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
-  final List<String> _interests = ['อาหาร', 'แฟชั่น', 'ขนม', 'สตรีทฟู้ด', 'เครื่องดื่ม', 'อื่นๆ'];
-  final List<String> _selectedInterests = ['อาหาร', 'แฟชั่น', 'ขนม'];
+
+  List<String> _dbInterests = [];
+  bool _isLoadingInterests = true;
+  final Set<String> _selectedInterests = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchInterestsFromDb();
+  }
+
+  Future<void> _fetchInterestsFromDb() async {
+    try {
+      final response = await ApiService.get('/v1/user-interests');
+      if (response['status'] == true && response['data'] is List) {
+        final List<dynamic> list = response['data'] as List<dynamic>;
+        if (mounted) {
+          setState(() {
+            final List<String> items = list.where((e) => e != null).map((e) => e.toString()).toList();
+            _sortInterestsWithOthersAtEnd(items);
+            _isLoadingInterests = false;
+          });
+          return;
+        }
+      }
+    } catch (e) {
+      debugPrint('Failed to load interests from DB: $e');
+    }
+
+    if (mounted) {
+      setState(() {
+        if (_dbInterests.isEmpty) {
+          _sortInterestsWithOthersAtEnd(['อาหาร', 'เครื่องดื่ม', 'ขนม', 'สตรีทฟู้ด', 'อื่นๆ']);
+        }
+        _isLoadingInterests = false;
+      });
+    }
+  }
+
+  void _sortInterestsWithOthersAtEnd(List<String> list) {
+    final others = list.where((e) => e == 'อื่นๆ' || e.contains('อื่นๆ')).toList();
+    final normal = list.where((e) => e != 'อื่นๆ' && !e.contains('อื่นๆ')).toList();
+    _dbInterests = [...normal, ...others];
+  }
 
   @override
   void dispose() {
@@ -517,6 +629,189 @@ class _ProfileTabState extends State<_ProfileTab> {
   void _initForm(UserModel? user) {
     _nameController.text = user?.username ?? 'สมชาย ใจดี';
     _phoneController.text = user?.phone ?? '081-999-99999';
+    _selectedProfileImage = user?.profileImage;
+    _pickedImageBytes = null;
+    _pickedImageName = null;
+
+    if (user?.interests != null) {
+      final dynamic raw = user!.interests;
+      final String rawInterests = (raw is List)
+          ? raw.join(',')
+          : raw.toString();
+      final userInterests = rawInterests
+          .split(',')
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty);
+      _selectedInterests.clear();
+      _selectedInterests.addAll(userInterests);
+    }
+  }
+
+  Future<void> _pickProfileImage(ImageSource source) async {
+    // 1. Try FilePicker first (100% Web & Desktop compatible without MissingPluginException)
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: false,
+        withData: true,
+      );
+
+      if (result != null && result.files.isNotEmpty) {
+        final file = result.files.first;
+        if (file.bytes != null) {
+          setState(() {
+            _pickedImageBytes = file.bytes;
+            _pickedImageName = file.name;
+          });
+          return;
+        }
+      }
+    } catch (e) {
+      debugPrint('FilePicker fallback: $e');
+    }
+
+    // 2. Fallback to ImagePicker
+    try {
+      final XFile? image = await _picker.pickImage(
+        source: source,
+        maxWidth: 800,
+        maxHeight: 800,
+        imageQuality: 85,
+      );
+      if (image != null) {
+        final bytes = await image.readAsBytes();
+        setState(() {
+          _pickedImageBytes = bytes;
+          _pickedImageName = image.name;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'ไม่สามารถเลือกรูปภาพได้: $e',
+              style: GoogleFonts.outfit(),
+            ),
+            backgroundColor: const Color(0xFFDC2626),
+          ),
+        );
+      }
+    }
+  }
+
+  void _showProfileImageOptions(UserModel? user) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'เปลี่ยน / อัปโหลดรูปโปรไฟล์',
+                      style: GoogleFonts.outfit(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF0F172A),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Color(0xFF64748B)),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFE3F2FD),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.photo_library_outlined,
+                      color: Color(0xFF1E88E5),
+                    ),
+                  ),
+                  title: Text(
+                    'เลือกไฟล์รูปภาพจากอุปกรณ์',
+                    style: GoogleFonts.outfit(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                      color: const Color(0xFF0F172A),
+                    ),
+                  ),
+                  subtitle: Text(
+                    'อัปโหลดรูปภาพ JPG, PNG จากคลังภาพของคุณ',
+                    style: GoogleFonts.outfit(
+                      fontSize: 12,
+                      color: const Color(0xFF64748B),
+                    ),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _pickProfileImage(ImageSource.gallery);
+                  },
+                ),
+                const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFF1F5F9),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.camera_alt_outlined,
+                      color: Color(0xFF475569),
+                    ),
+                  ),
+                  title: Text(
+                    'ถ่ายภาพด้วยกล้อง',
+                    style: GoogleFonts.outfit(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                      color: const Color(0xFF0F172A),
+                    ),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _pickProfileImage(ImageSource.camera);
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDefaultGreyAvatar(double size) {
+    return Container(
+      width: size,
+      height: size,
+      color: const Color(0xFFE4E6EB),
+      child: Center(
+        child: Icon(
+          Icons.person,
+          size: size * 0.65,
+          color: const Color(0xFF8A8D91),
+        ),
+      ),
+    );
   }
 
   @override
@@ -525,16 +820,22 @@ class _ProfileTabState extends State<_ProfileTab> {
     final user = authService.currentUser;
 
     // Use backend user details or fallback to mockup info
-    final String displayName = user != null && user.username.isNotEmpty ? user.username : 'สมชาย ใจดี';
-    final String displayRole = user != null && user.role == 'seller' ? 'เป็นสมาชิก และผู้ขาย' : 'เป็นสมาชิก';
+    final String displayName = user != null && user.username.isNotEmpty
+        ? user.username
+        : 'สมชาย ใจดี';
+    final String displayRole = user != null && user.role == 'seller'
+        ? 'เป็นสมาชิก และผู้ค้า'
+        : 'เป็นสมาชิก';
     final String displayEmail = user?.email ?? 'Test@gmail.com';
     final String joinDate = 'เข้าร่วมเมื่อ มกราคม 2023';
 
-    // Face image matching mock portrait
-    const String defaultAvatarUrl = 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300';
-    final String avatarUrl = user?.profileImage != null && user!.profileImage!.isNotEmpty
-        ? (user.profileImage!.startsWith('http') ? user.profileImage! : ApiService.getImagePath(user.profileImage))
-        : defaultAvatarUrl;
+    final String activeProfileImg =
+        _selectedProfileImage ?? user?.profileImage ?? '';
+    final String? avatarUrl = activeProfileImg.isNotEmpty
+        ? (activeProfileImg.startsWith('http')
+            ? activeProfileImg
+            : ApiService.getImagePath(activeProfileImg))
+        : null;
 
     if (_isEditing) {
       if (_nameController.text.isEmpty && _phoneController.text.isEmpty) {
@@ -632,7 +933,7 @@ class _ProfileTabState extends State<_ProfileTab> {
                           color: Colors.white,
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.06),
+                              color: Colors.black.withValues(alpha: 0.06),
                               blurRadius: 16,
                               offset: const Offset(0, 8),
                             ),
@@ -640,10 +941,25 @@ class _ProfileTabState extends State<_ProfileTab> {
                         ),
                         child: Padding(
                           padding: const EdgeInsets.all(6.0),
-                          child: CircleAvatar(
-                            radius: 64,
-                            backgroundColor: const Color(0xFFE2E8F0),
-                            backgroundImage: NetworkImage(avatarUrl),
+                          child: ClipOval(
+                            child: _pickedImageBytes != null
+                                ? Image.memory(
+                                    _pickedImageBytes!,
+                                    width: 128,
+                                    height: 128,
+                                    fit: BoxFit.cover,
+                                  )
+                                : (avatarUrl != null
+                                    ? Image.network(
+                                        avatarUrl,
+                                        width: 128,
+                                        height: 128,
+                                        fit: BoxFit.cover,
+                                        errorBuilder:
+                                            (context, error, stackTrace) =>
+                                                _buildDefaultGreyAvatar(128),
+                                      )
+                                    : _buildDefaultGreyAvatar(128)),
                           ),
                         ),
                       ),
@@ -658,16 +974,25 @@ class _ProfileTabState extends State<_ProfileTab> {
                       ),
                       const SizedBox(height: 6),
                       GestureDetector(
-                        onTap: () {
-                          // Change photo trigger
-                        },
-                        child: Text(
-                          'เปลี่ยนรูปโปรไฟล์',
-                          style: GoogleFonts.outfit(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: const Color(0xFF1E88E5),
-                          ),
+                        onTap: () => _showProfileImageOptions(user),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.add_a_photo_outlined,
+                              size: 16,
+                              color: Color(0xFF1E88E5),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'อัปโหลดรูปโปรไฟล์',
+                              style: GoogleFonts.outfit(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: const Color(0xFF1E88E5),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       const SizedBox(height: 6),
@@ -705,7 +1030,10 @@ class _ProfileTabState extends State<_ProfileTab> {
                     style: GoogleFonts.outfit(color: Colors.black),
                     decoration: const InputDecoration(
                       border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
                     ),
                   ),
                 ),
@@ -732,7 +1060,10 @@ class _ProfileTabState extends State<_ProfileTab> {
                     style: GoogleFonts.outfit(color: const Color(0xFF64748B)),
                     decoration: const InputDecoration(
                       border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
                     ),
                   ),
                 ),
@@ -758,58 +1089,109 @@ class _ProfileTabState extends State<_ProfileTab> {
                     style: GoogleFonts.outfit(color: Colors.black),
                     decoration: const InputDecoration(
                       border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
                     ),
                   ),
                 ),
                 const SizedBox(height: 24),
 
-                Text(
-                  'สิ่งที่สนใจ',
-                  style: GoogleFonts.outfit(
-                    fontSize: 14,
-                    color: const Color(0xFF475569),
-                    fontWeight: FontWeight.w600,
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'สิ่งที่สนใจ',
+                      style: GoogleFonts.outfit(
+                        fontSize: 14,
+                        color: const Color(0xFF475569),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      'เลือกแล้ว ${_selectedInterests.length}/5',
+                      style: GoogleFonts.outfit(
+                        fontSize: 12,
+                        color: const Color(0xFF1E88E5),
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 10,
-                  children: _interests.map((interest) {
-                    final isSelected = _selectedInterests.contains(interest);
-                    return FilterChip(
-                      selected: isSelected,
-                      label: Text(
-                        interest,
-                        style: GoogleFonts.outfit(
-                          fontSize: 14,
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                          color: isSelected ? const Color(0xFF1E88E5) : const Color(0xFF64748B),
+                _isLoadingInterests
+                    ? const SizedBox(
+                        height: 30,
+                        child: Center(
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Color(0xFF1E88E5),
+                          ),
                         ),
+                      )
+                    : Wrap(
+                        spacing: 8,
+                        runSpacing: 10,
+                        children: _dbInterests.map((interest) {
+                          final isSelected =
+                              _selectedInterests.contains(interest);
+                          return FilterChip(
+                            selected: isSelected,
+                            label: Text(
+                              interest,
+                              style: GoogleFonts.outfit(
+                                fontSize: 14,
+                                fontWeight: isSelected
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                                color: isSelected
+                                    ? const Color(0xFF1E88E5)
+                                    : const Color(0xFF64748B),
+                              ),
+                            ),
+                            onSelected: (selected) {
+                              setState(() {
+                                if (selected) {
+                                  if (_selectedInterests.length >= 5) {
+                                    ScaffoldMessenger.of(context)
+                                        .hideCurrentSnackBar();
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          'เลือกหมวดหมู่ได้สูงสุด 5 หมวดหมู่',
+                                          style: GoogleFonts.outfit(
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        backgroundColor: const Color(0xFFDC2626),
+                                        behavior: SnackBarBehavior.floating,
+                                        duration: const Duration(seconds: 2),
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                  _selectedInterests.add(interest);
+                                } else {
+                                  _selectedInterests.remove(interest);
+                                }
+                              });
+                            },
+                            selectedColor: const Color(0xFFE3F2FD),
+                            checkmarkColor: const Color(0xFF1E88E5),
+                            backgroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
+                              side: BorderSide(
+                                color: isSelected
+                                    ? const Color(0xFF1E88E5)
+                                    : const Color(0xFFCBD5E1),
+                                width: 1,
+                              ),
+                            ),
+                          );
+                        }).toList(),
                       ),
-                      onSelected: (selected) {
-                        setState(() {
-                          if (selected) {
-                            _selectedInterests.add(interest);
-                          } else {
-                            _selectedInterests.remove(interest);
-                          }
-                        });
-                      },
-                      selectedColor: const Color(0xFFE3F2FD),
-                      checkmarkColor: const Color(0xFF1E88E5),
-                      backgroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                        side: BorderSide(
-                          color: isSelected ? const Color(0xFF1E88E5) : const Color(0xFFCBD5E1),
-                          width: 1,
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
                 const SizedBox(height: 36),
 
                 SizedBox(
@@ -818,28 +1200,77 @@ class _ProfileTabState extends State<_ProfileTab> {
                   child: ElevatedButton(
                     onPressed: () {
                       if (_nameController.text.trim().isEmpty) {
-                        AppDialog.showError(context, title: 'ข้อผิดพลาด', message: 'กรุณากรอกชื่อ-นามสกุล');
+                        AppDialog.showError(
+                          context,
+                          title: 'ข้อผิดพลาด',
+                          message: 'กรุณากรอกชื่อ-นามสกุล',
+                        );
                         return;
                       }
 
                       AppDialog.showConfirm(
                         context,
                         title: 'ยืนยันการบันทึก',
-                        message: 'คุณต้องการบันทึกการเปลี่ยนแปลงข้อมูลโปรไฟล์ใช่หรือไม่?',
+                        message:
+                            'คุณต้องการบันทึกการเปลี่ยนแปลงข้อมูลโปรไฟล์ใช่หรือไม่?',
                         onConfirm: () async {
-                          // Call authService backend update
-                          await authService.updateProfile({
+                          if (user?.userId == null) return;
+
+                          final Map<String, String> fields = {
                             'username': _nameController.text.trim(),
                             'phone': _phoneController.text.trim(),
-                          });
+                            'interests': _selectedInterests.join(','),
+                          };
 
-                          setState(() => _isEditing = false);
-                          if (context.mounted) {
-                            AppDialog.showSuccess(
-                              context,
-                              title: 'สำเร็จ',
-                              message: 'บันทึกการเปลี่ยนแปลงโปรไฟล์เรียบร้อยแล้ว',
+                          Map<String, dynamic> response;
+
+                          if (_pickedImageBytes != null) {
+                            response = await ApiService.postMultipart(
+                              '/v1/users/${user!.userId}?_method=PUT',
+                              fields,
+                              fileKey: 'profile_image_file',
+                              fileBytes: _pickedImageBytes,
+                              fileName: _pickedImageName ?? 'profile.png',
                             );
+                          } else {
+                            final Map<String, dynamic> payload =
+                                Map<String, dynamic>.from(fields);
+                            if (_selectedProfileImage != null &&
+                                _selectedProfileImage!.isNotEmpty) {
+                              payload['profile_image'] =
+                                  _selectedProfileImage;
+                            }
+                            response =
+                                await authService.updateProfile(payload);
+                          }
+
+                          if (response['status'] == true) {
+                            if (response['data'] != null) {
+                              await authService
+                                  .updateUserData(response['data']);
+                            }
+                            setState(() {
+                              _isEditing = false;
+                              _pickedImageBytes = null;
+                              _pickedImageName = null;
+                            });
+                            if (context.mounted) {
+                              AppDialog.showSuccess(
+                                context,
+                                title: 'สำเร็จ',
+                                message:
+                                    'บันทึกการเปลี่ยนแปลงโปรไฟล์เรียบร้อยแล้ว',
+                              );
+                            }
+                          } else {
+                            if (context.mounted) {
+                              AppDialog.showError(
+                                context,
+                                title: 'เกิดข้อผิดพลาด',
+                                message: response['message'] ??
+                                    'ไม่สามารถบันทึกข้อมูลได้',
+                              );
+                            }
                           }
                         },
                       );
@@ -930,7 +1361,7 @@ class _ProfileTabState extends State<_ProfileTab> {
                   color: Colors.white,
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.06),
+                      color: Colors.black.withValues(alpha: 0.06),
                       blurRadius: 16,
                       offset: const Offset(0, 8),
                     ),
@@ -938,10 +1369,17 @@ class _ProfileTabState extends State<_ProfileTab> {
                 ),
                 child: Padding(
                   padding: const EdgeInsets.all(6.0),
-                  child: CircleAvatar(
-                    radius: 64,
-                    backgroundColor: const Color(0xFFE2E8F0),
-                    backgroundImage: NetworkImage(avatarUrl),
+                  child: ClipOval(
+                    child: avatarUrl != null
+                        ? Image.network(
+                            avatarUrl,
+                            width: 128,
+                            height: 128,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) =>
+                                _buildDefaultGreyAvatar(128),
+                          )
+                        : _buildDefaultGreyAvatar(128),
                   ),
                 ),
               ),
@@ -979,6 +1417,7 @@ class _ProfileTabState extends State<_ProfileTab> {
                 icon: Icons.manage_accounts_outlined,
                 title: 'แก้ไขโปรไฟล์',
                 onTap: () {
+                  _initForm(user);
                   setState(() {
                     _isEditing = true;
                   });
@@ -992,7 +1431,10 @@ class _ProfileTabState extends State<_ProfileTab> {
                   onTap: () {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text('ฟังก์ชันจองแผง กำลังพัฒนา', style: GoogleFonts.outfit()),
+                        content: Text(
+                          'ฟังก์ชันจองแผง กำลังพัฒนา',
+                          style: GoogleFonts.outfit(),
+                        ),
                         backgroundColor: const Color(0xFF1E88E5),
                       ),
                     );
@@ -1005,7 +1447,10 @@ class _ProfileTabState extends State<_ProfileTab> {
                   onTap: () {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text('ฟังก์ชันประวัติการจอง กำลังพัฒนา', style: GoogleFonts.outfit()),
+                        content: Text(
+                          'ฟังก์ชันประวัติการจอง กำลังพัฒนา',
+                          style: GoogleFonts.outfit(),
+                        ),
                         backgroundColor: const Color(0xFF1E88E5),
                       ),
                     );
@@ -1016,10 +1461,14 @@ class _ProfileTabState extends State<_ProfileTab> {
                   icon: Icons.storefront_outlined,
                   title: 'จัดการหน้าร้านค้า',
                   onTap: () async {
-                    final tabIndex = await Navigator.pushNamed(context, '/my_shops');
+                    final tabIndex = await Navigator.pushNamed(
+                      context,
+                      '/my_shops',
+                    );
                     if (!context.mounted) return;
                     if (tabIndex != null && tabIndex is int) {
-                      final homeState = context.findAncestorStateOfType<_HomeScreenState>();
+                      final homeState = context
+                          .findAncestorStateOfType<_HomeScreenState>();
                       if (homeState != null) {
                         homeState.setIndex(tabIndex);
                       }
@@ -1028,28 +1477,17 @@ class _ProfileTabState extends State<_ProfileTab> {
                 ),
                 const SizedBox(height: 16),
                 _buildMenuItem(
-                  icon: Icons.place_outlined,
-                  title: 'แจ้งปัญหา',
+                  icon: Icons.report_problem_outlined,
+                  title: 'แจ้งปัญหา / ประวัติ',
                   onTap: () async {
-                    final tabIndex = await Navigator.pushNamed(context, '/report_problem');
+                    final tabIndex = await Navigator.pushNamed(
+                      context,
+                      '/problem_history',
+                    );
                     if (!context.mounted) return;
                     if (tabIndex != null && tabIndex is int) {
-                      final homeState = context.findAncestorStateOfType<_HomeScreenState>();
-                      if (homeState != null) {
-                        homeState.setIndex(tabIndex);
-                      }
-                    }
-                  },
-                ),
-                const SizedBox(height: 16),
-                _buildMenuItem(
-                  icon: Icons.history_outlined,
-                  title: 'ประวัติการแจ้งปัญหา',
-                  onTap: () async {
-                    final tabIndex = await Navigator.pushNamed(context, '/problem_history');
-                    if (!context.mounted) return;
-                    if (tabIndex != null && tabIndex is int) {
-                      final homeState = context.findAncestorStateOfType<_HomeScreenState>();
+                      final homeState = context
+                          .findAncestorStateOfType<_HomeScreenState>();
                       if (homeState != null) {
                         homeState.setIndex(tabIndex);
                       }
@@ -1111,14 +1549,20 @@ class _ProfileTabState extends State<_ProfileTab> {
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 10,
+                              ),
                               elevation: 0,
                             ),
                             onPressed: () async {
                               Navigator.pop(dialogContext); // Close dialog
                               await authService.logout();
                               if (context.mounted) {
-                                Navigator.pushReplacementNamed(context, '/login');
+                                Navigator.pushReplacementNamed(
+                                  context,
+                                  '/login',
+                                );
                               }
                             },
                             child: Text(
@@ -1137,11 +1581,7 @@ class _ProfileTabState extends State<_ProfileTab> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(
-                      Icons.logout,
-                      color: Colors.redAccent,
-                      size: 22,
-                    ),
+                    const Icon(Icons.logout, color: Colors.redAccent, size: 22),
                     const SizedBox(width: 8),
                     Text(
                       'ออกจากระบบ',
@@ -1173,7 +1613,7 @@ class _ProfileTabState extends State<_ProfileTab> {
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.02),
+            color: Colors.black.withValues(alpha: 0.02),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -1194,11 +1634,7 @@ class _ProfileTabState extends State<_ProfileTab> {
                     color: const Color(0xFFE3F2FD),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(
-                    icon,
-                    color: const Color(0xFF1E88E5),
-                    size: 24,
-                  ),
+                  child: Icon(icon, color: const Color(0xFF1E88E5), size: 24),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -1235,35 +1671,7 @@ class _FollowedTab extends StatefulWidget {
 class _FollowedTabState extends State<_FollowedTab> {
   List<Shop> _shops = [];
   bool _isLoading = true;
-
-  // Mock shops matching screenshot
-  final List<Map<String, dynamic>> _mockShopsData = [
-    {
-      'shop_name': 'ร้านชายโขง',
-      'rating': 4.3,
-      'image_url': 'https://images.unsplash.com/photo-1543007630-9710e4a00a20?w=300',
-    },
-    {
-      'shop_name': 'ร้านผักสด',
-      'rating': 4.8,
-      'image_url': 'https://images.unsplash.com/photo-1574316071802-0d684efa7bf5?w=300',
-    },
-    {
-      'shop_name': 'PM ผลไม้สด',
-      'rating': 3.6,
-      'image_url': 'https://images.unsplash.com/photo-1596962248965-533b49751a13?w=300',
-    },
-    {
-      'shop_name': 'น้ำตาลสดแท้',
-      'rating': 4.1,
-      'image_url': 'https://images.unsplash.com/photo-1621506289937-a8e4df240d0b?w=300',
-    },
-    {
-      'shop_name': 'สยาม สโตร์',
-      'rating': 4.9,
-      'image_url': 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=300',
-    },
-  ];
+  String _searchQuery = '';
 
   @override
   void initState() {
@@ -1272,9 +1680,16 @@ class _FollowedTabState extends State<_FollowedTab> {
   }
 
   Future<void> _loadShops() async {
+    final auth = Provider.of<AuthService>(context, listen: false);
+    final user = auth.currentUser;
     setState(() => _isLoading = true);
     try {
-      final data = await ShopService.getShops();
+      List<Shop> data = [];
+      if (user != null && user.userId != null) {
+        data = await ShopService.getFollowedShops(user.userId!);
+      } else {
+        data = await ShopService.getShops();
+      }
       if (mounted) {
         setState(() {
           _shops = data;
@@ -1288,18 +1703,84 @@ class _FollowedTabState extends State<_FollowedTab> {
     }
   }
 
+  Future<void> _unfollowShop(Shop shop) async {
+    final auth = Provider.of<AuthService>(context, listen: false);
+    final user = auth.currentUser;
+    if (user == null || user.userId == null || shop.shopId == null) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          'ยกเลิกการติดตาม',
+          style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          'คุณต้องการยกเลิกการติดตามร้าน "${shop.shopName}" ใช่หรือไม่?',
+          style: GoogleFonts.outfit(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(
+              'ยกเลิก',
+              style: GoogleFonts.outfit(color: const Color(0xFF64748B)),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: Text('ยืนยัน', style: GoogleFonts.outfit()),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      final res = await ShopService.toggleFollowShop(
+        userId: user.userId!,
+        shopId: shop.shopId!,
+      );
+      if (mounted && res['status'] == true) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(res['message'] ?? 'เลิกติดตามเรียบร้อยแล้ว'),
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        _loadShops();
+      }
+    }
+  }
+
   Future<void> _navigateToShopDetail(Shop shop) async {
-    final result = await Navigator.pushNamed(
+    await Navigator.pushNamed(
       context,
       '/shop_detail',
       arguments: {'shop': shop, 'tabIndex': 2},
     );
-    if (result != null && result is int && mounted) {
-      final homeState = context.findAncestorStateOfType<_HomeScreenState>();
-      if (homeState != null) {
-        homeState.setIndex(result);
-      }
+    if (mounted) {
+      _loadShops();
     }
+  }
+
+  List<Shop> get _filteredShops {
+    if (_searchQuery.trim().isEmpty) return _shops;
+    final q = _searchQuery.trim().toLowerCase();
+    return _shops.where((s) {
+      final nameMatches = s.shopName.toLowerCase().contains(q);
+      final catMatches = s.categoryName.toLowerCase().contains(q);
+      return nameMatches || catMatches;
+    }).toList();
   }
 
   Widget _buildRatingStars(double rating) {
@@ -1316,16 +1797,12 @@ class _FollowedTabState extends State<_FollowedTab> {
         stars.add(const Icon(Icons.star_border, color: Colors.amber, size: 14));
       }
     }
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: stars,
-    );
+    return Row(mainAxisSize: MainAxisSize.min, children: stars);
   }
 
   @override
   Widget build(BuildContext context) {
-    // Generate combined data: if API is empty, use mock data
-    final displayCount = _shops.isNotEmpty ? _shops.length : _mockShopsData.length;
+    final displayList = _filteredShops;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -1428,134 +1905,352 @@ class _FollowedTabState extends State<_FollowedTab> {
                     borderRadius: BorderRadius.circular(24),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.03),
+                        color: Colors.black.withValues(alpha: 0.03),
                         blurRadius: 8,
                         offset: const Offset(0, 2),
                       ),
                     ],
                   ),
                   child: TextField(
+                    onChanged: (val) => setState(() => _searchQuery = val),
                     style: GoogleFonts.outfit(color: Colors.black),
                     decoration: InputDecoration(
-                      hintText: 'ค้นหาตลาด หรือ ร้านค้า...',
-                      hintStyle: GoogleFonts.outfit(color: const Color(0xFF94A3B8), fontSize: 15),
-                      prefixIcon: const Icon(Icons.search, color: Color(0xFF94A3B8), size: 22),
+                      hintText: 'ค้นหาร้านค้าที่ติดตาม...',
+                      hintStyle: GoogleFonts.outfit(
+                        color: const Color(0xFF94A3B8),
+                        fontSize: 15,
+                      ),
+                      prefixIcon: const Icon(
+                        Icons.search,
+                        color: Color(0xFF94A3B8),
+                        size: 22,
+                      ),
                       border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                      contentPadding: const EdgeInsets.symmetric(
+                        vertical: 14,
+                        horizontal: 16,
+                      ),
                     ),
                   ),
                 ),
                 const SizedBox(height: 24),
 
-                // Followed Shops Section Title
-                Text(
-                  'ร้านค้าที่คุณติดตาม',
-                  style: GoogleFonts.outfit(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: const Color(0xFF0F172A),
-                  ),
+                // Followed Shops Title & Count
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'ร้านค้าที่คุณติดตาม',
+                      style: GoogleFonts.outfit(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF0F172A),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEFF6FF),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '${_shops.length} ร้านค้า',
+                        style: GoogleFonts.outfit(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFF2563EB),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
 
-                // Grid View of Followed Shops
+                // Content Area
                 _isLoading
                     ? const Center(
                         child: Padding(
                           padding: EdgeInsets.all(40),
-                          child: CircularProgressIndicator(color: Color(0xFF1E88E5)),
+                          child: CircularProgressIndicator(
+                            color: Color(0xFF1E88E5),
+                          ),
                         ),
                       )
-                    : GridView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 3,
-                          crossAxisSpacing: 16,
-                          mainAxisSpacing: 24,
-                          childAspectRatio: 0.65,
-                        ),
-                        itemCount: displayCount,
-                        itemBuilder: (context, index) {
-                          final Shop shop;
-                          final double rating;
-
-                          if (_shops.isNotEmpty) {
-                            shop = _shops[index];
-                            rating = ((shop.shopId ?? index) % 15) / 10 + 3.5;
-                          } else {
-                            final mock = _mockShopsData[index];
-                            shop = Shop(
-                              shopId: index + 100, // mock ID
-                              shopName: mock['shop_name'],
-                              description: 'ร้านค้าคุณภาพสำหรับคุณ',
-                              shopImage: mock['image_url'],
-                            );
-                            rating = mock['rating'];
-                          }
-
-                          return GestureDetector(
-                            onTap: () => _navigateToShopDetail(shop),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                // Avatar circular container with double border effect
-                                Container(
-                                  width: 78,
-                                  height: 78,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                      color: const Color(0xFFE2E8F0),
-                                      width: 2,
+                    : displayList.isEmpty
+                        ? Center(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 40),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    width: 80,
+                                    height: 80,
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFFFEE2E2),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.favorite_border,
+                                      color: Color(0xFFEF4444),
+                                      size: 40,
                                     ),
                                   ),
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(2.0),
-                                    child: CircleAvatar(
-                                      backgroundColor: const Color(0xFFF1F5F9),
-                                      backgroundImage: shop.shopImage != null && shop.shopImage!.isNotEmpty
-                                          ? (shop.shopImage!.startsWith('http')
-                                              ? NetworkImage(shop.shopImage!)
-                                              : NetworkImage(ApiService.getImagePath(shop.shopImage)))
-                                          : null,
-                                      child: shop.shopImage == null || shop.shopImage!.isEmpty
-                                          ? const Icon(Icons.storefront, color: Color(0xFF94A3B8), size: 28)
-                                          : null,
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    _searchQuery.isNotEmpty
+                                        ? 'ไม่พบร้านค้าที่ตรงกับคำค้นหา'
+                                        : 'คุณยังไม่ได้ติดตามร้านค้าใดๆ',
+                                    style: GoogleFonts.outfit(
+                                      color: const Color(0xFF0F172A),
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
                                     ),
                                   ),
-                                ),
-                                const SizedBox(height: 10),
-                                // Shop Name
-                                Text(
-                                  shop.shopName,
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                    color: const Color(0xFF0F172A),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    'กดติดตามร้านค้าที่คุณชอบเพื่อรับข่าวสารและเมนูแนะนำก่อนใคร',
+                                    style: GoogleFonts.outfit(
+                                      color: const Color(0xFF64748B),
+                                      fontSize: 13,
+                                    ),
+                                    textAlign: TextAlign.center,
                                   ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  textAlign: TextAlign.center,
-                                ),
-                                const SizedBox(height: 4),
-                                // Rating Stars
-                                _buildRatingStars(rating),
-                                const SizedBox(height: 4),
-                                // Rating value text
-                                Text(
-                                  rating.toStringAsFixed(1),
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 12,
-                                    color: const Color(0xFF64748B),
-                                    fontWeight: FontWeight.w500,
+                                  const SizedBox(height: 20),
+                                  ElevatedButton.icon(
+                                    onPressed: () {
+                                      final homeState = context
+                                          .findAncestorStateOfType<
+                                            _HomeScreenState
+                                          >();
+                                      if (homeState != null) {
+                                        homeState.setIndex(0);
+                                      }
+                                    },
+                                    icon: const Icon(
+                                      Icons.storefront,
+                                      size: 18,
+                                    ),
+                                    label: Text(
+                                      'สำรวจร้านค้าในตลาด',
+                                      style: GoogleFonts.outfit(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF1E88E5),
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 20,
+                                        vertical: 12,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
-                          );
-                        },
-                      ),
+                          )
+                        : ListView.separated(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: displayList.length,
+                            separatorBuilder: (context, index) =>
+                                const SizedBox(height: 12),
+                            itemBuilder: (context, index) {
+                              final shop = displayList[index];
+                              final rating =
+                                  ((shop.shopId ?? index) % 15) / 10 + 3.5;
+
+                              return Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(16),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(
+                                        alpha: 0.04,
+                                      ),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                child: InkWell(
+                                  onTap: () => _navigateToShopDetail(shop),
+                                  borderRadius: BorderRadius.circular(16),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(12),
+                                    child: Row(
+                                      children: [
+                                        // Shop Image Avatar with Heart Icon
+                                        Stack(
+                                          children: [
+                                            ClipRRect(
+                                              borderRadius:
+                                                  BorderRadius.circular(14),
+                                              child: SizedBox(
+                                                width: 68,
+                                                height: 68,
+                                                child:
+                                                    shop.shopImage != null &&
+                                                        shop.shopImage!
+                                                            .isNotEmpty
+                                                    ? (shop.shopImage!
+                                                          .startsWith('http')
+                                                          ? Image.network(
+                                                              shop.shopImage!,
+                                                              fit: BoxFit.cover,
+                                                            )
+                                                          : Image.network(
+                                                              ApiService
+                                                                  .getImagePath(
+                                                                    shop
+                                                                        .shopImage,
+                                                                  ),
+                                                              fit: BoxFit.cover,
+                                                            ))
+                                                    : Container(
+                                                        color: const Color(
+                                                          0xFFF1F5F9,
+                                                        ),
+                                                        child: const Icon(
+                                                          Icons.storefront,
+                                                          color: Color(
+                                                            0xFF94A3B8,
+                                                          ),
+                                                          size: 32,
+                                                        ),
+                                                      ),
+                                              ),
+                                            ),
+                                            Positioned(
+                                              right: 2,
+                                              top: 2,
+                                              child: Container(
+                                                padding: const EdgeInsets.all(
+                                                  4,
+                                                ),
+                                                decoration: const BoxDecoration(
+                                                  color: Colors.white,
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                child: const Icon(
+                                                  Icons.favorite,
+                                                  color: Colors.red,
+                                                  size: 14,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(width: 14),
+                                        // Shop Details Info
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                shop.shopName,
+                                                style: GoogleFonts.outfit(
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: const Color(
+                                                    0xFF0F172A,
+                                                  ),
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Row(
+                                                children: [
+                                                  Container(
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 2,
+                                                    ),
+                                                    decoration: BoxDecoration(
+                                                      color: const Color(
+                                                        0xFFF1F5F9,
+                                                      ),
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            6,
+                                                          ),
+                                                    ),
+                                                    child: Text(
+                                                      shop.categoryName,
+                                                      style: GoogleFonts.outfit(
+                                                        fontSize: 11,
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        color: const Color(
+                                                          0xFF475569,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 8),
+                                                  _buildRatingStars(rating),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    rating.toStringAsFixed(1),
+                                                    style: GoogleFonts.outfit(
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      color: const Color(
+                                                        0xFF64748B,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                              if (shop.description != null &&
+                                                  shop.description!
+                                                      .isNotEmpty) ...[
+                                                const SizedBox(height: 4),
+                                                Text(
+                                                  shop.description!,
+                                                  style: GoogleFonts.outfit(
+                                                    fontSize: 12,
+                                                    color: const Color(
+                                                      0xFF94A3B8,
+                                                    ),
+                                                  ),
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ],
+                                            ],
+                                          ),
+                                        ),
+                                        // Unfollow Button Action
+                                        IconButton(
+                                          icon: const Icon(
+                                            Icons.favorite,
+                                            color: Colors.red,
+                                            size: 22,
+                                          ),
+                                          tooltip: 'ยกเลิกการติดตาม',
+                                          onPressed: () => _unfollowShop(shop),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
               ],
             ),
           ),

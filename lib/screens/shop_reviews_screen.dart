@@ -46,50 +46,20 @@ class _ShopReviewsScreenState extends State<ShopReviewsScreen> {
   // Rating breakdown values
   int _totalReviews = 124;
   double _averageRating = 4.8;
-  final List<double> _ratingPercentages = [0.70, 0.20, 0.05, 0.03, 0.02]; // 5, 4, 3, 2, 1 stars
+  final List<double> _ratingPercentages = [
+    0.70,
+    0.20,
+    0.05,
+    0.03,
+    0.02,
+  ]; // 5, 4, 3, 2, 1 stars
 
   late List<ReviewItem> _reviews;
-
-  List<ReviewItem> _getDefaultMockReviews() {
-    return [
-      ReviewItem(
-        reviewId: -1,
-        userName: 'คุณสมชาย',
-        userAvatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
-        rating: 5.0,
-        timeAgo: '2 วันที่แล้ว',
-        reviewText: 'อาหารอร่อยมาก บริการดี ประทับใจมากครับ แนะนำเมนูต้มยำกุ้งรสชาติจัดจ้านถึงใจจริงๆ',
-        images: [
-          'https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?w=300',
-          'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=300',
-        ],
-        likes: 12,
-      ),
-      ReviewItem(
-        reviewId: -2,
-        userName: 'คุณวรรณ',
-        userAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150',
-        rating: 4.0,
-        timeAgo: '3 วันที่แล้ว',
-        reviewText: 'รสชาติดีมากค่ะ สั่งกะเพราไข่ดาวมาทาน อิ่มกำลังดี แม่ค้าน่ารัก บริการเป็นกันเอง',
-        likes: 5,
-      ),
-      ReviewItem(
-        reviewId: -3,
-        userName: 'คุณวิชัย',
-        userAvatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=150',
-        rating: 5.0,
-        timeAgo: '1 สัปดาห์ที่แล้ว',
-        reviewText: 'ของสดสะอาด ดีคุ้มราคามากๆ ครับ แนะนำแผงนี้เลย!',
-        likes: 8,
-      ),
-    ];
-  }
 
   @override
   void initState() {
     super.initState();
-    _reviews = _getDefaultMockReviews();
+    _reviews = [];
   }
 
   @override
@@ -109,7 +79,9 @@ class _ShopReviewsScreenState extends State<ShopReviewsScreen> {
   Future<void> _loadReviews(int? shopId) async {
     if (shopId == null) {
       setState(() {
-        _reviews = _getDefaultMockReviews();
+        _reviews = [];
+        _totalReviews = 0;
+        _averageRating = 0.0;
         _isLoading = false;
       });
       return;
@@ -124,9 +96,10 @@ class _ShopReviewsScreenState extends State<ShopReviewsScreen> {
           _reviews = apiReviews.map((json) {
             final user = json['user'] as Map<String, dynamic>?;
             final String username = user?['username'] ?? 'ผู้ใช้ทั่วไป';
-            final String avatar = user?['profile_image'] != null && user!['profile_image'].toString().isNotEmpty
-                ? ApiService.getImagePath(user['profile_image'])
-                : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150';
+            final String profileImgStr = user?['profile_image']?.toString() ?? '';
+            final String avatar = profileImgStr.isNotEmpty
+                ? ApiService.getImagePath(profileImgStr)
+                : '';
 
             String timeAgo = 'ไม่ระบุเวลา';
             if (json['review_date'] != null) {
@@ -167,25 +140,28 @@ class _ShopReviewsScreenState extends State<ShopReviewsScreen> {
               counts[starIdx]++;
             }
           }
-          _averageRating = _totalReviews > 0 ? totalRating / _totalReviews : 4.8;
+          _averageRating = _totalReviews > 0
+              ? totalRating / _totalReviews
+              : 0.0;
           for (int i = 0; i < 5; i++) {
-            _ratingPercentages[i] = _totalReviews > 0 ? counts[i] / _totalReviews : _ratingPercentages[i];
+            _ratingPercentages[i] = _totalReviews > 0
+                ? counts[i] / _totalReviews
+                : 0.0;
           }
         } else {
-          _reviews = _getDefaultMockReviews();
-          _totalReviews = _reviews.length;
-          _averageRating = 4.8;
-          _ratingPercentages[0] = 0.70;
-          _ratingPercentages[1] = 0.20;
-          _ratingPercentages[2] = 0.05;
-          _ratingPercentages[3] = 0.03;
-          _ratingPercentages[4] = 0.02;
+          _reviews = [];
+          _totalReviews = 0;
+          _averageRating = 0.0;
+          _ratingPercentages[0] = 0.0;
+          _ratingPercentages[1] = 0.0;
+          _ratingPercentages[2] = 0.0;
+          _ratingPercentages[3] = 0.0;
+          _ratingPercentages[4] = 0.0;
         }
         _isLoading = false;
       });
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -206,15 +182,16 @@ class _ShopReviewsScreenState extends State<ShopReviewsScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Color(0xFF0F172A), size: 20),
+          icon: const Icon(
+            Icons.arrow_back_ios_new,
+            color: Color(0xFF0F172A),
+            size: 20,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1.0),
-          child: Container(
-            color: const Color(0xFFE2E8F0),
-            height: 1.0,
-          ),
+          child: Container(color: const Color(0xFFE2E8F0), height: 1.0),
         ),
       ),
       body: _isLoading
@@ -222,443 +199,528 @@ class _ShopReviewsScreenState extends State<ShopReviewsScreen> {
               child: CircularProgressIndicator(color: Color(0xFF1E88E5)),
             )
           : SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Rating Overview Section
-            Container(
-              color: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Left Rating Summary Info
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.baseline,
-                        textBaseline: TextBaseline.alphabetic,
-                        children: [
-                          Text(
-                            _averageRating.toStringAsFixed(1),
-                            style: GoogleFonts.outfit(
-                              fontSize: 48,
-                              fontWeight: FontWeight.bold,
-                              color: const Color(0xFF0F172A),
-                            ),
-                          ),
-                          Text(
-                            ' / 5',
-                            style: GoogleFonts.outfit(
-                              fontSize: 18,
-                              color: const Color(0xFF64748B),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      // Row of Stars
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: List.generate(5, (index) {
-                          final starVal = index + 1;
-                          if (starVal <= _averageRating.floor()) {
-                            return const Icon(Icons.star, color: Colors.amber, size: 20);
-                          } else if (starVal - 1 < _averageRating && starVal > _averageRating) {
-                            return const Icon(Icons.star_half, color: Colors.amber, size: 20);
-                          } else {
-                            return const Icon(Icons.star_border, color: Colors.amber, size: 20);
-                          }
-                        }),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '$_totalReviews รีวิวทั้งหมด',
-                        style: GoogleFonts.outfit(
-                          fontSize: 13,
-                          color: const Color(0xFF64748B),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(width: 24),
-                  // Right Rating Breakdown Chart Bar
-                  Expanded(
-                    child: Column(
-                      children: List.generate(5, (index) {
-                        final starsCount = 5 - index;
-                        final percent = _ratingPercentages[index];
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 2.0),
-                          child: Row(
-                            children: [
-                              SizedBox(
-                                width: 12,
-                                child: Text(
-                                  starsCount.toString(),
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    color: const Color(0xFF475569),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Container(
-                                  height: 12,
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFE2E8F0),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: FractionallySizedBox(
-                                    alignment: Alignment.centerLeft,
-                                    widthFactor: percent,
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF1E88E5),
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              SizedBox(
-                                width: 28,
-                                child: Text(
-                                  '${(percent * 100).toInt()}%',
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 12,
-                                    color: const Color(0xFF64748B),
-                                  ),
-                                  textAlign: TextAlign.end,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }),
+                  // Rating Overview Section
+                  Container(
+                    color: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 22,
                     ),
-                  ),
-                ],
-              ),
-            ),
-
-            // Write Review Action Button
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1E88E5),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  elevation: 0,
-                ),
-                onPressed: () async {
-                  final result = await Navigator.pushNamed(
-                    context,
-                    '/write_review',
-                    arguments: {'shop': _shop, 'tabIndex': _originTabIndex},
-                  );
-                  if (result == true) {
-                    _loadReviews(_shop.shopId);
-                  }
-                },
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.edit, color: Colors.white, size: 20),
-                    const SizedBox(width: 10),
-                    Text(
-                      'เขียนรีวิวของคุณ',
-                      style: GoogleFonts.outfit(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            // Shop Header Title in Reviews Screen
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Text(
-                '${_shop.shopName} (${_shop.shopName == 'สยาม ดีไลท์' ? 'Siam Delight' : 'Shop Detail'})',
-                style: GoogleFonts.outfit(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: const Color(0xFF0F172A),
-                ),
-              ),
-            ),
-
-            // Tabs for Latest and Highest Rating
-            Container(
-              decoration: const BoxDecoration(
-                border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
-              ),
-              child: Row(
-                children: [
-                  // Latest Tab Button
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _isLatestTab = true;
-                        });
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        decoration: BoxDecoration(
-                          border: Border(
-                            bottom: BorderSide(
-                              color: _isLatestTab ? const Color(0xFF1E88E5) : Colors.transparent,
-                              width: 3,
-                            ),
-                          ),
-                        ),
-                        child: Text(
-                          'ล่าสุด',
-                          style: GoogleFonts.outfit(
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                            color: _isLatestTab ? const Color(0xFF1E88E5) : const Color(0xFF64748B),
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ),
-                  ),
-                  // Highest Rating Tab Button
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _isLatestTab = false;
-                        });
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        decoration: BoxDecoration(
-                          border: Border(
-                            bottom: BorderSide(
-                              color: !_isLatestTab ? const Color(0xFF1E88E5) : Colors.transparent,
-                              width: 3,
-                            ),
-                          ),
-                        ),
-                        child: Text(
-                          'คะแนนสูงสุด',
-                          style: GoogleFonts.outfit(
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                            color: !_isLatestTab ? const Color(0xFF1E88E5) : const Color(0xFF64748B),
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // Reviews List Card Builder
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-              itemCount: sortedReviews.length,
-              itemBuilder: (context, index) {
-                final review = sortedReviews[index];
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // User Info & Stars Header Row
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          CircleAvatar(
-                            radius: 20,
-                            backgroundImage: NetworkImage(review.userAvatar),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                    child: Row(
+                      children: [
+                        // Left Rating Summary Info
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.baseline,
+                              textBaseline: TextBaseline.alphabetic,
                               children: [
                                 Text(
-                                  review.userName,
+                                  _averageRating.toStringAsFixed(1),
                                   style: GoogleFonts.outfit(
-                                    fontSize: 15,
+                                    fontSize: 48,
                                     fontWeight: FontWeight.bold,
                                     color: const Color(0xFF0F172A),
                                   ),
                                 ),
-                                const SizedBox(height: 2),
                                 Text(
-                                  review.timeAgo,
+                                  ' / 5',
                                   style: GoogleFonts.outfit(
-                                    fontSize: 12,
+                                    fontSize: 18,
                                     color: const Color(0xFF64748B),
                                   ),
                                 ),
                               ],
                             ),
-                          ),
-                          // Rating Stars Row on the Right
-                          Row(
-                            children: List.generate(5, (starIndex) {
-                              return Icon(
-                                starIndex < review.rating.floor() ? Icons.star : Icons.star_border,
-                                color: Colors.amber,
-                                size: 16,
+                            const SizedBox(height: 6),
+                            // Row of Stars
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: List.generate(5, (index) {
+                                final starVal = index + 1;
+                                if (starVal <= _averageRating.floor()) {
+                                  return const Icon(
+                                    Icons.star,
+                                    color: Colors.amber,
+                                    size: 20,
+                                  );
+                                } else if (starVal - 1 < _averageRating &&
+                                    starVal > _averageRating) {
+                                  return const Icon(
+                                    Icons.star_half,
+                                    color: Colors.amber,
+                                    size: 20,
+                                  );
+                                } else {
+                                  return const Icon(
+                                    Icons.star_border,
+                                    color: Colors.amber,
+                                    size: 20,
+                                  );
+                                }
+                              }),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              '$_totalReviews รีวิวทั้งหมด',
+                              style: GoogleFonts.outfit(
+                                fontSize: 13,
+                                color: const Color(0xFF64748B),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(width: 24),
+                        // Right Rating Breakdown Chart Bar
+                        Expanded(
+                          child: Column(
+                            children: List.generate(5, (index) {
+                              final starsCount = 5 - index;
+                              final percent = _ratingPercentages[index];
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 2.0,
+                                ),
+                                child: Row(
+                                  children: [
+                                    SizedBox(
+                                      width: 12,
+                                      child: Text(
+                                        starsCount.toString(),
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                          color: const Color(0xFF475569),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Container(
+                                        height: 12,
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFE2E8F0),
+                                          borderRadius: BorderRadius.circular(
+                                            6,
+                                          ),
+                                        ),
+                                        child: FractionallySizedBox(
+                                          alignment: Alignment.centerLeft,
+                                          widthFactor: percent,
+                                          child: Container(
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFF1E88E5),
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    SizedBox(
+                                      width: 28,
+                                      child: Text(
+                                        '${(percent * 100).toInt()}%',
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 12,
+                                          color: const Color(0xFF64748B),
+                                        ),
+                                        textAlign: TextAlign.end,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               );
                             }),
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      // Review Body text
-                      Text(
-                        review.reviewText,
-                        style: GoogleFonts.outfit(
-                          fontSize: 14,
-                          color: const Color(0xFF0F172A),
-                          height: 1.5,
-                        ),
-                      ),
-                      // Review Images Row (if any)
-                      if (review.images.isNotEmpty) ...[
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          height: 100,
-                          child: ListView.builder(
-                            scrollDirection: Axis.horizontal,
-                            itemCount: review.images.length,
-                            itemBuilder: (context, imgIndex) {
-                              return Container(
-                                margin: const EdgeInsets.only(right: 8),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(12),
-                                  child: Image.network(
-                                    review.images[imgIndex],
-                                    width: 100,
-                                    height: 100,
-                                    fit: BoxFit.cover,
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
                         ),
                       ],
-                      const SizedBox(height: 14),
-                      // Likes, Dislikes and Report Actions Row
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    ),
+                  ),
+
+                  // Write Review Action Button
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF1E88E5),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        elevation: 0,
+                      ),
+                      onPressed: () async {
+                        final result = await Navigator.pushNamed(
+                          context,
+                          '/write_review',
+                          arguments: {
+                            'shop': _shop,
+                            'tabIndex': _originTabIndex,
+                          },
+                        );
+                        if (result == true) {
+                          _loadReviews(_shop.shopId);
+                        }
+                      },
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Row(
-                            children: [
-                              // Like Icon Button
-                              GestureDetector(
-                                onTap: () {
-                                  setState(() {
-                                    if (review.isLiked) {
-                                      review.likes -= 1;
-                                      review.isLiked = false;
-                                    } else {
-                                      review.likes += 1;
-                                      review.isLiked = true;
-                                      if (review.isDisliked) {
-                                        review.isDisliked = false;
-                                      }
-                                    }
-                                  });
-                                },
-                                child: Icon(
-                                  review.isLiked ? Icons.thumb_up : Icons.thumb_up_outlined,
-                                  size: 18,
-                                  color: review.isLiked ? const Color(0xFF1E88E5) : const Color(0xFF94A3B8),
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              if (review.likes > 0)
-                                Text(
-                                  review.likes.toString(),
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 13,
-                                    color: const Color(0xFF64748B),
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              const SizedBox(width: 16),
-                              // Dislike Icon Button
-                              GestureDetector(
-                                onTap: () {
-                                  setState(() {
-                                    if (review.isDisliked) {
-                                      review.isDisliked = false;
-                                    } else {
-                                      review.isDisliked = true;
-                                      if (review.isLiked) {
-                                        review.likes -= 1;
-                                        review.isLiked = false;
-                                      }
-                                    }
-                                  });
-                                },
-                                child: Icon(
-                                  review.isDisliked ? Icons.thumb_down : Icons.thumb_down_outlined,
-                                  size: 18,
-                                  color: review.isDisliked ? const Color(0xFFE11D48) : const Color(0xFF94A3B8),
-                                ),
-                              ),
-                            ],
-                          ),
-                          // Report comment action
-                          GestureDetector(
-                            onTap: () {
-                              Navigator.pushNamed(
-                                context,
-                                '/report_comment',
-                                arguments: review,
-                              );
-                            },
-                            child: Text(
-                              'รายงานความคิดเห็น',
-                              style: GoogleFonts.outfit(
-                                fontSize: 13,
-                                color: const Color(0xFFE11D48),
-                                fontWeight: FontWeight.bold,
-                              ),
+                          const Icon(Icons.edit, color: Colors.white, size: 20),
+                          const SizedBox(width: 10),
+                          Text(
+                            'เขียนรีวิวของคุณ',
+                            style: GoogleFonts.outfit(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 14),
-                      const Divider(color: Color(0xFFE2E8F0)),
-                    ],
+                    ),
                   ),
-                );
-              },
+
+                  // Shop Header Title in Reviews Screen
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    child: Text(
+                      '${_shop.shopName} (${_shop.shopName == 'สยาม ดีไลท์' ? 'Siam Delight' : 'Shop Detail'})',
+                      style: GoogleFonts.outfit(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF0F172A),
+                      ),
+                    ),
+                  ),
+
+                  // Tabs for Latest and Highest Rating
+                  Container(
+                    decoration: const BoxDecoration(
+                      border: Border(
+                        bottom: BorderSide(color: Color(0xFFE2E8F0)),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        // Latest Tab Button
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _isLatestTab = true;
+                              });
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              decoration: BoxDecoration(
+                                border: Border(
+                                  bottom: BorderSide(
+                                    color: _isLatestTab
+                                        ? const Color(0xFF1E88E5)
+                                        : Colors.transparent,
+                                    width: 3,
+                                  ),
+                                ),
+                              ),
+                              child: Text(
+                                'ล่าสุด',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  color: _isLatestTab
+                                      ? const Color(0xFF1E88E5)
+                                      : const Color(0xFF64748B),
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ),
+                        ),
+                        // Highest Rating Tab Button
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _isLatestTab = false;
+                              });
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              decoration: BoxDecoration(
+                                border: Border(
+                                  bottom: BorderSide(
+                                    color: !_isLatestTab
+                                        ? const Color(0xFF1E88E5)
+                                        : Colors.transparent,
+                                    width: 3,
+                                  ),
+                                ),
+                              ),
+                              child: Text(
+                                'คะแนนสูงสุด',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  color: !_isLatestTab
+                                      ? const Color(0xFF1E88E5)
+                                      : const Color(0xFF64748B),
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Reviews List Card Builder
+                  ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 16,
+                    ),
+                    itemCount: sortedReviews.length,
+                    itemBuilder: (context, index) {
+                      final review = sortedReviews[index];
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0xFFF1F5F9)),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.03),
+                              blurRadius: 10,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // User Info & Stars Header Row
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                CircleAvatar(
+                                  radius: 20,
+                                  backgroundColor: const Color(0xFFE4E6EB),
+                                  child: review.userAvatar.isNotEmpty
+                                      ? ClipOval(
+                                          child: Image.network(
+                                            review.userAvatar,
+                                            width: 40,
+                                            height: 40,
+                                            fit: BoxFit.cover,
+                                            errorBuilder:
+                                                (context, error, stackTrace) =>
+                                                    const Icon(
+                                              Icons.person,
+                                              color: Color(0xFF8A8D91),
+                                              size: 24,
+                                            ),
+                                          ),
+                                        )
+                                      : const Icon(
+                                          Icons.person,
+                                          color: Color(0xFF8A8D91),
+                                          size: 24,
+                                        ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        review.userName,
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.bold,
+                                          color: const Color(0xFF0F172A),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        review.timeAgo,
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 12,
+                                          color: const Color(0xFF64748B),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                // Rating Stars Row on the Right
+                                Row(
+                                  children: List.generate(5, (starIndex) {
+                                    return Icon(
+                                      starIndex < review.rating.floor()
+                                          ? Icons.star
+                                          : Icons.star_border,
+                                      color: Colors.amber,
+                                      size: 16,
+                                    );
+                                  }),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            // Review Body text
+                            Text(
+                              review.reviewText,
+                              style: GoogleFonts.outfit(
+                                fontSize: 14,
+                                color: const Color(0xFF0F172A),
+                                height: 1.5,
+                              ),
+                            ),
+                            // Review Images Row (if any)
+                            if (review.images.isNotEmpty) ...[
+                              const SizedBox(height: 12),
+                              SizedBox(
+                                height: 100,
+                                child: ListView.builder(
+                                  scrollDirection: Axis.horizontal,
+                                  itemCount: review.images.length,
+                                  itemBuilder: (context, imgIndex) {
+                                    return Container(
+                                      margin: const EdgeInsets.only(right: 8),
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(12),
+                                        child: Image.network(
+                                          review.images[imgIndex],
+                                          width: 100,
+                                          height: 100,
+                                          fit: BoxFit.cover,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 14),
+                            // Likes, Dislikes and Report Actions Row
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    // Like Icon Button
+                                    GestureDetector(
+                                      onTap: () {
+                                        setState(() {
+                                          if (review.isLiked) {
+                                            review.likes -= 1;
+                                            review.isLiked = false;
+                                          } else {
+                                            review.likes += 1;
+                                            review.isLiked = true;
+                                            if (review.isDisliked) {
+                                              review.isDisliked = false;
+                                            }
+                                          }
+                                        });
+                                      },
+                                      child: Icon(
+                                        review.isLiked
+                                            ? Icons.thumb_up
+                                            : Icons.thumb_up_outlined,
+                                        size: 18,
+                                        color: review.isLiked
+                                            ? const Color(0xFF1E88E5)
+                                            : const Color(0xFF94A3B8),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    if (review.likes > 0)
+                                      Text(
+                                        review.likes.toString(),
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 13,
+                                          color: const Color(0xFF64748B),
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    const SizedBox(width: 16),
+                                    // Dislike Icon Button
+                                    GestureDetector(
+                                      onTap: () {
+                                        setState(() {
+                                          if (review.isDisliked) {
+                                            review.isDisliked = false;
+                                          } else {
+                                            review.isDisliked = true;
+                                            if (review.isLiked) {
+                                              review.likes -= 1;
+                                              review.isLiked = false;
+                                            }
+                                          }
+                                        });
+                                      },
+                                      child: Icon(
+                                        review.isDisliked
+                                            ? Icons.thumb_down
+                                            : Icons.thumb_down_outlined,
+                                        size: 18,
+                                        color: review.isDisliked
+                                            ? const Color(0xFFE11D48)
+                                            : const Color(0xFF94A3B8),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                // Report comment action
+                                GestureDetector(
+                                  onTap: () {
+                                    Navigator.pushNamed(
+                                      context,
+                                      '/report_comment',
+                                      arguments: review,
+                                    );
+                                  },
+                                  child: Text(
+                                    'รายงานความคิดเห็น',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 13,
+                                      color: const Color(0xFFE11D48),
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
             ),
-          ],
-        ),
-      ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.06),
+              color: Colors.black.withValues(alpha: 0.06),
               blurRadius: 12,
               offset: const Offset(0, -4),
             ),
@@ -672,28 +734,60 @@ class _ShopReviewsScreenState extends State<ShopReviewsScreen> {
               Navigator.pop(context, index);
             },
             backgroundColor: Colors.white,
-            indicatorColor: const Color(0xFF1E88E5).withOpacity(0.12),
+            indicatorColor: const Color(0xFF1E88E5).withValues(alpha: 0.12),
             height: 70,
             labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
             destinations: const [
               NavigationDestination(
-                icon: Icon(Icons.home_outlined, size: 24, color: Color(0xFF64748B)),
-                selectedIcon: Icon(Icons.home, size: 24, color: Color(0xFF1E88E5)),
+                icon: Icon(
+                  Icons.home_outlined,
+                  size: 24,
+                  color: Color(0xFF64748B),
+                ),
+                selectedIcon: Icon(
+                  Icons.home,
+                  size: 24,
+                  color: Color(0xFF1E88E5),
+                ),
                 label: 'หน้าหลัก',
               ),
               NavigationDestination(
-                icon: Icon(Icons.explore_outlined, size: 24, color: Color(0xFF64748B)),
-                selectedIcon: Icon(Icons.explore, size: 24, color: Color(0xFF1E88E5)),
+                icon: Icon(
+                  Icons.explore_outlined,
+                  size: 24,
+                  color: Color(0xFF64748B),
+                ),
+                selectedIcon: Icon(
+                  Icons.explore,
+                  size: 24,
+                  color: Color(0xFF1E88E5),
+                ),
                 label: 'แผนที่ตลาด',
               ),
               NavigationDestination(
-                icon: Icon(Icons.favorite_outline, size: 24, color: Color(0xFF64748B)),
-                selectedIcon: Icon(Icons.favorite, size: 24, color: Color(0xFF1E88E5)),
+                icon: Icon(
+                  Icons.favorite_outline,
+                  size: 24,
+                  color: Color(0xFF64748B),
+                ),
+                selectedIcon: Icon(
+                  Icons.favorite,
+                  size: 24,
+                  color: Color(0xFF1E88E5),
+                ),
                 label: 'ติดตาม',
               ),
               NavigationDestination(
-                icon: Icon(Icons.person_outline, size: 24, color: Color(0xFF64748B)),
-                selectedIcon: Icon(Icons.person, size: 24, color: Color(0xFF1E88E5)),
+                icon: Icon(
+                  Icons.person_outline,
+                  size: 24,
+                  color: Color(0xFF64748B),
+                ),
+                selectedIcon: Icon(
+                  Icons.person,
+                  size: 24,
+                  color: Color(0xFF1E88E5),
+                ),
                 label: 'โปรไฟล์',
               ),
             ],

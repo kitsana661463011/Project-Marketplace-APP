@@ -1,5 +1,8 @@
+import 'dart:typed_data';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../widgets/app_dialog.dart';
 import '../services/auth_service.dart';
@@ -16,6 +19,8 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
   final _phoneController = TextEditingController();
   final _addressController = TextEditingController();
   String? _uploadedFileName;
+  Uint8List? _uploadedFileBytes;
+  final ImagePicker _picker = ImagePicker();
 
   @override
   void dispose() {
@@ -23,6 +28,54 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
     _phoneController.dispose();
     _addressController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickFileWithFilePicker() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf'],
+        withData: true,
+      );
+      if (result != null && result.files.isNotEmpty) {
+        final file = result.files.first;
+        setState(() {
+          _uploadedFileName = file.name;
+          _uploadedFileBytes = file.bytes;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('ไม่สามารถเลือกไฟล์ได้: $e', style: GoogleFonts.outfit()),
+            backgroundColor: const Color(0xFFDC2626),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _pickWithCamera() async {
+    try {
+      final XFile? image = await _picker.pickImage(source: ImageSource.camera);
+      if (image != null) {
+        final bytes = await image.readAsBytes();
+        setState(() {
+          _uploadedFileName = image.name;
+          _uploadedFileBytes = bytes;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('ไม่สามารถเปิดกล้องได้: $e', style: GoogleFonts.outfit()),
+            backgroundColor: const Color(0xFFDC2626),
+          ),
+        );
+      }
+    }
   }
 
   void _onUploadPressed() {
@@ -39,7 +92,7 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 20),
                 child: Text(
-                  'เลือกวิธีการอัปโหลด',
+                  'เลือกวิธีการอัปโหลดเอกสาร',
                   style: GoogleFonts.outfit(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -48,33 +101,21 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
                 ),
               ),
               ListTile(
+                leading: const Icon(Icons.folder_open, color: Color(0xFF1E88E5)),
+                title: Text('เลือกไฟล์รูปภาพ / เอกสารจากอุปกรณ์', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                subtitle: Text('รองรับไฟล์ JPG, PNG, PDF จากคลังของคุณ', style: GoogleFonts.outfit(fontSize: 12, color: const Color(0xFF64748B))),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickFileWithFilePicker();
+                },
+              ),
+              const Divider(height: 1),
+              ListTile(
                 leading: const Icon(Icons.camera_alt, color: Color(0xFF1E88E5)),
                 title: Text('ถ่ายรูปด้วยกล้อง', style: GoogleFonts.outfit()),
                 onTap: () {
                   Navigator.pop(context);
-                  setState(() {
-                    _uploadedFileName = 'id_card_photo.jpg';
-                  });
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.photo_library, color: Color(0xFF1E88E5)),
-                title: Text('เลือกจากคลังภาพ', style: GoogleFonts.outfit()),
-                onTap: () {
-                  Navigator.pop(context);
-                  setState(() {
-                    _uploadedFileName = 'id_card_gallery.png';
-                  });
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.picture_as_pdf, color: Color(0xFF1E88E5)),
-                title: Text('เลือกไฟล์ PDF', style: GoogleFonts.outfit()),
-                onTap: () {
-                  Navigator.pop(context);
-                  setState(() {
-                    _uploadedFileName = 'id_card_document.pdf';
-                  });
+                  _pickWithCamera();
                 },
               ),
               const SizedBox(height: 12),
@@ -120,12 +161,16 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
 
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
-      final response = await authService.updateProfile({
+      final payload = <String, dynamic>{
         'role': 'seller',
         'document_status': 'approved',
         'citizen_id': '1234567890123',
         'address': _addressController.text.trim(),
-      });
+      };
+      if (_uploadedFileName != null) {
+        payload['document_image'] = _uploadedFileName;
+      }
+      final response = await authService.updateProfile(payload);
 
       if (mounted) {
         Navigator.pop(context); // Close loading dialog
@@ -291,19 +336,32 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
                   ),
                   child: Column(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: _uploadedFileName != null ? const Color(0xFFE8F5E9) : const Color(0xFFEFF6FF),
-                          shape: BoxShape.circle,
+                      if (_uploadedFileBytes != null &&
+                          (_uploadedFileName?.endsWith('.pdf') != true)) ...[
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Image.memory(
+                            _uploadedFileBytes!,
+                            height: 100,
+                            fit: BoxFit.contain,
+                          ),
                         ),
-                        child: Icon(
-                          _uploadedFileName != null ? Icons.check : Icons.cloud_upload_outlined,
-                          color: _uploadedFileName != null ? const Color(0xFF2E7D32) : const Color(0xFF1E88E5),
-                          size: 28,
+                        const SizedBox(height: 10),
+                      ] else ...[
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: _uploadedFileName != null ? const Color(0xFFE8F5E9) : const Color(0xFFEFF6FF),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            _uploadedFileName != null ? Icons.check : Icons.cloud_upload_outlined,
+                            color: _uploadedFileName != null ? const Color(0xFF2E7D32) : const Color(0xFF1E88E5),
+                            size: 28,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 12),
+                        const SizedBox(height: 12),
+                      ],
                       Text(
                         _uploadedFileName ?? 'คลิกเพื่ออัปโหลดรูปบัตรประชาชน',
                         style: GoogleFonts.outfit(

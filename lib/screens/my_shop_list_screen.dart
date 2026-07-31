@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../services/shop_service.dart';
 import '../services/booking_service.dart';
@@ -66,10 +67,7 @@ class _MyShopListScreenState extends State<MyShopListScreen> {
       if (i < _approvedBookings.length) {
         stallNum = _approvedBookings[i].stallNumber ?? 'C2';
       }
-      activeShops.add({
-        'shop': _myShops[i],
-        'stall_number': stallNum,
-      });
+      activeShops.add({'shop': _myShops[i], 'stall_number': stallNum});
     }
 
     // Remaining approved bookings that don't have a shop profile yet
@@ -77,33 +75,7 @@ class _MyShopListScreenState extends State<MyShopListScreen> {
       pendingStalls.addAll(_approvedBookings.sublist(_myShops.length));
     }
 
-    // High fidelity fallback: If DB is empty, mock data matching Screenshot 1
-    if (!_isLoading && _myShops.isEmpty && _approvedBookings.isEmpty) {
-      // Create a mockup mock shop
-      final mockShop = Shop(
-        shopId: 999,
-        shopName: 'กะเพราถาดยักษ์',
-        categoryId: 1,
-        description: 'ผัดกะเพราสูตรโบราณ รสชาติจัดจ้าน',
-        shopPhone: '0812345678',
-        shopImage: 'kaprao_chicken.png',
-        userId: 2,
-      );
-      activeShops.add({
-        'shop': mockShop,
-        'stall_number': 'C2',
-      });
-
-      // Create a mockup pending booking
-      final mockBooking = Booking(
-        bookingId: 888,
-        userId: 2,
-        stallId: 3,
-        stallNumber: 'A3',
-        status: 'approved',
-      );
-      pendingStalls.add(mockBooking);
-    }
+    // No fallback mock data - if shops are empty, show proper empty state
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -111,7 +83,11 @@ class _MyShopListScreenState extends State<MyShopListScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Color(0xFF0F172A), size: 20),
+          icon: const Icon(
+            Icons.arrow_back_ios_new,
+            color: Color(0xFF0F172A),
+            size: 20,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
@@ -130,7 +106,9 @@ class _MyShopListScreenState extends State<MyShopListScreen> {
       ),
       body: SafeArea(
         child: _isLoading
-            ? const Center(child: CircularProgressIndicator(color: Color(0xFF1E88E5)))
+            ? const Center(
+                child: CircularProgressIndicator(color: Color(0xFF1E88E5)),
+              )
             : SingleChildScrollView(
                 child: Padding(
                   padding: const EdgeInsets.all(20.0),
@@ -150,7 +128,10 @@ class _MyShopListScreenState extends State<MyShopListScreen> {
                             ),
                           ),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
                               color: const Color(0xFFEFF6FF),
                               borderRadius: BorderRadius.circular(12),
@@ -181,7 +162,7 @@ class _MyShopListScreenState extends State<MyShopListScreen> {
                             border: Border.all(color: const Color(0xFFE2E8F0)),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.01),
+                                color: Colors.black.withValues(alpha: 0.01),
                                 blurRadius: 8,
                                 offset: const Offset(0, 2),
                               ),
@@ -193,16 +174,35 @@ class _MyShopListScreenState extends State<MyShopListScreen> {
                               // Avatar with green status indicator
                               Stack(
                                 children: [
-                                  CircleAvatar(
-                                    radius: 30,
-                                    backgroundColor: const Color(0xFFEFF6FF),
-                                    backgroundImage: shop.shopImage != null
-                                        ? NetworkImage('http://10.0.2.2:8000/storage/custom_images/${shop.shopImage}')
-                                        : null,
-                                    child: shop.shopImage == null
-                                        ? const Icon(Icons.storefront, color: Color(0xFF2563EB), size: 28)
-                                        : null,
-                                  ),
+                                   ClipOval(
+                                     child: Container(
+                                       width: 60,
+                                       height: 60,
+                                       color: const Color(0xFFEFF6FF),
+                                       child: shop.shopImage != null &&
+                                               shop.shopImage!.isNotEmpty
+                                           ? Image.network(
+                                               ApiService.getImagePath(
+                                                 shop.shopImage,
+                                               ),
+                                               width: 60,
+                                               height: 60,
+                                               fit: BoxFit.cover,
+                                               errorBuilder:
+                                                   (context, error, stackTrace) =>
+                                                       const Icon(
+                                                 Icons.storefront,
+                                                 color: Color(0xFF2563EB),
+                                                 size: 28,
+                                               ),
+                                             )
+                                           : const Icon(
+                                               Icons.storefront,
+                                               color: Color(0xFF2563EB),
+                                               size: 28,
+                                             ),
+                                     ),
+                                   ),
                                   Positioned(
                                     right: 0,
                                     bottom: 0,
@@ -210,9 +210,14 @@ class _MyShopListScreenState extends State<MyShopListScreen> {
                                       width: 14,
                                       height: 14,
                                       decoration: BoxDecoration(
-                                        color: const Color(0xFF10B981), // Green status dot
+                                        color: const Color(
+                                          0xFF10B981,
+                                        ), // Green status dot
                                         shape: BoxShape.circle,
-                                        border: Border.all(color: Colors.white, width: 2),
+                                        border: Border.all(
+                                          color: Colors.white,
+                                          width: 2,
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -257,16 +262,25 @@ class _MyShopListScreenState extends State<MyShopListScreen> {
                                     },
                                   ).then((_) => _loadMerchantData());
                                 },
-                                icon: const Icon(Icons.settings_outlined, size: 14),
+                                icon: const Icon(
+                                  Icons.settings_outlined,
+                                  size: 14,
+                                ),
                                 label: Text(
                                   'จัดการ',
-                                  style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold),
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: const Color(0xFFEFF6FF),
                                   foregroundColor: const Color(0xFF2563EB),
                                   elevation: 0,
-                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 8,
+                                  ),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
                                   ),
@@ -301,7 +315,8 @@ class _MyShopListScreenState extends State<MyShopListScreen> {
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(
                                 color: const Color(0xFFBFDBFE),
-                                style: BorderStyle.solid, // solid border since Flutter doesn't have dashed natively without custom painters
+                                style: BorderStyle
+                                    .solid, // solid border since Flutter doesn't have dashed natively without custom painters
                                 width: 1.5,
                               ),
                             ),
@@ -361,7 +376,11 @@ class _MyShopListScreenState extends State<MyShopListScreen> {
                                         },
                                       ).then((_) => _loadMerchantData());
                                     },
-                                    icon: const Icon(Icons.add, color: Colors.white, size: 16),
+                                    icon: const Icon(
+                                      Icons.add,
+                                      color: Colors.white,
+                                      size: 16,
+                                    ),
                                     label: Text(
                                       'สร้างร้านค้าใหม่',
                                       style: GoogleFonts.outfit(
@@ -392,7 +411,9 @@ class _MyShopListScreenState extends State<MyShopListScreen> {
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: Colors.white,
-          border: Border(top: BorderSide(color: const Color(0xFFF1F5F9), width: 1.0)),
+          border: Border(
+            top: BorderSide(color: const Color(0xFFF1F5F9), width: 1.0),
+          ),
         ),
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Row(
@@ -408,7 +429,13 @@ class _MyShopListScreenState extends State<MyShopListScreen> {
     );
   }
 
-  Widget _buildNavItem(BuildContext context, IconData icon, String label, bool isActive, int index) {
+  Widget _buildNavItem(
+    BuildContext context,
+    IconData icon,
+    String label,
+    bool isActive,
+    int index,
+  ) {
     return GestureDetector(
       onTap: () {
         Navigator.pop(context, index);
@@ -426,7 +453,9 @@ class _MyShopListScreenState extends State<MyShopListScreen> {
             label,
             style: GoogleFonts.outfit(
               fontSize: 11,
-              color: isActive ? const Color(0xFF2563EB) : const Color(0xFF94A3B8),
+              color: isActive
+                  ? const Color(0xFF2563EB)
+                  : const Color(0xFF94A3B8),
             ),
           ),
         ],

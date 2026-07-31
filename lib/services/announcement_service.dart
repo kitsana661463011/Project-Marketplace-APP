@@ -5,7 +5,7 @@ import 'api_service.dart';
 class AnnouncementService {
   static Future<List<Announcement>> getAnnouncements() async {
     final response = await ApiService.get(ApiConfig.announcements);
-    if (response['status'] == true && response['data'] != null) {
+    if (response['status'] == true && response['data'] is List) {
       return (response['data'] as List)
           .map((json) => Announcement.fromJson(json))
           .toList();

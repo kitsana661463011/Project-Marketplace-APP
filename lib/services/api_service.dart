@@ -20,7 +20,14 @@ class ApiService {
 
   static String getImagePath(String? filename) {
     if (filename == null || filename.isEmpty) return '';
-    return '$imageUrl/$filename';
+    if (filename.startsWith('http://') || filename.startsWith('https://') || filename.startsWith('data:')) {
+      return filename;
+    }
+    final clean = filename
+        .replaceFirst(RegExp(r'^/?storage/images/'), '')
+        .replaceFirst(RegExp(r'^/?storage/'), '')
+        .replaceFirst(RegExp(r'^/?api/images/'), '');
+    return '$imageUrl/$clean';
   }
 
   static Future<Map<String, dynamic>> get(String endpoint) async {
@@ -28,7 +35,7 @@ class ApiService {
       final response = await http.get(
         Uri.parse('$baseUrl$endpoint'),
         headers: {'Accept': 'application/json'},
-      );
+      ).timeout(const Duration(seconds: 8));
       return _handleResponse(response);
     } catch (e) {
       return {'status': false, 'message': 'Connection error: $e', 'data': null};
@@ -47,7 +54,7 @@ class ApiService {
           'Content-Type': 'application/json',
         },
         body: jsonEncode(body),
-      );
+      ).timeout(const Duration(seconds: 8));
       return _handleResponse(response);
     } catch (e) {
       return {'status': false, 'message': 'Connection error: $e', 'data': null};
@@ -66,7 +73,7 @@ class ApiService {
           'Content-Type': 'application/json',
         },
         body: jsonEncode(body),
-      );
+      ).timeout(const Duration(seconds: 8));
       return _handleResponse(response);
     } catch (e) {
       return {'status': false, 'message': 'Connection error: $e', 'data': null};
@@ -78,7 +85,7 @@ class ApiService {
       final response = await http.delete(
         Uri.parse('$baseUrl$endpoint'),
         headers: {'Accept': 'application/json'},
-      );
+      ).timeout(const Duration(seconds: 8));
       return _handleResponse(response);
     } catch (e) {
       return {'status': false, 'message': 'Connection error: $e', 'data': null};
@@ -110,7 +117,7 @@ class ApiService {
         }
       }
 
-      final streamedResponse = await request.send();
+      final streamedResponse = await request.send().timeout(const Duration(seconds: 15));
       final response = await http.Response.fromStream(streamedResponse);
       return _handleResponse(response);
     } catch (e) {

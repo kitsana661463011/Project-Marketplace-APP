@@ -69,19 +69,25 @@ class AuthService extends ChangeNotifier {
     required String password,
     String? phone,
     String role = 'buyer',
+    String? interests,
   }) async {
     _isLoading = true;
     notifyListeners();
 
     try {
-      final response = await ApiService.post(ApiConfig.users, {
+      final payload = <String, dynamic>{
         'username': username,
         'email': email,
         'password': password,
         'phone': phone,
         'role': role,
         'status': 'active',
-      });
+      };
+      if (interests != null && interests.isNotEmpty) {
+        payload['interests'] = interests;
+      }
+
+      final response = await ApiService.post(ApiConfig.users, payload);
 
       if (response['status'] == true && response['data'] != null) {
         _currentUser = UserModel.fromJson(response['data']);
@@ -121,6 +127,12 @@ class AuthService extends ChangeNotifier {
       notifyListeners();
     }
     return response;
+  }
+
+  Future<void> updateUserData(Map<String, dynamic> userData) async {
+    _currentUser = UserModel.fromJson(userData);
+    await _saveUserData();
+    notifyListeners();
   }
 
   Future<void> logout() async {

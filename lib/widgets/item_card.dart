@@ -42,7 +42,7 @@ class ItemCard extends StatelessWidget {
                     ? Image.network(
                         ApiService.getImagePath(item.itemImage),
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => _buildPlaceholder(theme),
+                        errorBuilder: (_, _, _) => _buildPlaceholder(theme),
                       )
                     : _buildPlaceholder(theme),
               ),

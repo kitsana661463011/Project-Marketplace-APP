@@ -49,7 +49,7 @@ class ShopCard extends StatelessWidget {
                     ? Image.network(
                         ApiService.getImagePath(shop.shopImage),
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => _buildPlaceholder(theme),
+                        errorBuilder: (_, _, _) => _buildPlaceholder(theme),
                       )
                     : _buildPlaceholder(theme),
               ),
@@ -91,7 +91,9 @@ class ShopCard extends StatelessWidget {
                       Text(
                         shop.description!,
                         style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.6,
+                          ),
                         ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
@@ -102,13 +104,17 @@ class ShopCard extends StatelessWidget {
                         Icon(
                           Icons.person_outline,
                           size: 14,
-                          color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.5,
+                          ),
                         ),
                         const SizedBox(width: 4),
                         Text(
                           shop.ownerName,
                           style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.5,
+                            ),
                           ),
                         ),
                       ],

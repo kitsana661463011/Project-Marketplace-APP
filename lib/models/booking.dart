@@ -19,6 +19,13 @@ class Booking {
   final String? paymentDate;
   final String? paymentSlip;
   final String? paymentStatus;
+  final String? rejectReason;
+  final String? refundReason;
+  final String? refundBankName;
+  final String? refundAccountNumber;
+  final String? refundAccountName;
+  final String? refundSlip;
+  final String? refundedAt;
 
   Booking({
     this.bookingId,
@@ -40,6 +47,13 @@ class Booking {
     this.paymentDate,
     this.paymentSlip,
     this.paymentStatus,
+    this.rejectReason,
+    this.refundReason,
+    this.refundBankName,
+    this.refundAccountNumber,
+    this.refundAccountName,
+    this.refundSlip,
+    this.refundedAt,
   });
 
   factory Booking.fromJson(Map<String, dynamic> json) {
@@ -63,6 +77,13 @@ class Booking {
       paymentDate: json['payment_date'],
       paymentSlip: json['payment_slip'],
       paymentStatus: json['payment_status'],
+      rejectReason: json['reject_reason'],
+      refundReason: json['refund_reason'],
+      refundBankName: json['refund_bank_name'],
+      refundAccountNumber: json['refund_account_number'],
+      refundAccountName: json['refund_account_name'],
+      refundSlip: json['refund_slip'],
+      refundedAt: json['refunded_at'],
     );
   }
 
@@ -76,4 +97,11 @@ class Booking {
       'status': status,
     };
   }
+
+  bool get isApproved => status == 'approved';
+  bool get isPending => status == 'pending' || status == 'pending_review';
+  bool get isRenewalPending => status == 'renewal_pending';
+  bool get isRefundRequested => status == 'refund_requested';
+  bool get isRefunded => status == 'refunded';
+  bool get isRejected => status == 'rejected' || status == 'cancelled';
 }

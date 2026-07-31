@@ -11,7 +11,8 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStateMixin {
+class _LoginScreenState extends State<LoginScreen>
+    with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -26,9 +27,10 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       vsync: this,
       duration: const Duration(milliseconds: 1000),
     );
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _fadeController, curve: Curves.easeOut),
-    );
+    _fadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _fadeController, curve: Curves.easeOut));
     _fadeController.forward();
   }
 
@@ -72,10 +74,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         centerTitle: true,
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1.0),
-          child: Container(
-            color: const Color(0xFFE2E8F0),
-            height: 1.0,
-          ),
+          child: Container(color: const Color(0xFFE2E8F0), height: 1.0),
         ),
         title: Text(
           'Market Place',
@@ -139,8 +138,14 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                   TextFormField(
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
-                    style: GoogleFonts.outfit(color: Colors.black, fontWeight: FontWeight.w500),
-                    decoration: _buildInputDecoration('ใส่อีเมลของคุณ', Icons.mail_outline),
+                    style: GoogleFonts.outfit(
+                      color: Colors.black,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    decoration: _buildInputDecoration(
+                      'ใส่อีเมลของคุณ',
+                      Icons.mail_outline,
+                    ),
                     validator: (value) {
                       if (value == null || value.isEmpty) {
                         return 'กรุณากรอกอีเมล';
@@ -166,7 +171,10 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                   TextFormField(
                     controller: _passwordController,
                     obscureText: _obscurePassword,
-                    style: GoogleFonts.outfit(color: Colors.black, fontWeight: FontWeight.w500),
+                    style: GoogleFonts.outfit(
+                      color: Colors.black,
+                      fontWeight: FontWeight.w500,
+                    ),
                     decoration: _buildInputDecoration(
                       'ใส่รหัสผ่านของคุณ',
                       Icons.lock_outline,
@@ -230,7 +238,9 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                             backgroundColor: const Color(0xFF1E88E5),
                             foregroundColor: Colors.white,
                             elevation: 2,
-                            shadowColor: const Color(0xFF1E88E5).withValues(alpha: 0.3),
+                            shadowColor: const Color(
+                              0xFF1E88E5,
+                            ).withValues(alpha: 0.3),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(14),
                             ),
@@ -293,10 +303,17 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     );
   }
 
-  InputDecoration _buildInputDecoration(String hint, IconData prefixIcon, {Widget? suffix}) {
+  InputDecoration _buildInputDecoration(
+    String hint,
+    IconData prefixIcon, {
+    Widget? suffix,
+  }) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: GoogleFonts.outfit(color: const Color(0xFF94A3B8), fontSize: 15),
+      hintStyle: GoogleFonts.outfit(
+        color: const Color(0xFF94A3B8),
+        fontSize: 15,
+      ),
       prefixIcon: Icon(prefixIcon, color: const Color(0xFF94A3B8), size: 20),
       suffixIcon: suffix,
       filled: true,

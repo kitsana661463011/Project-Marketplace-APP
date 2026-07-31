@@ -57,4 +57,16 @@ class ProblemService {
     }
     return [];
   }
+
+  static Future<List<Map<String, dynamic>>> getAllProblemReports() async {
+    try {
+      final response = await ApiService.get('/v1/problem-reports');
+      if (response['status'] == true && response['data'] != null) {
+        return List<Map<String, dynamic>>.from(response['data']);
+      }
+    } catch (e) {
+      debugPrint('ProblemService.getAllProblemReports error: $e');
+    }
+    return [];
+  }
 }

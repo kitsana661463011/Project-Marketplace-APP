@@ -5,7 +5,7 @@ import 'api_service.dart';
 class ItemService {
   static Future<List<Item>> getItems() async {
     final response = await ApiService.get(ApiConfig.items);
-    if (response['status'] == true && response['data'] != null) {
+    if (response['status'] == true && response['data'] is List) {
       return (response['data'] as List)
           .map((json) => Item.fromJson(json))
           .toList();
