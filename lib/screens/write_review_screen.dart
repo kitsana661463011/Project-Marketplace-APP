@@ -1,3 +1,6 @@
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -17,6 +20,8 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
   late Shop _shop;
   double _rating = 0; // 0 means unrated
   final _commentController = TextEditingController();
+  final List<Uint8List> _reviewImageBytes = [];
+  final List<String> _reviewImageNames = [];
 
   @override
   void didChangeDependencies() {
@@ -35,6 +40,66 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
     super.dispose();
   }
 
+  Future<void> _pickReviewImages() async {
+    if (_reviewImageBytes.length >= 3) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'คุณสามารถเพิ่มได้สูงสุด 3 รูปเท่านั้น',
+              style: GoogleFonts.outfit(),
+            ),
+            backgroundColor: Colors.orangeAccent,
+          ),
+        );
+      }
+      return;
+    }
+
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: true,
+        withData: true,
+      );
+      if (result != null && result.files.isNotEmpty) {
+        final availableSlots = 3 - _reviewImageBytes.length;
+        final files = result.files
+            .where((file) => file.bytes != null)
+            .take(availableSlots)
+            .toList();
+
+        if (files.isEmpty) return;
+
+        setState(() {
+          for (final file in files) {
+            _reviewImageBytes.add(file.bytes!);
+            _reviewImageNames.add(file.name);
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'ไม่สามารถเลือกภาพรีวิวได้: $e',
+              style: GoogleFonts.outfit(),
+            ),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
+  }
+
+  void _removeReviewImage(int index) {
+    setState(() {
+      _reviewImageBytes.removeAt(index);
+      _reviewImageNames.removeAt(index);
+    });
+  }
+
   Future<void> _submitReview() async {
     final authService = Provider.of<AuthService>(context, listen: false);
     final currentUser = authService.currentUser;
@@ -42,7 +107,10 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
     if (currentUser == null || currentUser.userId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('กรุณาเข้าสู่ระบบก่อนรีวิวร้านค้า', style: GoogleFonts.outfit()),
+          content: Text(
+            'กรุณาเข้าสู่ระบบก่อนรีวิวร้านค้า',
+            style: GoogleFonts.outfit(),
+          ),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -56,14 +124,29 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const Center(child: CircularProgressIndicator(color: Color(0xFF1E88E5))),
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(color: Color(0xFF1E88E5)),
+      ),
     );
+
+    final imageFiles = _reviewImageBytes
+        .asMap()
+        .entries
+        .map(
+          (entry) => {
+            'key': 'images[]',
+            'bytes': entry.value,
+            'fileName': _reviewImageNames[entry.key],
+          },
+        )
+        .toList();
 
     final result = await ReviewService.createReview(
       userId: currentUser.userId!,
       shopId: _shop.shopId ?? 0,
       rating: _rating.toInt(),
       comment: _commentController.text.trim(),
+      reviewImages: imageFiles.isNotEmpty ? imageFiles : null,
     );
 
     if (mounted) navigator.pop(); // Pop loading dialog
@@ -71,7 +154,10 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
     if (result != null) {
       messenger.showSnackBar(
         SnackBar(
-          content: Text('บันทึกการรีวิวของคุณเรียบร้อยแล้ว!', style: GoogleFonts.outfit()),
+          content: Text(
+            'บันทึกการรีวิวของคุณเรียบร้อยแล้ว!',
+            style: GoogleFonts.outfit(),
+          ),
           backgroundColor: Colors.green,
         ),
       );
@@ -79,7 +165,10 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
     } else {
       messenger.showSnackBar(
         SnackBar(
-          content: Text('เกิดข้อผิดพลาดในการบันทึกรีวิว กรุณาลองใหม่อีกครั้ง', style: GoogleFonts.outfit()),
+          content: Text(
+            'เกิดข้อผิดพลาดในการบันทึกรีวิว กรุณาลองใหม่อีกครั้ง',
+            style: GoogleFonts.outfit(),
+          ),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -91,7 +180,10 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
       // Show warning if user has not selected a rating yet
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('กรุณาเลือกคะแนนความพึงพอใจอย่างน้อย 1 ดาวค่ะ', style: GoogleFonts.outfit()),
+          content: Text(
+            'กรุณาเลือกคะแนนความพึงพอใจอย่างน้อย 1 ดาวค่ะ',
+            style: GoogleFonts.outfit(),
+          ),
           backgroundColor: Colors.orangeAccent,
         ),
       );
@@ -104,7 +196,9 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
       builder: (BuildContext dialogContext) {
         return AlertDialog(
           backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           title: Text(
             'ยืนยันการส่งรีวิว',
             style: GoogleFonts.outfit(
@@ -136,8 +230,13 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
             ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF1E88E5),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 10,
+                ),
                 elevation: 0,
               ),
               onPressed: () {
@@ -166,15 +265,16 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Color(0xFF0F172A), size: 20),
+          icon: const Icon(
+            Icons.arrow_back_ios_new,
+            color: Color(0xFF0F172A),
+            size: 20,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1.0),
-          child: Container(
-            color: const Color(0xFFE2E8F0),
-            height: 1.0,
-          ),
+          child: Container(color: const Color(0xFFE2E8F0), height: 1.0),
         ),
       ),
       body: SingleChildScrollView(
@@ -198,13 +298,24 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
                       child: SizedBox(
                         width: 80,
                         height: 52,
-                        child: _shop.shopImage != null && _shop.shopImage!.isNotEmpty
+                        child:
+                            _shop.shopImage != null &&
+                                _shop.shopImage!.isNotEmpty
                             ? (_shop.shopImage!.startsWith('http')
-                                ? Image.network(_shop.shopImage!, fit: BoxFit.cover)
-                                : Image.network(ApiService.getImagePath(_shop.shopImage), fit: BoxFit.cover))
+                                  ? Image.network(
+                                      _shop.shopImage!,
+                                      fit: BoxFit.cover,
+                                    )
+                                  : Image.network(
+                                      ApiService.getImagePath(_shop.shopImage),
+                                      fit: BoxFit.cover,
+                                    ))
                             : Container(
                                 color: const Color(0xFFE2E8F0),
-                                child: const Icon(Icons.storefront, color: Color(0xFF94A3B8)),
+                                child: const Icon(
+                                  Icons.storefront,
+                                  color: Color(0xFF94A3B8),
+                                ),
                               ),
                       ),
                     ),
@@ -259,7 +370,9 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
                             padding: const EdgeInsets.symmetric(horizontal: 6),
                             child: Icon(
                               isSelected ? Icons.star : Icons.star,
-                              color: isSelected ? Colors.amber : const Color(0xFFE2E8F0),
+                              color: isSelected
+                                  ? Colors.amber
+                                  : const Color(0xFFE2E8F0),
                               size: 38,
                             ),
                           ),
@@ -268,7 +381,9 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      _rating == 0 ? 'แตะเพื่อเลือกคะแนน' : 'แตะเพื่อเลือกคะแนน (${_rating.toInt()}/5)',
+                      _rating == 0
+                          ? 'แตะเพื่อเลือกคะแนน'
+                          : 'แตะเพื่อเลือกคะแนน (${_rating.toInt()}/5)',
                       style: GoogleFonts.outfit(
                         fontSize: 13,
                         color: const Color(0xFF64748B),
@@ -304,78 +419,140 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
               const SizedBox(height: 12),
               Row(
                 children: [
-                  // Box 1 (Upload Button)
-                  Expanded(
-                    child: AspectRatio(
-                      aspectRatio: 1,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: const Color(0xFFE2E8F0)),
-                        ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.add_photo_alternate_outlined, color: Color(0xFF1E88E5), size: 28),
-                            const SizedBox(height: 6),
-                            Text(
-                              'อัปโหลด',
-                              style: GoogleFonts.outfit(
-                                fontSize: 12,
-                                color: const Color(0xFF1E88E5),
-                                fontWeight: FontWeight.bold,
+                  for (var index = 0; index < 3; index++) ...[
+                    Expanded(
+                      child: AspectRatio(
+                        aspectRatio: 1,
+                        child: GestureDetector(
+                          onTap:
+                              index == _reviewImageBytes.length &&
+                                  _reviewImageBytes.length < 3
+                              ? _pickReviewImages
+                              : null,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: index < _reviewImageBytes.length
+                                  ? Colors.white
+                                  : const Color(0xFFF8FAFC),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: const Color(0xFFE2E8F0),
                               ),
                             ),
-                          ],
+                            child: index < _reviewImageBytes.length
+                                ? Stack(
+                                    children: [
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(16),
+                                        child: Image.memory(
+                                          _reviewImageBytes[index],
+                                          width: double.infinity,
+                                          height: double.infinity,
+                                          fit: BoxFit.cover,
+                                        ),
+                                      ),
+                                      Positioned(
+                                        right: 6,
+                                        top: 6,
+                                        child: GestureDetector(
+                                          onTap: () =>
+                                              _removeReviewImage(index),
+                                          child: Container(
+                                            width: 24,
+                                            height: 24,
+                                            decoration: const BoxDecoration(
+                                              color: Colors.black54,
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: const Icon(
+                                              Icons.close,
+                                              size: 16,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                : Center(
+                                    child: Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          index == _reviewImageBytes.length &&
+                                                  _reviewImageBytes.length < 3
+                                              ? Icons
+                                                    .add_photo_alternate_outlined
+                                              : Icons.image_outlined,
+                                          color:
+                                              index ==
+                                                      _reviewImageBytes
+                                                          .length &&
+                                                  _reviewImageBytes.length < 3
+                                              ? const Color(0xFF1E88E5)
+                                              : const Color(0xFFCBD5E1),
+                                          size: 28,
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Text(
+                                          index == _reviewImageBytes.length &&
+                                                  _reviewImageBytes.length < 3
+                                              ? 'อัปโหลด'
+                                              : 'ยังไม่มีรูป',
+                                          style: GoogleFonts.outfit(
+                                            fontSize: 12,
+                                            color:
+                                                index ==
+                                                        _reviewImageBytes
+                                                            .length &&
+                                                    _reviewImageBytes.length < 3
+                                                ? const Color(0xFF1E88E5)
+                                                : const Color(0xFF94A3B8),
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  // Box 2 (Placeholder)
-                  Expanded(
-                    child: AspectRatio(
-                      aspectRatio: 1,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF8FAFC),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: const Color(0xFFF1F5F9)),
-                        ),
-                        child: const Icon(Icons.image_outlined, color: Color(0xFFCBD5E1), size: 28),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  // Box 3 (Placeholder)
-                  Expanded(
-                    child: AspectRatio(
-                      aspectRatio: 1,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF8FAFC),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: const Color(0xFFF1F5F9)),
-                        ),
-                        child: const Icon(Icons.image_outlined, color: Color(0xFFCBD5E1), size: 28),
-                      ),
-                    ),
-                  ),
+                    if (index < 2) const SizedBox(width: 12),
+                  ],
                 ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                _reviewImageBytes.isNotEmpty
+                    ? 'คุณเลือกแล้ว ${_reviewImageBytes.length}/3 รูป'
+                    : 'กดช่องแรกเพื่อเลือกภาพประกอบ',
+                style: GoogleFonts.outfit(
+                  fontSize: 13,
+                  color: const Color(0xFF64748B),
+                ),
               ),
               const SizedBox(height: 14),
 
               // Info Tip Banner
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF0F9FF),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.info_outline, color: Color(0xFF0284C7), size: 18),
+                    const Icon(
+                      Icons.info_outline,
+                      color: Color(0xFF0284C7),
+                      size: 18,
+                    ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
@@ -412,10 +589,17 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
                   controller: _commentController,
                   maxLines: 5,
                   minLines: 3,
-                  style: GoogleFonts.outfit(color: const Color(0xFF0F172A), fontSize: 14),
+                  style: GoogleFonts.outfit(
+                    color: const Color(0xFF0F172A),
+                    fontSize: 14,
+                  ),
                   decoration: InputDecoration(
-                    hintText: 'เขียนความรู้สึกของคุณที่นี่... (อย่างน้อย 10 ตัวอักษร)',
-                    hintStyle: GoogleFonts.outfit(color: const Color(0xFF94A3B8), fontSize: 14),
+                    hintText:
+                        'เขียนความรู้สึกของคุณที่นี่... (อย่างน้อย 10 ตัวอักษร)',
+                    hintStyle: GoogleFonts.outfit(
+                      color: const Color(0xFF94A3B8),
+                      fontSize: 14,
+                    ),
                     border: InputBorder.none,
                     contentPadding: const EdgeInsets.all(16),
                   ),
@@ -429,7 +613,9 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF1E88E5),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     elevation: 0,
                   ),

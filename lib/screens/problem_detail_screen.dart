@@ -507,54 +507,82 @@ class ProblemDetailScreen extends StatelessWidget {
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: Colors.white,
-          border: Border(
-            top: BorderSide(color: const Color(0xFFF1F5F9), width: 1.0),
-          ),
-        ),
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _buildNavItem(context, Icons.home_outlined, 'หน้าหลัก', false, 0),
-            _buildNavItem(context, Icons.explore_outlined, 'แผนที่', false, 1),
-            _buildNavItem(context, Icons.favorite_outline, 'ติดตาม', false, 2),
-            _buildNavItem(context, Icons.person, 'เมนู', true, 3),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 12,
+              offset: const Offset(0, -4),
+            ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildNavItem(
-    BuildContext context,
-    IconData icon,
-    String label,
-    bool isActive,
-    int index,
-  ) {
-    return GestureDetector(
-      onTap: () {
-        Navigator.pop(context, index);
-      },
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            icon,
-            color: isActive ? const Color(0xFF2563EB) : const Color(0xFF94A3B8),
-            size: 24,
+        child: ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          child: NavigationBar(
+            selectedIndex: 3,
+            onDestinationSelected: (index) {
+              Navigator.pop(context, index);
+            },
+            backgroundColor: Colors.white,
+            indicatorColor: const Color(0xFF1E88E5).withValues(alpha: 0.12),
+            height: 70,
+            labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+            destinations: [
+              NavigationDestination(
+                icon: const Icon(
+                  Icons.home_outlined,
+                  size: 24,
+                  color: Color(0xFF64748B),
+                ),
+                selectedIcon: const Icon(
+                  Icons.home,
+                  size: 24,
+                  color: Color(0xFF1E88E5),
+                ),
+                label: 'หน้าหลัก',
+              ),
+              NavigationDestination(
+                icon: const Icon(
+                  Icons.explore_outlined,
+                  size: 24,
+                  color: Color(0xFF64748B),
+                ),
+                selectedIcon: const Icon(
+                  Icons.explore,
+                  size: 24,
+                  color: Color(0xFF1E88E5),
+                ),
+                label: 'แผนที่',
+              ),
+              NavigationDestination(
+                icon: const Icon(
+                  Icons.favorite_outline,
+                  size: 24,
+                  color: Color(0xFF64748B),
+                ),
+                selectedIcon: const Icon(
+                  Icons.favorite,
+                  size: 24,
+                  color: Color(0xFF1E88E5),
+                ),
+                label: 'ติดตาม',
+              ),
+              NavigationDestination(
+                icon: const Icon(
+                  Icons.person_outline,
+                  size: 24,
+                  color: Color(0xFF64748B),
+                ),
+                selectedIcon: const Icon(
+                  Icons.person,
+                  size: 24,
+                  color: Color(0xFF1E88E5),
+                ),
+                label: 'เมนู',
+              ),
+            ],
           ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: GoogleFonts.outfit(
-              fontSize: 11,
-              color: isActive
-                  ? const Color(0xFF2563EB)
-                  : const Color(0xFF94A3B8),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

@@ -67,7 +67,10 @@ class _BookStallScreenState extends State<BookStallScreen> {
 
   Future<void> _fetchPaymentSettings() async {
     try {
-      final res = await ApiService.get('/v1/admin/market-payment-settings');
+      var res = await ApiService.get('/admin/market-payment-settings');
+      if (res['status'] != true || res['data'] == null) {
+        res = await ApiService.get('/v1/admin/market-payment-settings');
+      }
       if (res['status'] == true && res['data'] != null) {
         final data = res['data'];
         setState(() {
@@ -99,10 +102,15 @@ class _BookStallScreenState extends State<BookStallScreen> {
     return DateTime(targetYear, targetMonth, targetDay);
   }
 
-  double get _monthlyRate => _stallItem?.price ?? 500;
-  double get _rentTotal => _monthlyRate * _selectedDurationMonths;
-  double get _depositFee => _monthlyRate; // 1 month deposit fee
-  double get _grandTotal => _rentTotal + _depositFee;
+  // Correct price fields from DB
+  bool get _isMonthly => _stallItem?.isMonthly ?? false;
+  double get _rentalRate => _isMonthly
+      ? (_stallItem?.monthlyPrice ?? _stallItem?.price ?? 5000)
+      : (_stallItem?.dailyPrice ?? _stallItem?.price ?? 500);
+  double get _rentTotal => _rentalRate * _selectedDurationMonths;
+  double get _entryFeeAmount => _isMonthly ? (_stallItem?.entryFee ?? 0) : 0;
+  double get _securityDepositAmount => _isMonthly ? (_stallItem?.securityDeposit ?? 0) : 0;
+  double get _grandTotal => _rentTotal + _entryFeeAmount + _securityDepositAmount;
 
   String _formatDate(DateTime dt) {
     return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year + 543}';
@@ -212,7 +220,10 @@ class _BookStallScreenState extends State<BookStallScreen> {
     if (_stallItem == null || _stallItem!.stallId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('ไม่พบข้อมูลแผงค้าที่เลือก', style: GoogleFonts.outfit()),
+          content: Text(
+            'ไม่พบข้อมูลแผงค้าที่เลือก',
+            style: GoogleFonts.outfit(),
+          ),
           backgroundColor: const Color(0xFFDC2626),
         ),
       );
@@ -241,11 +252,19 @@ class _BookStallScreenState extends State<BookStallScreen> {
         stallId: _stallItem!.stallId!,
         startDate: _toIsoDate(_startDate),
         endDate: _toIsoDate(_endDate),
+        rentalType: _stallItem!.rentalType,
+        dailyPrice: _stallItem!.dailyPrice,
+        monthlyPrice: _stallItem!.monthlyPrice,
+        entryFee: _stallItem!.entryFee,
+        securityDeposit: _stallItem!.securityDeposit,
+        totalAmount: _grandTotal,
       );
 
       if (bookingRes['status'] == true) {
         final bookingData = bookingRes['data'];
-        final bookingId = bookingData != null ? bookingData['booking_id'] : null;
+        final bookingId = bookingData != null
+            ? bookingData['booking_id']
+            : null;
 
         // 2. Upload payment slip if provided
         if (bookingId != null && _slipBytes != null) {
@@ -304,9 +323,7 @@ class _BookStallScreenState extends State<BookStallScreen> {
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         content: Padding(
           padding: const EdgeInsets.symmetric(vertical: 8),
           child: Column(
@@ -355,7 +372,9 @@ class _BookStallScreenState extends State<BookStallScreen> {
                     _dialogSummaryRow('แผงค้า', _stallItem?.label ?? '-'),
                     const SizedBox(height: 8),
                     _dialogSummaryRow(
-                        'ระยะเวลาเช่า', '$_selectedDurationMonths เดือน'),
+                      'ระยะเวลาเช่า',
+                      '$_selectedDurationMonths เดือน',
+                    ),
                     const SizedBox(height: 8),
                     _dialogSummaryRow('เริ่มสัญญา', _formatDate(_startDate)),
                     const SizedBox(height: 8),
@@ -405,8 +424,12 @@ class _BookStallScreenState extends State<BookStallScreen> {
     );
   }
 
-  Widget _dialogSummaryRow(String label, String val,
-      {bool isBold = false, Color? color}) {
+  Widget _dialogSummaryRow(
+    String label,
+    String val, {
+    bool isBold = false,
+    Color? color,
+  }) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -532,7 +555,12 @@ class _BookStallScreenState extends State<BookStallScreen> {
   }
 
   Widget _buildStallCard(MarketMapItem item) {
-    final dailyEstimate = (item.price / 30).toStringAsFixed(0);
+    final bool monthly = item.isMonthly;
+    final double displayRate = monthly
+        ? (item.monthlyPrice ?? item.price)
+        : (item.dailyPrice ?? item.price);
+    final double dailyEstimateVal = monthly ? (displayRate / 30) : displayRate;
+    final String dailyEstimate = dailyEstimateVal.toStringAsFixed(0);
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -588,7 +616,9 @@ class _BookStallScreenState extends State<BookStallScreen> {
                         const Spacer(),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 4),
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: const Color(0xFFDCFCE7),
                             borderRadius: BorderRadius.circular(20),
@@ -622,8 +652,11 @@ class _BookStallScreenState extends State<BookStallScreen> {
                     const SizedBox(height: 6),
                     Row(
                       children: [
-                        const Icon(Icons.straighten,
-                            size: 15, color: Color(0xFF64748B)),
+                        const Icon(
+                          Icons.straighten,
+                          size: 15,
+                          color: Color(0xFF64748B),
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           'ขนาด ${item.size}',
@@ -659,7 +692,7 @@ class _BookStallScreenState extends State<BookStallScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'ค่าเช่ารายเดือน',
+                        monthly ? 'ค่าเช่ารายเดือน' : 'ค่าเช่ารายวัน',
                         style: GoogleFonts.outfit(
                           fontSize: 11.5,
                           color: const Color(0xFF64748B),
@@ -671,7 +704,7 @@ class _BookStallScreenState extends State<BookStallScreen> {
                         textBaseline: TextBaseline.alphabetic,
                         children: [
                           Text(
-                            '฿${_formatCurrency(item.price)}',
+                            '฿${_formatCurrency(displayRate)}',
                             style: GoogleFonts.outfit(
                               fontSize: 17,
                               fontWeight: FontWeight.bold,
@@ -679,7 +712,7 @@ class _BookStallScreenState extends State<BookStallScreen> {
                             ),
                           ),
                           Text(
-                            ' /เดือน',
+                            monthly ? ' /เดือน' : ' /วัน',
                             style: GoogleFonts.outfit(
                               fontSize: 11,
                               color: const Color(0xFF64748B),
@@ -688,7 +721,7 @@ class _BookStallScreenState extends State<BookStallScreen> {
                         ],
                       ),
                       Text(
-                        'เฉลี่ย ~฿$dailyEstimate/วัน',
+                        monthly ? 'เฉลี่ย ~฿$dailyEstimate/วัน' : 'ต่อ 1 วันเช่า',
                         style: GoogleFonts.outfit(
                           fontSize: 10.5,
                           color: const Color(0xFF94A3B8),
@@ -711,7 +744,7 @@ class _BookStallScreenState extends State<BookStallScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'เงินมัดจำแรกเข้า',
+                        monthly ? 'ค่าแรกเข้า + เงินประกัน' : 'ค่ามัดจำ',
                         style: GoogleFonts.outfit(
                           fontSize: 11.5,
                           color: const Color(0xFF64748B),
@@ -719,7 +752,9 @@ class _BookStallScreenState extends State<BookStallScreen> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        '฿${_formatCurrency(item.price)}',
+                        monthly
+                            ? '฿${_formatCurrency((item.entryFee ?? 0) + (item.securityDeposit ?? 0))}'
+                            : '฿0',
                         style: GoogleFonts.outfit(
                           fontSize: 17,
                           fontWeight: FontWeight.bold,
@@ -727,10 +762,10 @@ class _BookStallScreenState extends State<BookStallScreen> {
                         ),
                       ),
                       Text(
-                        '*ได้รับคืนเมื่อหมดสัญญา',
+                        monthly ? '*เงินประกันคืนเมื่อหมดสัญญา' : 'ไม่มีค่ามัดจำรายวัน',
                         style: GoogleFonts.outfit(
                           fontSize: 10.5,
-                          color: const Color(0xFF16A34A),
+                          color: monthly ? const Color(0xFF16A34A) : const Color(0xFF94A3B8),
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -751,7 +786,10 @@ class _BookStallScreenState extends State<BookStallScreen> {
               _stallFeatureBadge(Icons.bolt, 'ฟรีจุดไฟ'),
               _stallFeatureBadge(Icons.water_drop, 'ฟรีจุดน้ำ'),
               _stallFeatureBadge(Icons.shield_outlined, 'รปภ. 24 ชม.'),
-              _stallFeatureBadge(Icons.cleaning_services_outlined, 'บริการเก็บขยะ'),
+              _stallFeatureBadge(
+                Icons.cleaning_services_outlined,
+                'บริการเก็บขยะ',
+              ),
             ],
           ),
         ],
@@ -844,13 +882,21 @@ class _BookStallScreenState extends State<BookStallScreen> {
           TextFormField(
             controller: _phoneController,
             keyboardType: TextInputType.phone,
-            style: GoogleFonts.outfit(fontSize: 14, color: const Color(0xFF0F172A)),
+            style: GoogleFonts.outfit(
+              fontSize: 14,
+              color: const Color(0xFF0F172A),
+            ),
             decoration: InputDecoration(
               hintText: 'กรอกเบอร์โทรศัพท์สำหรับติดต่อ',
-              prefixIcon: const Icon(Icons.phone_outlined,
-                  size: 18, color: Color(0xFF64748B)),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              prefixIcon: const Icon(
+                Icons.phone_outlined,
+                size: 18,
+                color: Color(0xFF64748B),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 12,
+              ),
               filled: true,
               fillColor: const Color(0xFFF8FAFC),
               border: OutlineInputBorder(
@@ -863,7 +909,10 @@ class _BookStallScreenState extends State<BookStallScreen> {
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.5),
+                borderSide: const BorderSide(
+                  color: Color(0xFF2563EB),
+                  width: 1.5,
+                ),
               ),
             ),
           ),
@@ -965,8 +1014,10 @@ class _BookStallScreenState extends State<BookStallScreen> {
                   ),
                   const Spacer(),
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(8),
@@ -1012,7 +1063,10 @@ class _BookStallScreenState extends State<BookStallScreen> {
               ),
               // Highlight Badge showing current selection
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
                     colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)],
@@ -1027,7 +1081,11 @@ class _BookStallScreenState extends State<BookStallScreen> {
                   ],
                 ),
                 child: Text(
-                  '$_selectedDurationMonths เดือน${_selectedDurationMonths == 12 ? ' (1 ปี)' : _selectedDurationMonths == 6 ? ' (ครึ่งปี)' : ''}',
+                  '$_selectedDurationMonths เดือน${_selectedDurationMonths == 12
+                      ? ' (1 ปี)'
+                      : _selectedDurationMonths == 6
+                      ? ' (ครึ่งปี)'
+                      : ''}',
                   style: GoogleFonts.outfit(
                     fontSize: 13.5,
                     fontWeight: FontWeight.bold,
@@ -1069,7 +1127,9 @@ class _BookStallScreenState extends State<BookStallScreen> {
                           activeTrackColor: const Color(0xFF2563EB),
                           inactiveTrackColor: const Color(0xFFE2E8F0),
                           thumbColor: const Color(0xFF2563EB),
-                          overlayColor: const Color(0xFF2563EB).withValues(alpha: 0.15),
+                          overlayColor: const Color(
+                            0xFF2563EB,
+                          ).withValues(alpha: 0.15),
                           thumbShape: const RoundSliderThumbShape(
                             enabledThumbRadius: 11,
                             elevation: 3,
@@ -1077,7 +1137,9 @@ class _BookStallScreenState extends State<BookStallScreen> {
                           tickMarkShape: const RoundSliderTickMarkShape(
                             tickMarkRadius: 3,
                           ),
-                          activeTickMarkColor: Colors.white.withValues(alpha: 0.7),
+                          activeTickMarkColor: Colors.white.withValues(
+                            alpha: 0.7,
+                          ),
                           inactiveTickMarkColor: const Color(0xFFCBD5E1),
                         ),
                         child: Slider(
@@ -1109,7 +1171,10 @@ class _BookStallScreenState extends State<BookStallScreen> {
                 ),
                 // Min / Max labels & Markers
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 2,
+                  ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -1160,12 +1225,16 @@ class _BookStallScreenState extends State<BookStallScreen> {
                     selectedColor: const Color(0xFFEFF6FF),
                     backgroundColor: Colors.white,
                     side: BorderSide(
-                      color: isSel ? const Color(0xFF2563EB) : const Color(0xFFE2E8F0),
+                      color: isSel
+                          ? const Color(0xFF2563EB)
+                          : const Color(0xFFE2E8F0),
                     ),
                     labelStyle: GoogleFonts.outfit(
                       fontSize: 12,
                       fontWeight: isSel ? FontWeight.bold : FontWeight.w500,
-                      color: isSel ? const Color(0xFF2563EB) : const Color(0xFF475569),
+                      color: isSel
+                          ? const Color(0xFF2563EB)
+                          : const Color(0xFF475569),
                     ),
                     showCheckmark: false,
                     onSelected: (selected) {
@@ -1221,8 +1290,10 @@ class _BookStallScreenState extends State<BookStallScreen> {
                   ),
                 ),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(8),
@@ -1289,15 +1360,26 @@ class _BookStallScreenState extends State<BookStallScreen> {
           ),
           const SizedBox(height: 16),
           _costRow(
-            'ค่าเช่าแผงค้า (฿${_formatCurrency(_monthlyRate)} × $_selectedDurationMonths เดือน)',
+            _isMonthly
+                ? 'ค่าเช่า (฿${_formatCurrency(_rentalRate)}/เดือน × $_selectedDurationMonths เดือน)'
+                : 'ค่าเช่า (฿${_formatCurrency(_rentalRate)}/วัน)',
             '฿${_formatCurrency(_rentTotal)}',
           ),
-          const SizedBox(height: 10),
-          _costRow(
-            'ค่ามัดจำประกันแรกเข้า (1 เดือน)',
-            '฿${_formatCurrency(_depositFee)}',
-            subtitle: '* ได้รับเงินมัดจำคืนเต็มจำนวนเมื่อครบสัญญาเช่า',
-          ),
+          if (_isMonthly && _entryFeeAmount > 0) ...[
+            const SizedBox(height: 10),
+            _costRow(
+              'ค่าแรกเข้า',
+              '฿${_formatCurrency(_entryFeeAmount)}',
+            ),
+          ],
+          if (_isMonthly && _securityDepositAmount > 0) ...[
+            const SizedBox(height: 10),
+            _costRow(
+              'เงินประกัน',
+              '฿${_formatCurrency(_securityDepositAmount)}',
+              subtitle: '* คืนเมื่อครบสัญญาเช่า',
+            ),
+          ],
           const SizedBox(height: 14),
           const Divider(color: Color(0xFFE2E8F0), height: 1),
           const SizedBox(height: 12),
@@ -1316,7 +1398,7 @@ class _BookStallScreenState extends State<BookStallScreen> {
                     ),
                   ),
                   Text(
-                    'รวมค่าเช่า + ค่ามัดจำ',
+                    _isMonthly ? 'ค่าเช่า + ค่าแรกเข้า + เงินประกัน' : 'ค่าเช่ารายวัน',
                     style: GoogleFonts.outfit(
                       fontSize: 11,
                       color: const Color(0xFF64748B),
@@ -1579,8 +1661,11 @@ class _BookStallScreenState extends State<BookStallScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(Icons.check_circle,
-                                color: Color(0xFF16A34A), size: 18),
+                            const Icon(
+                              Icons.check_circle,
+                              color: Color(0xFF16A34A),
+                              size: 18,
+                            ),
                             const SizedBox(width: 6),
                             Expanded(
                               child: Text(
@@ -1663,12 +1748,16 @@ class _BookStallScreenState extends State<BookStallScreen> {
         decoration: BoxDecoration(
           color: _agreeTerms
               ? const Color(0xFFEFF6FF)
-              : const Color(0xFFFFF7ED), // Soft amber/warm tint when unchecked, blue tint when checked
+              : const Color(
+                  0xFFFFF7ED,
+                ), // Soft amber/warm tint when unchecked, blue tint when checked
           borderRadius: BorderRadius.circular(18),
           border: Border.all(
             color: _agreeTerms
                 ? const Color(0xFF2563EB)
-                : const Color(0xFFFDBA74), // Orange border when unchecked, Blue when checked
+                : const Color(
+                    0xFFFDBA74,
+                  ), // Orange border when unchecked, Blue when checked
             width: _agreeTerms ? 2.0 : 1.5,
           ),
           boxShadow: [
@@ -1690,9 +1779,7 @@ class _BookStallScreenState extends State<BookStallScreen> {
               width: 26,
               height: 26,
               decoration: BoxDecoration(
-                color: _agreeTerms
-                    ? const Color(0xFF2563EB)
-                    : Colors.white,
+                color: _agreeTerms ? const Color(0xFF2563EB) : Colors.white,
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
                   color: _agreeTerms
@@ -1702,11 +1789,7 @@ class _BookStallScreenState extends State<BookStallScreen> {
                 ),
               ),
               child: _agreeTerms
-                  ? const Icon(
-                      Icons.check,
-                      size: 18,
-                      color: Colors.white,
-                    )
+                  ? const Icon(Icons.check, size: 18, color: Colors.white)
                   : null,
             ),
             const SizedBox(width: 14),
@@ -1717,7 +1800,9 @@ class _BookStallScreenState extends State<BookStallScreen> {
                   Row(
                     children: [
                       Icon(
-                        _agreeTerms ? Icons.verified_user : Icons.gavel_outlined,
+                        _agreeTerms
+                            ? Icons.verified_user
+                            : Icons.gavel_outlined,
                         size: 16,
                         color: _agreeTerms
                             ? const Color(0xFF2563EB)
@@ -1825,8 +1910,11 @@ class _BookStallScreenState extends State<BookStallScreen> {
                     : Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.check_circle_outline,
-                              color: Colors.white, size: 20),
+                          const Icon(
+                            Icons.check_circle_outline,
+                            color: Colors.white,
+                            size: 20,
+                          ),
                           const SizedBox(width: 8),
                           Text(
                             'ยืนยันการจองแผง',

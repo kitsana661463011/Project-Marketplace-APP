@@ -7,6 +7,7 @@ class Item {
   final String? itemImage;
   final List<String> images;
   final int? categoryId;
+  final String status;
   final Map<String, dynamic>? shop;
   final Map<String, dynamic>? category;
 
@@ -19,6 +20,7 @@ class Item {
     this.itemImage,
     this.images = const [],
     this.categoryId,
+    this.status = 'เปิดขาย',
     this.shop,
     this.category,
   });
@@ -36,7 +38,9 @@ class Item {
             .toList();
       }
     }
-    if (parsedImages.isEmpty && json['item_image'] != null && json['item_image'].toString().isNotEmpty) {
+    if (parsedImages.isEmpty &&
+        json['item_image'] != null &&
+        json['item_image'].toString().isNotEmpty) {
       parsedImages = [json['item_image'].toString()];
     }
 
@@ -44,7 +48,13 @@ class Item {
       itemId: json['item_id'],
       shopId: json['shop_id'],
       itemName: json['item_name'] ?? '',
-      price: (json['price'] ?? 0).toDouble(),
+      price: (() {
+        final raw = json['price'];
+        if (raw == null) return 0.0;
+        if (raw is num) return raw.toDouble();
+        final parsed = double.tryParse(raw.toString());
+        return parsed ?? 0.0;
+      })(),
       description: json['description'],
       itemImage: json['item_image'],
       images: parsedImages,
@@ -55,11 +65,13 @@ class Item {
       category: json['category'] != null
           ? Map<String, dynamic>.from(json['category'])
           : null,
+      status: json['status'] ?? 'เปิดขาย',
     );
   }
 
   String get categoryName => category?['category_name'] ?? 'ไม่ระบุ';
   String get shopName => shop?['shop_name'] ?? 'ไม่ทราบ';
+  bool get isAvailable => status == 'เปิดขาย';
 
   List<String> get allImages {
     if (images.isNotEmpty) return images;

@@ -9,6 +9,7 @@ class Shop {
   final int? userId;
   final Map<String, dynamic>? category;
   final Map<String, dynamic>? owner;
+  final int followerCount;
 
   Shop({
     this.shopId,
@@ -21,6 +22,7 @@ class Shop {
     this.userId,
     this.category,
     this.owner,
+    this.followerCount = 0,
   });
 
   factory Shop.fromJson(Map<String, dynamic> json) {
@@ -39,6 +41,9 @@ class Shop {
       owner: json['owner'] != null
           ? Map<String, dynamic>.from(json['owner'])
           : null,
+      followerCount: json['follows_count'] is int
+          ? json['follows_count'] as int
+          : int.tryParse(json['follows_count']?.toString() ?? '') ?? 0,
     );
   }
 

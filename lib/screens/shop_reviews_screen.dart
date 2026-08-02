@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/shop.dart';
@@ -96,7 +98,8 @@ class _ShopReviewsScreenState extends State<ShopReviewsScreen> {
           _reviews = apiReviews.map((json) {
             final user = json['user'] as Map<String, dynamic>?;
             final String username = user?['username'] ?? 'ผู้ใช้ทั่วไป';
-            final String profileImgStr = user?['profile_image']?.toString() ?? '';
+            final String profileImgStr =
+                user?['profile_image']?.toString() ?? '';
             final String avatar = profileImgStr.isNotEmpty
                 ? ApiService.getImagePath(profileImgStr)
                 : '';
@@ -118,6 +121,25 @@ class _ShopReviewsScreenState extends State<ShopReviewsScreen> {
               } catch (_) {}
             }
 
+            final imagesValue = json['review_images'];
+            List<String> reviewImages = [];
+            if (imagesValue is String && imagesValue.isNotEmpty) {
+              try {
+                final parsedImages = jsonDecode(imagesValue);
+                if (parsedImages is List) {
+                  reviewImages = parsedImages.map((e) => e.toString()).toList();
+                }
+              } catch (_) {
+                reviewImages = imagesValue
+                    .split(',')
+                    .map((e) => e.trim())
+                    .where((e) => e.isNotEmpty)
+                    .toList();
+              }
+            } else if (imagesValue is List) {
+              reviewImages = imagesValue.map((e) => e.toString()).toList();
+            }
+
             return ReviewItem(
               reviewId: json['review_id'] as int? ?? 0,
               userName: username,
@@ -125,6 +147,9 @@ class _ShopReviewsScreenState extends State<ShopReviewsScreen> {
               rating: (json['rating'] as num? ?? 5.0).toDouble(),
               timeAgo: timeAgo,
               reviewText: json['comment'] ?? '',
+              images: reviewImages
+                  .map((src) => ApiService.getImagePath(src))
+                  .toList(),
               likes: (json['likes'] ?? 0) as int,
             );
           }).toList();
@@ -529,10 +554,10 @@ class _ShopReviewsScreenState extends State<ShopReviewsScreen> {
                                             errorBuilder:
                                                 (context, error, stackTrace) =>
                                                     const Icon(
-                                              Icons.person,
-                                              color: Color(0xFF8A8D91),
-                                              size: 24,
-                                            ),
+                                                      Icons.person,
+                                                      color: Color(0xFF8A8D91),
+                                                      size: 24,
+                                                    ),
                                           ),
                                         )
                                       : const Icon(

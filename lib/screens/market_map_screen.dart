@@ -26,8 +26,10 @@ class _MarketMapScreenState extends State<MarketMapScreen>
   final TransformationController _transformationController =
       TransformationController();
 
-  // Legend filter
-  String _filterStatus = 'all'; // 'all', 'available', 'occupied'
+  // Filters
+  String _filterStatus =
+      'all'; // 'all', 'available', 'occupied', 'approved', 'repair'
+  String _filterRentalType = 'all'; // 'all', 'daily', 'monthly'
 
   // Padding around the content bounds
   static const double _canvasPadding = 40.0;
@@ -78,30 +80,93 @@ class _MarketMapScreenState extends State<MarketMapScreen>
     }
   }
 
+  bool _isCurrentUserRefundOwner(model.MarketMapItem item) {
+    final currentUserId = Provider.of<AuthService>(
+      context,
+      listen: false,
+    ).currentUser?.userId;
+    final sellerId = int.tryParse(
+      item.seller?['id']?.toString() ??
+          item.seller?['user_id']?.toString() ??
+          '',
+    );
+
+    return currentUserId != null &&
+        sellerId != null &&
+        currentUserId == sellerId;
+  }
+
+  bool _isVacantForViewer(model.MarketMapItem item) {
+    if (item.isAvailable) return true;
+    if (item.isRefundRequested || item.isRefunded) {
+      return !_isCurrentUserRefundOwner(item);
+    }
+    return false;
+  }
+
+  bool _shouldExposeSellerDetails(model.MarketMapItem item) {
+    if (item.seller == null) return false;
+    if (item.isRefundRequested || item.isRefunded) {
+      return _isCurrentUserRefundOwner(item);
+    }
+    return item.isApproved || item.isPending;
+  }
+
   Color _getStallColor(model.MarketMapItem item) {
     if (!item.isBlock) return _parseColor(item.fillColor, opacity: 0.35);
-    switch (item.status) {
-      case 'available':
-        return const Color(0xFF22C55E); // green
-      case 'occupied':
-        return const Color(0xFFEF4444); // red
-      case 'repair':
-        return const Color(0xFFF59E0B); // amber
-      default:
-        return _parseColor(item.fillColor);
+
+    if (_isVacantForViewer(item)) {
+      return const Color(0xFF22C55E); // Green (ว่าง)
+    } else if (item.isPending) {
+      return const Color(0xFF3B82F6); // Blue (กำลังจอง - pending approval)
+    } else if (item.isApproved) {
+      return const Color(0xFFEF4444); // Red (มีผู้เช่าแล้ว)
+    } else if (item.isRepair) {
+      return const Color(0xFFF59E0B); // Amber / Yellow-Orange (ปิดปรับปรุง)
+    } else if (item.isRefundRequested) {
+      return const Color(0xFF8B5CF6); // Purple (ขอคืนเงิน)
+    } else if (item.isRefunded) {
+      return const Color(0xFF7C3AED); // Deep Purple (คืนเงินแล้ว)
+    } else {
+      return const Color(0xFF64748B); // Fallback
     }
   }
 
   bool _shouldShow(model.MarketMapItem item) {
-    if (_filterStatus == 'all') return true;
     if (!item.isBlock) return true; // always show zones/roads/entrances
-    return item.status == _filterStatus;
+
+    // Filter by Status
+    bool matchesStatus = true;
+    if (_filterStatus != 'all') {
+      if (_filterStatus == 'available') {
+        matchesStatus = item.isAvailable;
+      } else if (_filterStatus == 'occupied') {
+        matchesStatus = item.isPending;
+      } else if (_filterStatus == 'approved') {
+        matchesStatus = item.isApproved;
+      } else if (_filterStatus == 'repair') {
+        matchesStatus = item.isRepair;
+      }
+    }
+
+    // Filter by Rental Type
+    bool matchesRental = true;
+    if (_filterRentalType != 'all') {
+      if (_filterRentalType == 'daily') {
+        matchesRental = item.isDaily;
+      } else if (_filterRentalType == 'monthly') {
+        matchesRental = item.isMonthly;
+      }
+    }
+
+    return matchesStatus && matchesRental;
   }
 
   void _showStallDetail(model.MarketMapItem item) {
     if (!item.isBlock) return;
     final authService = Provider.of<AuthService>(context, listen: false);
-    final isSeller = authService.currentUser?.role == 'seller' ||
+    final isSeller =
+        authService.currentUser?.role == 'seller' ||
         authService.currentUser?.role == 'admin';
     setState(() => _selectedItem = item);
     showModalBottomSheet(
@@ -114,22 +179,40 @@ class _MarketMapScreenState extends State<MarketMapScreen>
     });
   }
 
-  Widget _buildStallSheet(model.MarketMapItem item,
-      {bool isSeller = false}) {
+  Widget _buildStallSheet(model.MarketMapItem item, {bool isSeller = false}) {
     if (!isSeller) {
       return _buildCustomerStallSheet(item);
     }
 
-    final statusColor = item.isAvailable
+    final isViewerOwner = _isCurrentUserRefundOwner(item);
+    final canBook = _isVacantForViewer(item);
+    final statusColor = item.isRefundRequested
+        ? (isViewerOwner ? const Color(0xFF8B5CF6) : const Color(0xFF22C55E))
+        : item.isRefunded
+        ? (isViewerOwner ? const Color(0xFF7C3AED) : const Color(0xFF22C55E))
+        : item.isAvailable
         ? const Color(0xFF22C55E)
-        : item.isOccupied
-            ? const Color(0xFFEF4444)
-            : const Color(0xFFF59E0B);
-    final statusLabel = item.isAvailable
+        : item.isPending
+        ? const Color(0xFF3B82F6)
+        : item.isApproved
+        ? const Color(0xFFEF4444)
+        : const Color(0xFFF59E0B);
+
+    final statusLabel = item.isRefundRequested
+        ? (isViewerOwner ? 'อยู่ระหว่างคืนเงิน' : 'ว่าง')
+        : item.isRefunded
+        ? (isViewerOwner ? 'คืนเงินแล้ว' : 'ว่าง')
+        : item.isAvailable
         ? 'ว่าง'
-        : item.isOccupied
-            ? 'มีผู้เช่า'
-            : 'ปิดปรับปรุง';
+        : item.isPending
+        ? 'กำลังรอจอง'
+        : item.isApproved
+        ? 'มีผู้เช่าแล้ว'
+        : 'ปิดปรับปรุง';
+
+    final priceText = item.isMonthly
+        ? '฿${(item.monthlyPrice ?? item.price).toStringAsFixed(0)}/เดือน'
+        : '฿${(item.dailyPrice ?? item.price).toStringAsFixed(0)}/วัน';
 
     return Container(
       margin: const EdgeInsets.all(16),
@@ -193,7 +276,9 @@ class _MarketMapScreenState extends State<MarketMapScreen>
                           const SizedBox(height: 4),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 3),
+                              horizontal: 10,
+                              vertical: 3,
+                            ),
                             decoration: BoxDecoration(
                               color: statusColor.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(20),
@@ -216,22 +301,33 @@ class _MarketMapScreenState extends State<MarketMapScreen>
                 const Divider(color: Color(0xFFF1F5F9)),
                 const SizedBox(height: 16),
                 // Info rows
-                _infoRow(Icons.straighten_outlined, 'ขนาด', item.size),
+                _infoRow(Icons.straighten_outlined, 'ขนาดแผง', item.size),
                 const SizedBox(height: 12),
-                _infoRow(Icons.payments_outlined, 'ค่าเช่า',
-                    '฿${item.price.toStringAsFixed(0)}/เดือน'),
-                if (item.seller != null) ...[
+                _infoRow(
+                  Icons.sell_outlined,
+                  'รูปแบบการเช่า',
+                  item.isMonthly ? 'เช่ารายเดือน' : 'เช่ารายวัน',
+                ),
+                const SizedBox(height: 12),
+                _infoRow(Icons.payments_outlined, 'ค่าเช่า', priceText),
+                if (_shouldExposeSellerDetails(item)) ...[
                   const SizedBox(height: 12),
-                  _infoRow(Icons.person_outline, 'ผู้เช่า',
-                      item.seller!['name'] ?? 'ไม่ระบุ'),
+                  _infoRow(
+                    Icons.person_outline,
+                    'ผู้เช่า',
+                    item.seller!['name'] ?? 'ไม่ระบุ',
+                  ),
                   if (item.seller!['shop_name'] != null) ...[
                     const SizedBox(height: 12),
-                    _infoRow(Icons.store_outlined, 'ชื่อร้าน',
-                        item.seller!['shop_name']),
+                    _infoRow(
+                      Icons.store_outlined,
+                      'ชื่อร้าน',
+                      item.seller!['shop_name'],
+                    ),
                   ],
                 ],
                 const SizedBox(height: 24),
-                if (item.isAvailable)
+                if (canBook)
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
@@ -250,7 +346,9 @@ class _MarketMapScreenState extends State<MarketMapScreen>
                       label: Text(
                         'จองแผงค้านี้',
                         style: GoogleFonts.outfit(
-                            fontWeight: FontWeight.bold, fontSize: 15),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF2563EB),
@@ -279,7 +377,9 @@ class _MarketMapScreenState extends State<MarketMapScreen>
                       child: Text(
                         'ปิด',
                         style: GoogleFonts.outfit(
-                            fontWeight: FontWeight.bold, fontSize: 15),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
                       ),
                     ),
                   ),
@@ -293,13 +393,22 @@ class _MarketMapScreenState extends State<MarketMapScreen>
 
   Widget _buildCustomerStallSheet(model.MarketMapItem item) {
     final sellerInfo = item.seller;
-    final hasShop = sellerInfo != null;
-    final shopName = sellerInfo?['shop_name'] ?? sellerInfo?['name'] ?? 'ร้านค้าในตลาด';
+    final showSellerIdentity = _shouldExposeSellerDetails(item);
+    final hasShop = showSellerIdentity;
+    final shopName =
+        sellerInfo?['shop_name'] ?? sellerInfo?['name'] ?? 'ร้านค้าในตลาด';
     final categoryName = sellerInfo?['category_name'] ?? 'อาหารและเครื่องดื่ม';
-    final description = sellerInfo?['description'] ?? 'มีเมนูเด็ดและสินค้าพร้อมให้บริการ';
+    final description =
+        sellerInfo?['description'] ?? 'มีเมนูเด็ดและสินค้าพร้อมให้บริการ';
     final shopPhone = sellerInfo?['shop_phone'] ?? sellerInfo?['phone'] ?? '';
     final shopImage = sellerInfo?['shop_image'];
-    final shopId = int.tryParse(sellerInfo?['shop_id']?.toString() ?? sellerInfo?['id']?.toString() ?? '') ?? 0;
+    final shopId =
+        int.tryParse(
+          sellerInfo?['shop_id']?.toString() ??
+              sellerInfo?['id']?.toString() ??
+              '',
+        ) ??
+        0;
 
     return Container(
       margin: const EdgeInsets.all(16),
@@ -348,15 +457,18 @@ class _MarketMapScreenState extends State<MarketMapScreen>
                         ),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(14),
-                          child: shopImage != null && shopImage.toString().isNotEmpty
+                          child:
+                              shopImage != null &&
+                                  shopImage.toString().isNotEmpty
                               ? Image.network(
                                   '${ApiConfig.apiImageUrl}/$shopImage',
                                   fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) => const Icon(
-                                    Icons.storefront,
-                                    color: Color(0xFF2563EB),
-                                    size: 32,
-                                  ),
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      const Icon(
+                                        Icons.storefront,
+                                        color: Color(0xFF2563EB),
+                                        size: 32,
+                                      ),
                                 )
                               : const Icon(
                                   Icons.storefront,
@@ -387,12 +499,15 @@ class _MarketMapScreenState extends State<MarketMapScreen>
                               children: [
                                 Container(
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 10, vertical: 3),
+                                    horizontal: 10,
+                                    vertical: 3,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: const Color(0xFFEFF6FF),
                                     borderRadius: BorderRadius.circular(20),
                                     border: Border.all(
-                                        color: const Color(0xFFBFDBFE)),
+                                      color: const Color(0xFFBFDBFE),
+                                    ),
                                   ),
                                   child: Text(
                                     categoryName,
@@ -405,7 +520,9 @@ class _MarketMapScreenState extends State<MarketMapScreen>
                                 ),
                                 Container(
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 10, vertical: 3),
+                                    horizontal: 10,
+                                    vertical: 3,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: const Color(0xFFF1F5F9),
                                     borderRadius: BorderRadius.circular(20),
@@ -459,8 +576,11 @@ class _MarketMapScreenState extends State<MarketMapScreen>
                   ),
                   if (shopPhone.toString().isNotEmpty) ...[
                     const SizedBox(height: 12),
-                    _infoRow(Icons.phone_outlined, 'เบอร์โทรติดต่อ',
-                        shopPhone.toString()),
+                    _infoRow(
+                      Icons.phone_outlined,
+                      'เบอร์โทรติดต่อ',
+                      shopPhone.toString(),
+                    ),
                   ],
                   const SizedBox(height: 24),
                   SizedBox(
@@ -527,7 +647,9 @@ class _MarketMapScreenState extends State<MarketMapScreen>
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'ตำแหน่งนี้ยังไม่มีร้านค้าเปิดให้บริการ',
+                          showSellerIdentity
+                              ? 'ตำแหน่งนี้ยังไม่มีร้านค้าเปิดให้บริการ'
+                              : 'ข้อมูลร้านค้าไม่พร้อมเปิดเผยสำหรับแผงนี้',
                           style: GoogleFonts.outfit(
                             fontSize: 14,
                             color: const Color(0xFF64748B),
@@ -627,9 +749,14 @@ class _MarketMapScreenState extends State<MarketMapScreen>
 
   @override
   Widget build(BuildContext context) {
-    final authService = Provider.of<AuthService>(context);
-    final isSeller = authService.currentUser?.role == 'seller' ||
-        authService.currentUser?.role == 'admin';
+    final availableCount =
+        _map?.items.where((i) => i.isBlock && i.isAvailable).length ?? 0;
+    final pendingCount =
+        _map?.items.where((i) => i.isBlock && i.isPending).length ?? 0;
+    final approvedCount =
+        _map?.items.where((i) => i.isBlock && i.isApproved).length ?? 0;
+    final repairCount =
+        _map?.items.where((i) => i.isBlock && i.isRepair).length ?? 0;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -639,8 +766,11 @@ class _MarketMapScreenState extends State<MarketMapScreen>
         leading: widget.isEmbedded
             ? null
             : IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new,
-                    color: Color(0xFF0F172A), size: 20),
+                icon: const Icon(
+                  Icons.arrow_back_ios_new,
+                  color: Color(0xFF0F172A),
+                  size: 20,
+                ),
                 onPressed: () => Navigator.pop(context),
               ),
         title: Column(
@@ -656,39 +786,38 @@ class _MarketMapScreenState extends State<MarketMapScreen>
             ),
             if (_map != null)
               Text(
-                isSeller
-                    ? '${_map!.items.where((i) => i.isBlock && i.isAvailable).length} แผงว่าง · ${_map!.items.where((i) => i.isBlock && i.isOccupied).length} แผงมีผู้เช่า'
-                    : '${_map!.items.where((i) => i.isBlock && i.isOccupied).length} ร้านค้าพร้อมให้บริการในตลาด',
+                '$availableCount แผงว่าง · $pendingCount กำลังจอง · $approvedCount มีผู้เช่า · $repairCount ปิดปรับปรุง',
                 style: GoogleFonts.outfit(
                   color: const Color(0xFF64748B),
-                  fontSize: 12,
+                  fontSize: 11,
                 ),
               ),
           ],
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh_outlined,
-                color: Color(0xFF0F172A), size: 22),
+            icon: const Icon(
+              Icons.refresh_outlined,
+              color: Color(0xFF0F172A),
+              size: 22,
+            ),
             onPressed: _loadMap,
             tooltip: 'รีเฟรช',
           ),
           const SizedBox(width: 4),
         ],
-        bottom: isSeller
-            ? PreferredSize(
-                preferredSize: const Size.fromHeight(48),
-                child: _buildFilterBar(),
-              )
-            : null,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(82),
+          child: _buildFilterBar(),
+        ),
       ),
       body: _isLoading
           ? const Center(
               child: CircularProgressIndicator(color: Color(0xFF2563EB)),
             )
           : _error != null
-              ? _buildError()
-              : _buildMapCanvas(),
+          ? _buildError()
+          : _buildMapCanvas(),
       floatingActionButton: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -713,8 +842,11 @@ class _MarketMapScreenState extends State<MarketMapScreen>
             onPressed: _resetZoom,
             backgroundColor: Colors.white,
             elevation: 3,
-            child: const Icon(Icons.center_focus_strong,
-                color: Color(0xFF475569), size: 18),
+            child: const Icon(
+              Icons.center_focus_strong,
+              color: Color(0xFF475569),
+              size: 18,
+            ),
           ),
         ],
       ),
@@ -722,93 +854,168 @@ class _MarketMapScreenState extends State<MarketMapScreen>
   }
 
   Widget _buildFilterBar() {
-    final filters = [
+    final statusFilters = [
       {'key': 'all', 'label': 'ทั้งหมด', 'color': const Color(0xFF2563EB)},
-      {
-        'key': 'available',
-        'label': 'ว่าง',
-        'color': const Color(0xFF22C55E)
-      },
+      {'key': 'available', 'label': 'ว่าง', 'color': const Color(0xFF22C55E)},
       {
         'key': 'occupied',
-        'label': 'มีผู้เช่า',
-        'color': const Color(0xFFEF4444)
+        'label': 'กำลังจอง',
+        'color': const Color(0xFF3B82F6),
       },
+      {
+        'key': 'approved',
+        'label': 'มีผู้เช่า',
+        'color': const Color(0xFFEF4444),
+      },
+      {
+        'key': 'repair',
+        'label': 'ปิดปรับปรุง',
+        'color': const Color(0xFFF59E0B),
+      },
+    ];
+
+    final rentalTypeFilters = [
+      {'key': 'all', 'label': 'ทั้งหมด'},
+      {'key': 'daily', 'label': '📅 แผงรายวัน'},
+      {'key': 'monthly', 'label': '📆 แผงรายเดือน'},
     ];
 
     return Container(
       color: Colors.white,
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        physics: const BouncingScrollPhysics(),
-        child: Row(
-          children: [
-            ...filters.map((f) {
-              final isActive = _filterStatus == f['key'];
-              return Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: GestureDetector(
-                  onTap: () => setState(() => _filterStatus = f['key'] as String),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: isActive
-                          ? (f['color'] as Color).withValues(alpha: 0.15)
-                          : const Color(0xFFF1F5F9),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: isActive
-                            ? f['color'] as Color
-                            : const Color(0xFFE2E8F0),
-                        width: 1.5,
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Row 1: Status Filters
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            child: Row(
+              children: [
+                ...statusFilters.map((f) {
+                  final isActive = _filterStatus == f['key'];
+                  final Color itemColor = f['color'] as Color;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: GestureDetector(
+                      onTap: () =>
+                          setState(() => _filterStatus = f['key'] as String),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isActive
+                              ? itemColor.withValues(alpha: 0.15)
+                              : const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: isActive
+                                ? itemColor
+                                : const Color(0xFFE2E8F0),
+                            width: 1.2,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (f['key'] != 'all') ...[
+                              Container(
+                                width: 7,
+                                height: 7,
+                                decoration: BoxDecoration(
+                                  color: itemColor,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 5),
+                            ],
+                            Text(
+                              f['label'] as String,
+                              style: GoogleFonts.outfit(
+                                fontSize: 11.5,
+                                fontWeight: isActive
+                                    ? FontWeight.bold
+                                    : FontWeight.w500,
+                                color: isActive
+                                    ? itemColor
+                                    : const Color(0xFF64748B),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                    child: Text(
-                      f['label'] as String,
-                      style: GoogleFonts.outfit(
-                        fontSize: 12,
-                        fontWeight:
-                            isActive ? FontWeight.bold : FontWeight.w500,
-                        color: isActive
-                            ? f['color'] as Color
-                            : const Color(0xFF64748B),
-                      ),
-                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+          const SizedBox(height: 6),
+          // Row 2: Rental Type Filters
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            child: Row(
+              children: [
+                Text(
+                  'สัญญา: ',
+                  style: GoogleFonts.outfit(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF94A3B8),
                   ),
                 ),
-              );
-            }),
-            const SizedBox(width: 12),
-            // Legend
-            _legendDot(const Color(0xFF22C55E), 'ว่าง'),
-            const SizedBox(width: 10),
-            _legendDot(const Color(0xFFEF4444), 'มีผู้เช่า'),
-            const SizedBox(width: 10),
-            _legendDot(const Color(0xFFF59E0B), 'ซ่อมบำรุง'),
-          ],
-        ),
+                ...rentalTypeFilters.map((rf) {
+                  final isActive = _filterRentalType == rf['key'];
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: GestureDetector(
+                      onTap: () => setState(
+                        () => _filterRentalType = rf['key'] as String,
+                      ),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isActive
+                              ? const Color(0xFFEFF6FF)
+                              : const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: isActive
+                                ? const Color(0xFF2563EB)
+                                : const Color(0xFFE2E8F0),
+                            width: 1.2,
+                          ),
+                        ),
+                        child: Text(
+                          rf['label'] as String,
+                          style: GoogleFonts.outfit(
+                            fontSize: 11,
+                            fontWeight: isActive
+                                ? FontWeight.bold
+                                : FontWeight.w500,
+                            color: isActive
+                                ? const Color(0xFF2563EB)
+                                : const Color(0xFF64748B),
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+        ],
       ),
-    );
-  }
-
-  Widget _legendDot(Color color, String label) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 4),
-        Text(
-          label,
-          style: GoogleFonts.outfit(fontSize: 11, color: const Color(0xFF64748B)),
-        ),
-      ],
     );
   }
 
@@ -821,7 +1028,10 @@ class _MarketMapScreenState extends State<MarketMapScreen>
           const SizedBox(height: 16),
           Text(
             _error!,
-            style: GoogleFonts.outfit(color: const Color(0xFF64748B), fontSize: 14),
+            style: GoogleFonts.outfit(
+              color: const Color(0xFF64748B),
+              fontSize: 14,
+            ),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 20),
@@ -833,7 +1043,8 @@ class _MarketMapScreenState extends State<MarketMapScreen>
               backgroundColor: const Color(0xFF2563EB),
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
           ),
         ],
@@ -859,7 +1070,10 @@ class _MarketMapScreenState extends State<MarketMapScreen>
     }
     // Fallback if no items
     if (minX == double.infinity) {
-      minX = 0; minY = 0; maxX = 1000; maxY = 800;
+      minX = 0;
+      minY = 0;
+      maxX = 1000;
+      maxY = 800;
     }
 
     // Add padding around content
@@ -871,8 +1085,7 @@ class _MarketMapScreenState extends State<MarketMapScreen>
     final rawW = (maxX - minX);
     final rawH = (maxY - minY);
 
-    final visibleItems =
-        map.items.where((item) => _shouldShow(item)).toList();
+    final visibleItems = map.items.where((item) => _shouldShow(item)).toList();
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -896,10 +1109,7 @@ class _MarketMapScreenState extends State<MarketMapScreen>
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: const Color(0xFFCBD5E1),
-                  width: 1.5,
-                ),
+                border: Border.all(color: const Color(0xFFCBD5E1), width: 1.5),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.04),
@@ -927,7 +1137,9 @@ class _MarketMapScreenState extends State<MarketMapScreen>
                       left: x,
                       top: y,
                       child: GestureDetector(
-                        onTap: item.isBlock ? () => _showStallDetail(item) : null,
+                        onTap: item.isBlock
+                            ? () => _showStallDetail(item)
+                            : null,
                         child: _buildMapElement(item, w, h),
                       ),
                     );
@@ -1068,18 +1280,22 @@ class _MarketMapScreenState extends State<MarketMapScreen>
     final fontSize = (h * 0.14).clamp(7.0, 12.5);
     final showLabel = h > 26;
 
-    // Use Shop Name if stall is occupied, or stall label if available!
+    // Show shop/seller name only for occupied/approved stalls.
+    // Available, repair, and refund-related stalls should not show seller names on the map.
     final String displayText;
-    if (item.isOccupied && item.seller != null) {
+    if ((item.isApproved || item.isPending) &&
+        item.seller != null &&
+        !item.isRefundRequested &&
+        !item.isRefunded) {
       final String? shopName = item.seller!['shop_name'];
       final String? sellerName = item.seller!['name'];
       displayText = (shopName != null && shopName.isNotEmpty)
           ? shopName
           : (sellerName != null && sellerName.isNotEmpty)
-              ? sellerName
-              : item.label;
+          ? sellerName
+          : item.label;
     } else {
-      displayText = item.label;
+      displayText = '';
     }
 
     return AnimatedContainer(
@@ -1100,14 +1316,14 @@ class _MarketMapScreenState extends State<MarketMapScreen>
                   color: baseColor.withValues(alpha: 0.5),
                   blurRadius: 8,
                   spreadRadius: 2,
-                )
+                ),
               ]
             : [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.06),
                   blurRadius: 4,
                   offset: const Offset(0, 2),
-                )
+                ),
               ],
       ),
       child: Center(
@@ -1116,11 +1332,15 @@ class _MarketMapScreenState extends State<MarketMapScreen>
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              item.isAvailable ? Icons.storefront_outlined : Icons.store,
+              item.isAvailable
+                  ? Icons.storefront_outlined
+                  : item.isRepair
+                  ? Icons.build_outlined
+                  : Icons.store,
               size: iconSize,
               color: Colors.white,
             ),
-            if (showLabel) ...[
+            if (showLabel && displayText.isNotEmpty) ...[
               const SizedBox(height: 2),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 2),

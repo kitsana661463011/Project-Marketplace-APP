@@ -3,7 +3,9 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import '../models/shop_category.dart';
 import '../services/auth_service.dart';
+import '../services/category_service.dart';
 import '../services/shop_service.dart';
 
 class CreateShopScreen extends StatefulWidget {
@@ -16,16 +18,31 @@ class CreateShopScreen extends StatefulWidget {
 class _CreateShopScreenState extends State<CreateShopScreen> {
   final _nameController = TextEditingController();
   final _descriptionController = TextEditingController();
-  String _selectedCategoryTag = 'อาหาร';
+  int? _selectedCategoryId;
   Uint8List? _pickedShopImageBytes;
   String? _pickedShopImageName;
   bool _isSubmitting = false;
+  bool _isLoadingCategories = true;
 
-  final List<Map<String, dynamic>> _categoryTags = [
-    {'name': 'อาหาร', 'icon': Icons.restaurant},
-    {'name': 'เครื่องดื่ม', 'icon': Icons.local_cafe},
-    {'name': 'ขนม', 'icon': Icons.cookie},
-  ];
+  List<ShopCategory> _categories = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCategories();
+  }
+
+  Future<void> _loadCategories() async {
+    final categories = await CategoryService.getShopCategories();
+    if (!mounted) return;
+    setState(() {
+      _categories = categories;
+      _selectedCategoryId = categories.isNotEmpty
+          ? categories.first.categoryId
+          : null;
+      _isLoadingCategories = false;
+    });
+  }
 
   @override
   void dispose() {
@@ -54,7 +71,10 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('ไม่สามารถเลือกรูปภาพได้: $e', style: GoogleFonts.outfit()),
+            content: Text(
+              'ไม่สามารถเลือกรูปภาพได้: $e',
+              style: GoogleFonts.outfit(),
+            ),
             backgroundColor: const Color(0xFFDC2626),
           ),
         );
@@ -95,9 +115,23 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
     );
 
     // Create the shop using ShopService
+    if (_selectedCategoryId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'กรุณาเลือกหมวดหมู่ร้านค้าก่อนทำการสร้างค่ะ',
+            style: GoogleFonts.outfit(),
+          ),
+          backgroundColor: Colors.orangeAccent,
+        ),
+      );
+      setState(() => _isSubmitting = false);
+      return;
+    }
+
     final result = await ShopService.createShop(
       shopName: name,
-      categoryId: 1, // Category: อาหารและเครื่องดื่ม
+      categoryId: _selectedCategoryId!,
       description: _descriptionController.text.trim(),
       shopPhone: currentUser.phone ?? '0812345678',
       userId: currentUser.userId!,
@@ -244,9 +278,9 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
                               height: 110,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: const Color(0xFFFFB74D).withValues(
-                                  alpha: 0.2,
-                                ),
+                                color: const Color(
+                                  0xFFFFB74D,
+                                ).withValues(alpha: 0.2),
                                 border: Border.all(
                                   color: const Color(0xFFFFB74D),
                                   width: 1.5,
@@ -289,7 +323,11 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
                       const SizedBox(height: 8),
                       TextButton.icon(
                         onPressed: _pickShopImageFromFilePicker,
-                        icon: const Icon(Icons.upload_file, size: 18, color: Color(0xFF2563EB)),
+                        icon: const Icon(
+                          Icons.upload_file,
+                          size: 18,
+                          color: Color(0xFF2563EB),
+                        ),
                         label: Text(
                           _pickedShopImageName != null
                               ? 'เลือกแล้ว: $_pickedShopImageName'
@@ -371,58 +409,77 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: _categoryTags.map((tag) {
-                      final isSelected = _selectedCategoryTag == tag['name'];
-                      return GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            _selectedCategoryTag = tag['name']!;
-                          });
-                        },
-                        child: Container(
-                          margin: const EdgeInsets.only(right: 12),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 10,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? const Color(0xFF2563EB)
-                                : const Color(0xFFF1F5F9),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                tag['icon'] as IconData,
-                                color: isSelected
-                                    ? Colors.white
-                                    : const Color(0xFF64748B),
-                                size: 16,
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                tag['name']!,
-                                style: GoogleFonts.outfit(
-                                  fontSize: 13,
-                                  fontWeight: isSelected
-                                      ? FontWeight.bold
-                                      : FontWeight.normal,
+                if (_isLoadingCategories)
+                  const SizedBox(
+                    height: 48,
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        color: Color(0xFF2563EB),
+                      ),
+                    ),
+                  )
+                else if (_categories.isEmpty)
+                  Text(
+                    'ไม่พบหมวดหมู่ร้านค้าในระบบ',
+                    style: GoogleFonts.outfit(
+                      fontSize: 13,
+                      color: const Color(0xFF64748B),
+                    ),
+                  )
+                else
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: _categories.map((category) {
+                        final isSelected =
+                            _selectedCategoryId == category.categoryId;
+                        return GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _selectedCategoryId = category.categoryId;
+                            });
+                          },
+                          child: Container(
+                            margin: const EdgeInsets.only(right: 12),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? const Color(0xFF2563EB)
+                                  : const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.category_outlined,
                                   color: isSelected
                                       ? Colors.white
                                       : const Color(0xFF64748B),
+                                  size: 16,
                                 ),
-                              ),
-                            ],
+                                const SizedBox(width: 6),
+                                Text(
+                                  category.categoryName,
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 13,
+                                    fontWeight: isSelected
+                                        ? FontWeight.bold
+                                        : FontWeight.normal,
+                                    color: isSelected
+                                        ? Colors.white
+                                        : const Color(0xFF64748B),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                      );
-                    }).toList(),
+                        );
+                      }).toList(),
+                    ),
                   ),
-                ),
                 const SizedBox(height: 28),
 
                 // 4. แผงที่เลือก Panel

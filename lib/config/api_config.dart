@@ -24,4 +24,5 @@ class ApiConfig {
   static const String announcements = '/v1/admin/announcements';
   static const String shopReviews = '/v1/shop-reviews';
   static const String reviewReports = '/v1/review-reports';
+  static const String categories = '/v1/categories';
 }

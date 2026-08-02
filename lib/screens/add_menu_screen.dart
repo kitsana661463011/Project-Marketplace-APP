@@ -15,8 +15,8 @@ class AddMenuScreen extends StatefulWidget {
 class _AddMenuScreenState extends State<AddMenuScreen> {
   final _nameController = TextEditingController();
   final _descriptionController = TextEditingController();
-  Uint8List? _pickedMenuImageBytes;
-  String? _pickedMenuImageName;
+  final List<Uint8List> _pickedMenuImageBytes = [];
+  final List<String> _pickedMenuImageNames = [];
   final _priceController = TextEditingController();
   bool _isAvailable = true;
   bool _isSubmitting = false;
@@ -33,23 +33,45 @@ class _AddMenuScreenState extends State<AddMenuScreen> {
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.image,
-        allowMultiple: false,
+        allowMultiple: true,
         withData: true,
       );
       if (result != null && result.files.isNotEmpty) {
-        final file = result.files.first;
-        if (file.bytes != null) {
-          setState(() {
-            _pickedMenuImageBytes = file.bytes;
-            _pickedMenuImageName = file.name;
-          });
+        final files = result.files
+            .where((file) => file.bytes != null)
+            .take(3)
+            .toList();
+
+        if (files.isEmpty) {
+          return;
         }
+
+        final newImages = <Uint8List>[];
+        final newNames = <String>[];
+
+        for (final file in files) {
+          if (_pickedMenuImageBytes.length >= 3) {
+            break;
+          }
+          newImages.add(file.bytes!);
+          newNames.add(file.name);
+        }
+
+        setState(() {
+          _pickedMenuImageBytes.clear();
+          _pickedMenuImageNames.clear();
+          _pickedMenuImageBytes.addAll(newImages);
+          _pickedMenuImageNames.addAll(newNames);
+        });
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('ไม่สามารถเลือกรูปภาพได้: $e', style: GoogleFonts.outfit()),
+            content: Text(
+              'ไม่สามารถเลือกรูปภาพได้: $e',
+              style: GoogleFonts.outfit(),
+            ),
             backgroundColor: const Color(0xFFDC2626),
           ),
         );
@@ -57,10 +79,39 @@ class _AddMenuScreenState extends State<AddMenuScreen> {
     }
   }
 
+  void _removeMenuImage(int index) {
+    setState(() {
+      _pickedMenuImageBytes.removeAt(index);
+      _pickedMenuImageNames.removeAt(index);
+    });
+  }
+
   Future<void> _handleSubmit() async {
-    final args =
-        ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
-    final Shop shop = args['shop'] as Shop;
+    final route = ModalRoute.of(context);
+    final rawArgs = route?.settings.arguments;
+    Shop? shop;
+
+    if (rawArgs is Map<String, dynamic>) {
+      shop = rawArgs['shop'] as Shop?;
+    } else if (rawArgs is Map) {
+      final args = Map<String, dynamic>.from(rawArgs);
+      shop = args['shop'] as Shop?;
+    }
+
+    if (shop == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'ไม่สามารถบันทึกเมนูได้ เนื่องจากข้อมูลร้านค้าหายไป',
+              style: GoogleFonts.outfit(),
+            ),
+            backgroundColor: const Color(0xFFDC2626),
+          ),
+        );
+      }
+      return;
+    }
 
     final name = _nameController.text.trim();
     final desc = _descriptionController.text.trim();
@@ -89,16 +140,33 @@ class _AddMenuScreenState extends State<AddMenuScreen> {
         'item_name': name,
         'price': price.toString(),
         'description': desc,
-        'category_id': '1', // Default category
+        'category_id': '1',
+        'status': _isAvailable ? 'เปิดขาย' : 'ปิดขาย',
       };
 
+      final extraFiles = _pickedMenuImageBytes
+          .asMap()
+          .entries
+          .map(
+            (entry) => {
+              'key': 'images[]',
+              'bytes': entry.value,
+              'fileName': _pickedMenuImageNames[entry.key],
+            },
+          )
+          .toList();
 
       final response = await ApiService.postMultipart(
         '/v1/items',
         fields,
-        fileKey: _pickedMenuImageBytes != null ? 'item_image_file' : null,
-        fileBytes: _pickedMenuImageBytes,
-        fileName: _pickedMenuImageName ?? 'item.png',
+        fileKey: _pickedMenuImageBytes.isNotEmpty ? 'item_image_file' : null,
+        fileBytes: _pickedMenuImageBytes.isNotEmpty
+            ? _pickedMenuImageBytes.first
+            : null,
+        fileName: _pickedMenuImageNames.isNotEmpty
+            ? _pickedMenuImageNames.first
+            : 'item.png',
+        extraFiles: extraFiles,
       );
 
       if (mounted) {
@@ -167,7 +235,8 @@ class _AddMenuScreenState extends State<AddMenuScreen> {
             ),
           );
         } else {
-          final errorMessage = response['message'] ?? 'เกิดข้อผิดพลาดในการบันทึกเมนู';
+          final errorMessage =
+              response['message'] ?? 'เกิดข้อผิดพลาดในการบันทึกเมนู';
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
@@ -245,9 +314,9 @@ class _AddMenuScreenState extends State<AddMenuScreen> {
                         ),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(18),
-                          child: _pickedMenuImageBytes != null
+                          child: _pickedMenuImageBytes.isNotEmpty
                               ? Image.memory(
-                                  _pickedMenuImageBytes!,
+                                  _pickedMenuImageBytes.first,
                                   fit: BoxFit.cover,
                                 )
                               : const Icon(
@@ -279,11 +348,15 @@ class _AddMenuScreenState extends State<AddMenuScreen> {
                 const SizedBox(height: 8),
                 TextButton.icon(
                   onPressed: _pickMenuImageFromFilePicker,
-                  icon: const Icon(Icons.upload_file, size: 16, color: Color(0xFF2563EB)),
+                  icon: const Icon(
+                    Icons.upload_file,
+                    size: 16,
+                    color: Color(0xFF2563EB),
+                  ),
                   label: Text(
-                    _pickedMenuImageName != null
-                        ? 'เลือกแล้ว: $_pickedMenuImageName'
-                        : 'คลิกเพื่อเลือกรูปภาพเมนูจากอุปกรณ์',
+                    _pickedMenuImageNames.isNotEmpty
+                        ? 'เลือกรูปแล้ว ${_pickedMenuImageNames.length}/3 รูป'
+                        : 'คลิกเพื่อเลือกรูปภาพเมนูจากอุปกรณ์ (สูงสุด 3 รูป)',
                     style: GoogleFonts.outfit(
                       fontSize: 13,
                       fontWeight: FontWeight.bold,
@@ -291,6 +364,26 @@ class _AddMenuScreenState extends State<AddMenuScreen> {
                     ),
                   ),
                 ),
+                if (_pickedMenuImageNames.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: List.generate(
+                      _pickedMenuImageNames.length,
+                      (index) => Chip(
+                        label: Text(
+                          _pickedMenuImageNames[index],
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.outfit(fontSize: 12),
+                        ),
+                        avatar: const Icon(Icons.image, size: 16),
+                        deleteIcon: const Icon(Icons.close, size: 16),
+                        onDeleted: () => _removeMenuImage(index),
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 28),
 
                 // 2. ชื่อเมนู

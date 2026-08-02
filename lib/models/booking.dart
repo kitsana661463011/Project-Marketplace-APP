@@ -2,6 +2,12 @@ class Booking {
   final int? bookingId;
   final int? userId;
   final int? stallId;
+  final String? rentalType;
+  final double? dailyPrice;
+  final double? monthlyPrice;
+  final double? entryFee;
+  final double? securityDeposit;
+  final double? totalAmount;
   final String? bookingDate;
   final String? startDate;
   final String? endDate;
@@ -31,6 +37,12 @@ class Booking {
     this.bookingId,
     this.userId,
     this.stallId,
+    this.rentalType,
+    this.dailyPrice,
+    this.monthlyPrice,
+    this.entryFee,
+    this.securityDeposit,
+    this.totalAmount,
     this.bookingDate,
     this.startDate,
     this.endDate,
@@ -57,10 +69,28 @@ class Booking {
   });
 
   factory Booking.fromJson(Map<String, dynamic> json) {
+    double? parseDouble(dynamic val) {
+      if (val == null) return null;
+      if (val is num) return val.toDouble();
+      return double.tryParse(val.toString());
+    }
+
+    int? parseInt(dynamic val) {
+      if (val == null) return null;
+      if (val is int) return val;
+      return int.tryParse(val.toString());
+    }
+
     return Booking(
-      bookingId: json['booking_id'],
-      userId: json['user_id'],
-      stallId: json['stall_id'],
+      bookingId: parseInt(json['booking_id']),
+      userId: parseInt(json['user_id']),
+      stallId: parseInt(json['stall_id']),
+      rentalType: json['rental_type'] ?? json['stall_rental_type'] ?? 'daily',
+      dailyPrice: parseDouble(json['daily_price']) ?? parseDouble(json['stall_daily_price']),
+      monthlyPrice: parseDouble(json['monthly_price']) ?? parseDouble(json['stall_monthly_price']),
+      entryFee: parseDouble(json['entry_fee']) ?? parseDouble(json['stall_entry_fee']),
+      securityDeposit: parseDouble(json['security_deposit']) ?? parseDouble(json['stall_security_deposit']),
+      totalAmount: parseDouble(json['total_amount']) ?? parseDouble(json['amount']),
       bookingDate: json['booking_date'],
       startDate: json['start_date'],
       endDate: json['end_date'],
@@ -72,8 +102,8 @@ class Booking {
       stallSize: json['stall_size'],
       stallStatus: json['stall_status'],
       zoneName: json['zone_name'],
-      paymentId: json['payment_id'],
-      amount: json['amount'] != null ? (json['amount']).toDouble() : null,
+      paymentId: parseInt(json['payment_id']),
+      amount: parseDouble(json['amount']),
       paymentDate: json['payment_date'],
       paymentSlip: json['payment_slip'],
       paymentStatus: json['payment_status'],
@@ -91,6 +121,12 @@ class Booking {
     return {
       'user_id': userId,
       'stall_id': stallId,
+      'rental_type': rentalType,
+      'daily_price': dailyPrice,
+      'monthly_price': monthlyPrice,
+      'entry_fee': entryFee,
+      'security_deposit': securityDeposit,
+      'total_amount': totalAmount,
       'booking_date': bookingDate,
       'start_date': startDate,
       'end_date': endDate,
@@ -104,4 +140,5 @@ class Booking {
   bool get isRefundRequested => status == 'refund_requested';
   bool get isRefunded => status == 'refunded';
   bool get isRejected => status == 'rejected' || status == 'cancelled';
+  bool get isMonthly => rentalType == 'monthly';
 }

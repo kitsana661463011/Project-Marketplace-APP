@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../services/shop_service.dart';
+import '../services/review_service.dart';
 import '../models/shop.dart';
 import '../models/user.dart';
 import '../services/api_service.dart';
@@ -13,7 +14,9 @@ import '../widgets/app_dialog.dart';
 import 'market_map_screen.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final int initialIndex;
+
+  const HomeScreen({super.key, this.initialIndex = 0});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -27,6 +30,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _currentIndex = widget.initialIndex;
     _pages = [
       const _HomeTab(),
       const MarketMapScreen(isEmbedded: true),
@@ -139,6 +143,8 @@ class _HomeTab extends StatefulWidget {
 
 class _HomeTabState extends State<_HomeTab> {
   List<Shop> _shops = [];
+  List<Shop> _followedShops = [];
+  String _searchQuery = '';
   bool _isLoading = true;
 
   @override
@@ -150,21 +156,19 @@ class _HomeTabState extends State<_HomeTab> {
   Future<void> _loadShops() async {
     setState(() => _isLoading = true);
     try {
-      final shops = await ShopService.getShops();
-      if (!mounted) return;
       final authService = Provider.of<AuthService>(context, listen: false);
-      final userInterests = authService.currentUser?.interests ?? [];
+      final currentUser = authService.currentUser;
 
-      // Sort according to Priority:
-      // Priority 1: Followed shops (e.g. shop_id in followed list)
-      // Priority 2: Shops matching user interests category
-      // Priority 3: Other shops
+      final shops = await ShopService.getShops();
+      final followedShops = currentUser?.userId != null
+          ? await ShopService.getFollowedShops(currentUser!.userId!)
+          : <Shop>[];
+
+      if (!mounted) return;
+
+      final userInterests = currentUser?.interests ?? [];
+
       shops.sort((a, b) {
-        final aFollowed = a.shopId == 1; // Sample followed check
-        final bFollowed = b.shopId == 1;
-        if (aFollowed && !bFollowed) return -1;
-        if (!aFollowed && bFollowed) return 1;
-
         final aInterestMatch = userInterests.any(
           (interest) =>
               a.categoryName.contains(interest) ||
@@ -184,12 +188,23 @@ class _HomeTabState extends State<_HomeTab> {
       if (mounted) {
         setState(() {
           _shops = shops;
+          _followedShops = followedShops;
           _isLoading = false;
         });
       }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  List<Shop> get _filteredShops {
+    if (_searchQuery.trim().isEmpty) return _shops;
+    final q = _searchQuery.trim().toLowerCase();
+    return _shops.where((shop) {
+      final nameMatches = shop.shopName.toLowerCase().contains(q);
+      final categoryMatches = shop.categoryName.toLowerCase().contains(q);
+      return nameMatches || categoryMatches;
+    }).toList();
   }
 
   Future<void> _navigateToShopDetail(Shop shop) async {
@@ -203,6 +218,13 @@ class _HomeTabState extends State<_HomeTab> {
       if (homeState != null) {
         homeState.setIndex(result);
       }
+    }
+  }
+
+  void _openFollowedTab() {
+    final homeState = context.findAncestorStateOfType<_HomeScreenState>();
+    if (homeState != null && mounted) {
+      homeState.setIndex(2);
     }
   }
 
@@ -315,6 +337,7 @@ class _HomeTabState extends State<_HomeTab> {
                   ],
                 ),
                 child: TextField(
+                  onChanged: (val) => setState(() => _searchQuery = val),
                   style: GoogleFonts.outfit(color: Colors.black),
                   decoration: InputDecoration(
                     hintText: 'ค้นหาร้าน หรือ ร้านค้า...',
@@ -350,7 +373,7 @@ class _HomeTabState extends State<_HomeTab> {
                     ),
                   ),
                   GestureDetector(
-                    onTap: () {},
+                    onTap: _openFollowedTab,
                     child: Text(
                       'ดูทั้งหมด',
                       style: GoogleFonts.outfit(
@@ -374,13 +397,26 @@ class _HomeTabState extends State<_HomeTab> {
                         ),
                       ),
                     )
+                  : _followedShops.isEmpty
+                  ? SizedBox(
+                      height: 64,
+                      child: Center(
+                        child: Text(
+                          'คุณยังไม่ได้ติดตามร้านค้าใดๆ',
+                          style: GoogleFonts.outfit(
+                            fontSize: 13,
+                            color: const Color(0xFF64748B),
+                          ),
+                        ),
+                      ),
+                    )
                   : SizedBox(
                       height: 110,
                       child: ListView.builder(
                         scrollDirection: Axis.horizontal,
-                        itemCount: _shops.length,
+                        itemCount: _followedShops.length,
                         itemBuilder: (context, index) {
-                          final shop = _shops[index];
+                          final shop = _followedShops[index];
                           return GestureDetector(
                             onTap: () => _navigateToShopDetail(shop),
                             child: Container(
@@ -392,7 +428,8 @@ class _HomeTabState extends State<_HomeTab> {
                                       width: 68,
                                       height: 68,
                                       color: const Color(0xFFE2E8F0),
-                                      child: shop.shopImage != null &&
+                                      child:
+                                          shop.shopImage != null &&
                                               shop.shopImage!.isNotEmpty
                                           ? Image.network(
                                               ApiService.getImagePath(
@@ -402,12 +439,15 @@ class _HomeTabState extends State<_HomeTab> {
                                               height: 68,
                                               fit: BoxFit.cover,
                                               errorBuilder:
-                                                  (context, error, stackTrace) =>
-                                                      const Icon(
-                                                Icons.storefront,
-                                                color: Color(0xFF64748B),
-                                                size: 30,
-                                              ),
+                                                  (
+                                                    context,
+                                                    error,
+                                                    stackTrace,
+                                                  ) => const Icon(
+                                                    Icons.storefront,
+                                                    color: Color(0xFF64748B),
+                                                    size: 30,
+                                                  ),
                                             )
                                           : const Icon(
                                               Icons.storefront,
@@ -457,17 +497,19 @@ class _HomeTabState extends State<_HomeTab> {
                         ),
                       ),
                     )
-                  : _shops.isEmpty
+                  : _filteredShops.isEmpty
                   ? Center(
                       child: Text(
-                        'ยังไม่มีร้านแนะนำในขณะนี้',
+                        _searchQuery.trim().isEmpty
+                            ? 'ยังไม่มีร้านแนะนำในขณะนี้'
+                            : 'ไม่พบร้านค้าตามคำค้นหา',
                         style: GoogleFonts.outfit(
                           color: const Color(0xFF94A3B8),
                         ),
                       ),
                     )
                   : Column(
-                      children: _shops
+                      children: _filteredShops
                           .map((shop) => _buildRecommendedCard(shop))
                           .toList(),
                     ),
@@ -557,8 +599,6 @@ class _HomeTabState extends State<_HomeTab> {
   }
 }
 
-
-
 class _ProfileTab extends StatefulWidget {
   const _ProfileTab();
 
@@ -592,7 +632,10 @@ class _ProfileTabState extends State<_ProfileTab> {
         final List<dynamic> list = response['data'] as List<dynamic>;
         if (mounted) {
           setState(() {
-            final List<String> items = list.where((e) => e != null).map((e) => e.toString()).toList();
+            final List<String> items = list
+                .where((e) => e != null)
+                .map((e) => e.toString())
+                .toList();
             _sortInterestsWithOthersAtEnd(items);
             _isLoadingInterests = false;
           });
@@ -606,7 +649,13 @@ class _ProfileTabState extends State<_ProfileTab> {
     if (mounted) {
       setState(() {
         if (_dbInterests.isEmpty) {
-          _sortInterestsWithOthersAtEnd(['อาหาร', 'เครื่องดื่ม', 'ขนม', 'สตรีทฟู้ด', 'อื่นๆ']);
+          _sortInterestsWithOthersAtEnd([
+            'อาหาร',
+            'เครื่องดื่ม',
+            'ขนม',
+            'สตรีทฟู้ด',
+            'อื่นๆ',
+          ]);
         }
         _isLoadingInterests = false;
       });
@@ -614,8 +663,12 @@ class _ProfileTabState extends State<_ProfileTab> {
   }
 
   void _sortInterestsWithOthersAtEnd(List<String> list) {
-    final others = list.where((e) => e == 'อื่นๆ' || e.contains('อื่นๆ')).toList();
-    final normal = list.where((e) => e != 'อื่นๆ' && !e.contains('อื่นๆ')).toList();
+    final others = list
+        .where((e) => e == 'อื่นๆ' || e.contains('อื่นๆ'))
+        .toList();
+    final normal = list
+        .where((e) => e != 'อื่นๆ' && !e.contains('อื่นๆ'))
+        .toList();
     _dbInterests = [...normal, ...others];
   }
 
@@ -833,8 +886,8 @@ class _ProfileTabState extends State<_ProfileTab> {
         _selectedProfileImage ?? user?.profileImage ?? '';
     final String? avatarUrl = activeProfileImg.isNotEmpty
         ? (activeProfileImg.startsWith('http')
-            ? activeProfileImg
-            : ApiService.getImagePath(activeProfileImg))
+              ? activeProfileImg
+              : ApiService.getImagePath(activeProfileImg))
         : null;
 
     if (_isEditing) {
@@ -950,16 +1003,16 @@ class _ProfileTabState extends State<_ProfileTab> {
                                     fit: BoxFit.cover,
                                   )
                                 : (avatarUrl != null
-                                    ? Image.network(
-                                        avatarUrl,
-                                        width: 128,
-                                        height: 128,
-                                        fit: BoxFit.cover,
-                                        errorBuilder:
-                                            (context, error, stackTrace) =>
-                                                _buildDefaultGreyAvatar(128),
-                                      )
-                                    : _buildDefaultGreyAvatar(128)),
+                                      ? Image.network(
+                                          avatarUrl,
+                                          width: 128,
+                                          height: 128,
+                                          fit: BoxFit.cover,
+                                          errorBuilder:
+                                              (context, error, stackTrace) =>
+                                                  _buildDefaultGreyAvatar(128),
+                                        )
+                                      : _buildDefaultGreyAvatar(128)),
                           ),
                         ),
                       ),
@@ -1134,8 +1187,9 @@ class _ProfileTabState extends State<_ProfileTab> {
                         spacing: 8,
                         runSpacing: 10,
                         children: _dbInterests.map((interest) {
-                          final isSelected =
-                              _selectedInterests.contains(interest);
+                          final isSelected = _selectedInterests.contains(
+                            interest,
+                          );
                           return FilterChip(
                             selected: isSelected,
                             label: Text(
@@ -1154,8 +1208,9 @@ class _ProfileTabState extends State<_ProfileTab> {
                               setState(() {
                                 if (selected) {
                                   if (_selectedInterests.length >= 5) {
-                                    ScaffoldMessenger.of(context)
-                                        .hideCurrentSnackBar();
+                                    ScaffoldMessenger.of(
+                                      context,
+                                    ).hideCurrentSnackBar();
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(
                                         content: Text(
@@ -1164,7 +1219,9 @@ class _ProfileTabState extends State<_ProfileTab> {
                                             fontWeight: FontWeight.bold,
                                           ),
                                         ),
-                                        backgroundColor: const Color(0xFFDC2626),
+                                        backgroundColor: const Color(
+                                          0xFFDC2626,
+                                        ),
                                         behavior: SnackBarBehavior.floating,
                                         duration: const Duration(seconds: 2),
                                       ),
@@ -1237,17 +1294,16 @@ class _ProfileTabState extends State<_ProfileTab> {
                                 Map<String, dynamic>.from(fields);
                             if (_selectedProfileImage != null &&
                                 _selectedProfileImage!.isNotEmpty) {
-                              payload['profile_image'] =
-                                  _selectedProfileImage;
+                              payload['profile_image'] = _selectedProfileImage;
                             }
-                            response =
-                                await authService.updateProfile(payload);
+                            response = await authService.updateProfile(payload);
                           }
 
                           if (response['status'] == true) {
                             if (response['data'] != null) {
-                              await authService
-                                  .updateUserData(response['data']);
+                              await authService.updateUserData(
+                                response['data'],
+                              );
                             }
                             setState(() {
                               _isEditing = false;
@@ -1267,7 +1323,8 @@ class _ProfileTabState extends State<_ProfileTab> {
                               AppDialog.showError(
                                 context,
                                 title: 'เกิดข้อผิดพลาด',
-                                message: response['message'] ??
+                                message:
+                                    response['message'] ??
                                     'ไม่สามารถบันทึกข้อมูลได้',
                               );
                             }
@@ -1426,34 +1483,24 @@ class _ProfileTabState extends State<_ProfileTab> {
               const SizedBox(height: 16),
               if (user != null && user.role == 'seller') ...[
                 _buildMenuItem(
-                  icon: Icons.place_outlined,
+                  icon: Icons.map_outlined,
                   title: 'จองแผง',
                   onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'ฟังก์ชันจองแผง กำลังพัฒนา',
-                          style: GoogleFonts.outfit(),
-                        ),
-                        backgroundColor: const Color(0xFF1E88E5),
-                      ),
-                    );
+                    final homeState = context
+                        .findAncestorStateOfType<_HomeScreenState>();
+                    if (homeState != null) {
+                      homeState.setIndex(1);
+                    } else {
+                      Navigator.pushNamed(context, '/market_map');
+                    }
                   },
                 ),
                 const SizedBox(height: 16),
                 _buildMenuItem(
-                  icon: Icons.place_outlined,
+                  icon: Icons.receipt_long_outlined,
                   title: 'ประวัติการจอง',
                   onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'ฟังก์ชันประวัติการจอง กำลังพัฒนา',
-                          style: GoogleFonts.outfit(),
-                        ),
-                        backgroundColor: const Color(0xFF1E88E5),
-                      ),
-                    );
+                    Navigator.pushNamed(context, '/booking_history');
                   },
                 ),
                 const SizedBox(height: 16),
@@ -1478,7 +1525,7 @@ class _ProfileTabState extends State<_ProfileTab> {
                 const SizedBox(height: 16),
                 _buildMenuItem(
                   icon: Icons.report_problem_outlined,
-                  title: 'แจ้งปัญหา / ประวัติ',
+                  title: 'แจ้งปัญหา',
                   onTap: () async {
                     final tabIndex = await Navigator.pushNamed(
                       context,
@@ -1670,6 +1717,7 @@ class _FollowedTab extends StatefulWidget {
 
 class _FollowedTabState extends State<_FollowedTab> {
   List<Shop> _shops = [];
+  Map<int, double> _shopRatings = {};
   bool _isLoading = true;
   String _searchQuery = '';
 
@@ -1681,18 +1729,37 @@ class _FollowedTabState extends State<_FollowedTab> {
 
   Future<void> _loadShops() async {
     final auth = Provider.of<AuthService>(context, listen: false);
+    await auth.loadUser();
     final user = auth.currentUser;
+
     setState(() => _isLoading = true);
     try {
       List<Shop> data = [];
       if (user != null && user.userId != null) {
         data = await ShopService.getFollowedShops(user.userId!);
-      } else {
-        data = await ShopService.getShops();
       }
+
+      final ratings = <int, double>{};
+      for (final shop in data) {
+        if (shop.shopId == null) continue;
+
+        final reviews = await ReviewService.getReviewsByShop(shop.shopId!);
+        if (reviews.isNotEmpty) {
+          final totalRating = reviews.fold<double>(
+            0,
+            (sum, review) =>
+                sum + ((review['rating'] as num?)?.toDouble() ?? 0),
+          );
+          ratings[shop.shopId!] = totalRating / reviews.length;
+        } else {
+          ratings[shop.shopId!] = 0.0;
+        }
+      }
+
       if (mounted) {
         setState(() {
           _shops = data;
+          _shopRatings = ratings;
           _isLoading = false;
         });
       }
@@ -1980,277 +2047,256 @@ class _FollowedTabState extends State<_FollowedTab> {
                         ),
                       )
                     : displayList.isEmpty
-                        ? Center(
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 40),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Container(
-                                    width: 80,
-                                    height: 80,
-                                    decoration: const BoxDecoration(
-                                      color: Color(0xFFFEE2E2),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(
-                                      Icons.favorite_border,
-                                      color: Color(0xFFEF4444),
-                                      size: 40,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 16),
-                                  Text(
-                                    _searchQuery.isNotEmpty
-                                        ? 'ไม่พบร้านค้าที่ตรงกับคำค้นหา'
-                                        : 'คุณยังไม่ได้ติดตามร้านค้าใดๆ',
-                                    style: GoogleFonts.outfit(
-                                      color: const Color(0xFF0F172A),
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    'กดติดตามร้านค้าที่คุณชอบเพื่อรับข่าวสารและเมนูแนะนำก่อนใคร',
-                                    style: GoogleFonts.outfit(
-                                      color: const Color(0xFF64748B),
-                                      fontSize: 13,
-                                    ),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                  const SizedBox(height: 20),
-                                  ElevatedButton.icon(
-                                    onPressed: () {
-                                      final homeState = context
-                                          .findAncestorStateOfType<
-                                            _HomeScreenState
-                                          >();
-                                      if (homeState != null) {
-                                        homeState.setIndex(0);
-                                      }
-                                    },
-                                    icon: const Icon(
-                                      Icons.storefront,
-                                      size: 18,
-                                    ),
-                                    label: Text(
-                                      'สำรวจร้านค้าในตลาด',
-                                      style: GoogleFonts.outfit(
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: const Color(0xFF1E88E5),
-                                      foregroundColor: Colors.white,
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 20,
-                                        vertical: 12,
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          )
-                        : ListView.separated(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: displayList.length,
-                            separatorBuilder: (context, index) =>
-                                const SizedBox(height: 12),
-                            itemBuilder: (context, index) {
-                              final shop = displayList[index];
-                              final rating =
-                                  ((shop.shopId ?? index) % 15) / 10 + 3.5;
-
-                              return Container(
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(16),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withValues(
-                                        alpha: 0.04,
-                                      ),
-                                      blurRadius: 10,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                  ],
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 40),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 80,
+                                height: 80,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFFFEE2E2),
+                                  shape: BoxShape.circle,
                                 ),
-                                child: InkWell(
-                                  onTap: () => _navigateToShopDetail(shop),
-                                  borderRadius: BorderRadius.circular(16),
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(12),
-                                    child: Row(
+                                child: const Icon(
+                                  Icons.favorite_border,
+                                  color: Color(0xFFEF4444),
+                                  size: 40,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                _searchQuery.isNotEmpty
+                                    ? 'ไม่พบร้านค้าที่ตรงกับคำค้นหา'
+                                    : 'คุณยังไม่ได้ติดตามร้านค้าใดๆ',
+                                style: GoogleFonts.outfit(
+                                  color: const Color(0xFF0F172A),
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                'กดติดตามร้านค้าที่คุณชอบเพื่อรับข่าวสารและเมนูแนะนำก่อนใคร',
+                                style: GoogleFonts.outfit(
+                                  color: const Color(0xFF64748B),
+                                  fontSize: 13,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 20),
+                              ElevatedButton.icon(
+                                onPressed: () {
+                                  final homeState = context
+                                      .findAncestorStateOfType<
+                                        _HomeScreenState
+                                      >();
+                                  if (homeState != null) {
+                                    homeState.setIndex(0);
+                                  }
+                                },
+                                icon: const Icon(Icons.storefront, size: 18),
+                                label: Text(
+                                  'สำรวจร้านค้าในตลาด',
+                                  style: GoogleFonts.outfit(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF1E88E5),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 20,
+                                    vertical: 12,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    : ListView.separated(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: displayList.length,
+                        separatorBuilder: (context, index) =>
+                            const SizedBox(height: 12),
+                        itemBuilder: (context, index) {
+                          final shop = displayList[index];
+                          final rating = _shopRatings[shop.shopId] ?? 0.0;
+
+                          return Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.04),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: InkWell(
+                              onTap: () => _navigateToShopDetail(shop),
+                              borderRadius: BorderRadius.circular(16),
+                              child: Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: Row(
+                                  children: [
+                                    // Shop Image Avatar with Heart Icon
+                                    Stack(
                                       children: [
-                                        // Shop Image Avatar with Heart Icon
-                                        Stack(
-                                          children: [
-                                            ClipRRect(
-                                              borderRadius:
-                                                  BorderRadius.circular(14),
-                                              child: SizedBox(
-                                                width: 68,
-                                                height: 68,
-                                                child:
-                                                    shop.shopImage != null &&
-                                                        shop.shopImage!
-                                                            .isNotEmpty
-                                                    ? (shop.shopImage!
-                                                          .startsWith('http')
-                                                          ? Image.network(
-                                                              shop.shopImage!,
-                                                              fit: BoxFit.cover,
-                                                            )
-                                                          : Image.network(
-                                                              ApiService
-                                                                  .getImagePath(
-                                                                    shop
-                                                                        .shopImage,
-                                                                  ),
-                                                              fit: BoxFit.cover,
-                                                            ))
-                                                    : Container(
-                                                        color: const Color(
-                                                          0xFFF1F5F9,
-                                                        ),
-                                                        child: const Icon(
-                                                          Icons.storefront,
-                                                          color: Color(
-                                                            0xFF94A3B8,
+                                        ClipRRect(
+                                          borderRadius: BorderRadius.circular(
+                                            14,
+                                          ),
+                                          child: SizedBox(
+                                            width: 68,
+                                            height: 68,
+                                            child:
+                                                shop.shopImage != null &&
+                                                    shop.shopImage!.isNotEmpty
+                                                ? (shop.shopImage!.startsWith(
+                                                        'http',
+                                                      )
+                                                      ? Image.network(
+                                                          shop.shopImage!,
+                                                          fit: BoxFit.cover,
+                                                        )
+                                                      : Image.network(
+                                                          ApiService.getImagePath(
+                                                            shop.shopImage,
                                                           ),
-                                                          size: 32,
-                                                        ),
-                                                      ),
-                                              ),
-                                            ),
-                                            Positioned(
-                                              right: 2,
-                                              top: 2,
-                                              child: Container(
-                                                padding: const EdgeInsets.all(
-                                                  4,
-                                                ),
-                                                decoration: const BoxDecoration(
-                                                  color: Colors.white,
-                                                  shape: BoxShape.circle,
-                                                ),
-                                                child: const Icon(
-                                                  Icons.favorite,
-                                                  color: Colors.red,
-                                                  size: 14,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(width: 14),
-                                        // Shop Details Info
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                shop.shopName,
-                                                style: GoogleFonts.outfit(
-                                                  fontSize: 16,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: const Color(
-                                                    0xFF0F172A,
-                                                  ),
-                                                ),
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                              const SizedBox(height: 4),
-                                              Row(
-                                                children: [
-                                                  Container(
-                                                    padding: const EdgeInsets
-                                                        .symmetric(
-                                                      horizontal: 8,
-                                                      vertical: 2,
-                                                    ),
-                                                    decoration: BoxDecoration(
-                                                      color: const Color(
-                                                        0xFFF1F5F9,
-                                                      ),
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            6,
-                                                          ),
-                                                    ),
-                                                    child: Text(
-                                                      shop.categoryName,
-                                                      style: GoogleFonts.outfit(
-                                                        fontSize: 11,
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                        color: const Color(
-                                                          0xFF475569,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                  const SizedBox(width: 8),
-                                                  _buildRatingStars(rating),
-                                                  const SizedBox(width: 4),
-                                                  Text(
-                                                    rating.toStringAsFixed(1),
-                                                    style: GoogleFonts.outfit(
-                                                      fontSize: 12,
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                      color: const Color(
-                                                        0xFF64748B,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                              if (shop.description != null &&
-                                                  shop.description!
-                                                      .isNotEmpty) ...[
-                                                const SizedBox(height: 4),
-                                                Text(
-                                                  shop.description!,
-                                                  style: GoogleFonts.outfit(
-                                                    fontSize: 12,
+                                                          fit: BoxFit.cover,
+                                                        ))
+                                                : Container(
                                                     color: const Color(
-                                                      0xFF94A3B8,
+                                                      0xFFF1F5F9,
+                                                    ),
+                                                    child: const Icon(
+                                                      Icons.storefront,
+                                                      color: Color(0xFF94A3B8),
+                                                      size: 32,
                                                     ),
                                                   ),
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                ),
-                                              ],
-                                            ],
                                           ),
                                         ),
-                                        // Unfollow Button Action
-                                        IconButton(
-                                          icon: const Icon(
-                                            Icons.favorite,
-                                            color: Colors.red,
-                                            size: 22,
+                                        Positioned(
+                                          right: 2,
+                                          top: 2,
+                                          child: Container(
+                                            padding: const EdgeInsets.all(4),
+                                            decoration: const BoxDecoration(
+                                              color: Colors.white,
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: const Icon(
+                                              Icons.favorite,
+                                              color: Colors.red,
+                                              size: 14,
+                                            ),
                                           ),
-                                          tooltip: 'ยกเลิกการติดตาม',
-                                          onPressed: () => _unfollowShop(shop),
                                         ),
                                       ],
                                     ),
-                                  ),
+                                    const SizedBox(width: 14),
+                                    // Shop Details Info
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            shop.shopName,
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
+                                              color: const Color(0xFF0F172A),
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Row(
+                                            children: [
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 2,
+                                                    ),
+                                                decoration: BoxDecoration(
+                                                  color: const Color(
+                                                    0xFFF1F5F9,
+                                                  ),
+                                                  borderRadius:
+                                                      BorderRadius.circular(6),
+                                                ),
+                                                child: Text(
+                                                  shop.categoryName,
+                                                  style: GoogleFonts.outfit(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: const Color(
+                                                      0xFF475569,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              _buildRatingStars(rating),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                rating.toStringAsFixed(1),
+                                                style: GoogleFonts.outfit(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: const Color(
+                                                    0xFF64748B,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          if (shop.description != null &&
+                                              shop.description!.isNotEmpty) ...[
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              shop.description!,
+                                              style: GoogleFonts.outfit(
+                                                fontSize: 12,
+                                                color: const Color(0xFF94A3B8),
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                    // Unfollow Button Action
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.favorite,
+                                        color: Colors.red,
+                                        size: 22,
+                                      ),
+                                      tooltip: 'ยกเลิกการติดตาม',
+                                      onPressed: () => _unfollowShop(shop),
+                                    ),
+                                  ],
                                 ),
-                              );
-                            },
-                          ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
               ],
             ),
           ),

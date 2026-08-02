@@ -61,9 +61,11 @@ class _ProblemHistoryScreenState extends State<ProblemHistoryScreen> {
 
     final combined = reportMap.values.toList();
     combined.sort((a, b) {
-      final dateA = DateTime.tryParse(a['report_date']?.toString() ?? '') ??
+      final dateA =
+          DateTime.tryParse(a['report_date']?.toString() ?? '') ??
           DateTime(2000);
-      final dateB = DateTime.tryParse(b['report_date']?.toString() ?? '') ??
+      final dateB =
+          DateTime.tryParse(b['report_date']?.toString() ?? '') ??
           DateTime(2000);
       return dateB.compareTo(dateA);
     });
@@ -323,7 +325,9 @@ class _ProblemHistoryScreenState extends State<ProblemHistoryScreen> {
                           color: const Color(0xFFEFF6FF),
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(
-                            color: const Color(0xFF2563EB).withValues(alpha: 0.3),
+                            color: const Color(
+                              0xFF2563EB,
+                            ).withValues(alpha: 0.3),
                             width: 1.5,
                           ),
                         ),
@@ -366,7 +370,9 @@ class _ProblemHistoryScreenState extends State<ProblemHistoryScreen> {
                           color: const Color(0xFFFEE2E2),
                           shape: BoxShape.circle,
                           border: Border.all(
-                            color: const Color(0xFFEF4444).withValues(alpha: 0.3),
+                            color: const Color(
+                              0xFFEF4444,
+                            ).withValues(alpha: 0.3),
                           ),
                         ),
                         child: const Icon(
@@ -496,7 +502,8 @@ class _ProblemHistoryScreenState extends State<ProblemHistoryScreen> {
                               : '-';
                           final String? stallNumber = report['stall_number'];
 
-                          final bool isMyReport = currentUser != null &&
+                          final bool isMyReport =
+                              currentUser != null &&
                               (report['user_id']?.toString() ==
                                   currentUser.userId?.toString());
 
@@ -738,19 +745,81 @@ class _ProblemHistoryScreenState extends State<ProblemHistoryScreen> {
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: Colors.white,
-          border: Border(
-            top: BorderSide(color: const Color(0xFFF1F5F9), width: 1.0),
-          ),
-        ),
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _buildNavItem(Icons.home_outlined, 'หน้าหลัก', false, 0),
-            _buildNavItem(Icons.explore_outlined, 'แผนที่', false, 1),
-            _buildNavItem(Icons.favorite_outline, 'ติดตาม', false, 2),
-            _buildNavItem(Icons.person, 'เมนู', true, 3),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 12,
+              offset: const Offset(0, -4),
+            ),
           ],
+        ),
+        child: ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          child: NavigationBar(
+            selectedIndex: 3,
+            onDestinationSelected: (index) {
+              Navigator.pop(context, index);
+            },
+            backgroundColor: Colors.white,
+            indicatorColor: const Color(0xFF1E88E5).withValues(alpha: 0.12),
+            height: 70,
+            labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+            destinations: [
+              NavigationDestination(
+                icon: const Icon(
+                  Icons.home_outlined,
+                  size: 24,
+                  color: Color(0xFF64748B),
+                ),
+                selectedIcon: const Icon(
+                  Icons.home,
+                  size: 24,
+                  color: Color(0xFF1E88E5),
+                ),
+                label: 'หน้าหลัก',
+              ),
+              NavigationDestination(
+                icon: const Icon(
+                  Icons.explore_outlined,
+                  size: 24,
+                  color: Color(0xFF64748B),
+                ),
+                selectedIcon: const Icon(
+                  Icons.explore,
+                  size: 24,
+                  color: Color(0xFF1E88E5),
+                ),
+                label: 'แผนที่',
+              ),
+              NavigationDestination(
+                icon: const Icon(
+                  Icons.favorite_outline,
+                  size: 24,
+                  color: Color(0xFF64748B),
+                ),
+                selectedIcon: const Icon(
+                  Icons.favorite,
+                  size: 24,
+                  color: Color(0xFF1E88E5),
+                ),
+                label: 'ติดตาม',
+              ),
+              NavigationDestination(
+                icon: const Icon(
+                  Icons.person_outline,
+                  size: 24,
+                  color: Color(0xFF64748B),
+                ),
+                selectedIcon: const Icon(
+                  Icons.person,
+                  size: 24,
+                  color: Color(0xFF1E88E5),
+                ),
+                label: 'เมนู',
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -773,9 +842,7 @@ class _ProblemHistoryScreenState extends State<ProblemHistoryScreen> {
           color: isActive ? const Color(0xFF2563EB) : const Color(0xFFF1F5F9),
           borderRadius: BorderRadius.circular(24),
           border: Border.all(
-            color: isActive
-                ? const Color(0xFF2563EB)
-                : const Color(0xFFCBD5E1),
+            color: isActive ? const Color(0xFF2563EB) : const Color(0xFFCBD5E1),
             width: 1.5,
           ),
           boxShadow: isActive
@@ -796,34 +863,6 @@ class _ProblemHistoryScreenState extends State<ProblemHistoryScreen> {
             color: isActive ? Colors.white : const Color(0xFF1E293B),
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildNavItem(IconData icon, String label, bool isActive, int index) {
-    return GestureDetector(
-      onTap: () {
-        Navigator.pop(context, index);
-      },
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            icon,
-            color: isActive ? const Color(0xFF2563EB) : const Color(0xFF94A3B8),
-            size: 24,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: GoogleFonts.outfit(
-              fontSize: 11,
-              color: isActive
-                  ? const Color(0xFF2563EB)
-                  : const Color(0xFF94A3B8),
-            ),
-          ),
-        ],
       ),
     );
   }

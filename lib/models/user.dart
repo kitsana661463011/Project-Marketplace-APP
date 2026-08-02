@@ -43,11 +43,13 @@ class UserModel {
       }
     }
 
+    final rawUserId = json['user_id'] ?? json['id'];
+
     return UserModel(
-      userId: json['user_id'],
-      username: json['username'] ?? '',
-      email: json['email'] ?? '',
-      phone: json['phone'],
+      userId: rawUserId != null ? int.tryParse(rawUserId.toString()) : null,
+      username: json['username'] ?? json['user_name'] ?? '',
+      email: json['email'] ?? json['user_email'] ?? '',
+      phone: json['phone'] ?? json['user_phone'],
       profileImage: json['profile_image'],
       role: json['role'] ?? 'buyer',
       status: json['status'] ?? 'active',

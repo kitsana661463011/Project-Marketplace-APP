@@ -20,7 +20,9 @@ class ApiService {
 
   static String getImagePath(String? filename) {
     if (filename == null || filename.isEmpty) return '';
-    if (filename.startsWith('http://') || filename.startsWith('https://') || filename.startsWith('data:')) {
+    if (filename.startsWith('http://') ||
+        filename.startsWith('https://') ||
+        filename.startsWith('data:')) {
       return filename;
     }
     final clean = filename
@@ -32,10 +34,18 @@ class ApiService {
 
   static Future<Map<String, dynamic>> get(String endpoint) async {
     try {
-      final response = await http.get(
-        Uri.parse('$baseUrl$endpoint'),
-        headers: {'Accept': 'application/json'},
-      ).timeout(const Duration(seconds: 8));
+      final response = await http
+          .get(
+            Uri.parse('$baseUrl$endpoint'),
+            headers: {'Accept': 'application/json'},
+          )
+          .timeout(const Duration(seconds: 8));
+      // Debug logging to help diagnose empty responses from API
+      try {
+        debugPrint('ApiService GET: $baseUrl$endpoint');
+        debugPrint('ApiService Response status: ${response.statusCode}');
+        debugPrint('ApiService Response body: ${response.body}');
+      } catch (_) {}
       return _handleResponse(response);
     } catch (e) {
       return {'status': false, 'message': 'Connection error: $e', 'data': null};
@@ -47,14 +57,16 @@ class ApiService {
     Map<String, dynamic> body,
   ) async {
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl$endpoint'),
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode(body),
-      ).timeout(const Duration(seconds: 8));
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl$endpoint'),
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 8));
       return _handleResponse(response);
     } catch (e) {
       return {'status': false, 'message': 'Connection error: $e', 'data': null};
@@ -66,14 +78,16 @@ class ApiService {
     Map<String, dynamic> body,
   ) async {
     try {
-      final response = await http.put(
-        Uri.parse('$baseUrl$endpoint'),
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode(body),
-      ).timeout(const Duration(seconds: 8));
+      final response = await http
+          .put(
+            Uri.parse('$baseUrl$endpoint'),
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 8));
       return _handleResponse(response);
     } catch (e) {
       return {'status': false, 'message': 'Connection error: $e', 'data': null};
@@ -82,10 +96,12 @@ class ApiService {
 
   static Future<Map<String, dynamic>> delete(String endpoint) async {
     try {
-      final response = await http.delete(
-        Uri.parse('$baseUrl$endpoint'),
-        headers: {'Accept': 'application/json'},
-      ).timeout(const Duration(seconds: 8));
+      final response = await http
+          .delete(
+            Uri.parse('$baseUrl$endpoint'),
+            headers: {'Accept': 'application/json'},
+          )
+          .timeout(const Duration(seconds: 8));
       return _handleResponse(response);
     } catch (e) {
       return {'status': false, 'message': 'Connection error: $e', 'data': null};
@@ -99,25 +115,53 @@ class ApiService {
     String? filePath,
     List<int>? fileBytes,
     String? fileName,
+    List<Map<String, dynamic>>? extraFiles,
   }) async {
     try {
-      final request = http.MultipartRequest('POST', Uri.parse('$baseUrl$endpoint'));
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$baseUrl$endpoint'),
+      );
       request.headers.addAll({'Accept': 'application/json'});
       request.fields.addAll(fields);
 
       if (fileKey != null) {
         if (filePath != null && filePath.isNotEmpty) {
-          request.files.add(await http.MultipartFile.fromPath(fileKey, filePath));
+          request.files.add(
+            await http.MultipartFile.fromPath(fileKey, filePath),
+          );
         } else if (fileBytes != null && fileBytes.isNotEmpty) {
-          request.files.add(http.MultipartFile.fromBytes(
-            fileKey,
-            fileBytes,
-            filename: fileName ?? 'upload.png',
-          ));
+          request.files.add(
+            http.MultipartFile.fromBytes(
+              fileKey,
+              fileBytes,
+              filename: fileName ?? 'upload.png',
+            ),
+          );
         }
       }
 
-      final streamedResponse = await request.send().timeout(const Duration(seconds: 15));
+      if (extraFiles != null) {
+        for (final extraFile in extraFiles) {
+          final key = extraFile['key'] as String? ?? 'images';
+          final extraBytes = extraFile['bytes'] as List<int>?;
+          final extraName = extraFile['fileName'] as String? ?? 'upload.png';
+
+          if (extraBytes != null && extraBytes.isNotEmpty) {
+            request.files.add(
+              http.MultipartFile.fromBytes(
+                key,
+                extraBytes,
+                filename: extraName,
+              ),
+            );
+          }
+        }
+      }
+
+      final streamedResponse = await request.send().timeout(
+        const Duration(seconds: 15),
+      );
       final response = await http.Response.fromStream(streamedResponse);
       return _handleResponse(response);
     } catch (e) {

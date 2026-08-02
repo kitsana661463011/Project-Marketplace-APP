@@ -24,6 +24,7 @@ import 'screens/add_menu_screen.dart';
 import 'screens/manage_menu_category_screen.dart';
 import 'screens/market_map_screen.dart';
 import 'screens/book_stall_screen.dart';
+import 'screens/booking_history_screen.dart';
 
 void main() {
   runApp(
@@ -71,7 +72,11 @@ class MyApp extends StatelessWidget {
         '/login': (context) => const LoginScreen(),
         '/register': (context) => const RegisterScreen(),
         '/forgot_password': (context) => const ForgotPasswordScreen(),
-        '/home': (context) => const HomeScreen(),
+        '/home': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments as Map?;
+          final initialIndex = (args?['initialIndex'] as int?) ?? 0;
+          return HomeScreen(initialIndex: initialIndex);
+        },
         '/announcements': (context) => const AnnouncementScreen(),
         '/vendor_register': (context) => const VendorRegistrationScreen(),
         '/shop_detail': (context) => const ShopDetailScreen(),
@@ -88,6 +93,7 @@ class MyApp extends StatelessWidget {
         '/manage_menu_category': (context) => const ManageMenuCategoryScreen(),
         '/market_map': (context) => const MarketMapScreen(),
         '/book_stall': (context) => const BookStallScreen(),
+        '/booking_history': (context) => const BookingHistoryScreen(),
       },
     );
   }

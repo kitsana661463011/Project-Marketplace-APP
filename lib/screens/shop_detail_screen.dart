@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/shop.dart';
 import '../models/item.dart';
 import '../services/item_service.dart';
+import '../services/review_service.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../services/shop_service.dart';
@@ -22,6 +23,8 @@ class _ShopDetailScreenState extends State<ShopDetailScreen> {
   bool _isLoading = true;
   int _originTabIndex = 0;
   late Shop _shop;
+  int _reviewCount = 0;
+  double _averageRating = 0.0;
 
   @override
   void didChangeDependencies() {
@@ -35,6 +38,7 @@ class _ShopDetailScreenState extends State<ShopDetailScreen> {
       _originTabIndex = args['tabIndex'] as int? ?? 0;
     }
     _loadItems(_shop.shopId);
+    _loadReviewSummary(_shop.shopId);
     final auth = Provider.of<AuthService>(context, listen: false);
     if (auth.currentUser != null &&
         auth.currentUser!.userId != null &&
@@ -44,8 +48,10 @@ class _ShopDetailScreenState extends State<ShopDetailScreen> {
   }
 
   Future<void> _checkFollowStatus(int userId, int shopId) async {
-    final isFollowing =
-        await ShopService.isShopFollowed(userId: userId, shopId: shopId);
+    final isFollowing = await ShopService.isShopFollowed(
+      userId: userId,
+      shopId: shopId,
+    );
     if (mounted) {
       setState(() => _isFavorite = isFollowing);
     }
@@ -58,7 +64,9 @@ class _ShopDetailScreenState extends State<ShopDetailScreen> {
 
     setState(() => _isFavorite = !_isFavorite);
     final res = await ShopService.toggleFollowShop(
-        userId: user.userId!, shopId: _shop.shopId!);
+      userId: user.userId!,
+      shopId: _shop.shopId!,
+    );
     if (mounted && res['status'] == true) {
       ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
@@ -94,6 +102,45 @@ class _ShopDetailScreenState extends State<ShopDetailScreen> {
         setState(() {
           _items = [];
           _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadReviewSummary(int? shopId) async {
+    if (shopId == null) {
+      if (mounted) {
+        setState(() {
+          _reviewCount = 0;
+          _averageRating = 0.0;
+        });
+      }
+      return;
+    }
+
+    try {
+      final reviews = await ReviewService.getReviewsByShop(shopId);
+      if (!mounted) return;
+
+      final int count = reviews.length;
+      double totalRating = 0.0;
+      for (final json in reviews) {
+        final ratingValue = json['rating'];
+        final rating = ratingValue is num
+            ? ratingValue.toDouble()
+            : double.tryParse(ratingValue?.toString() ?? '0') ?? 0.0;
+        totalRating += rating;
+      }
+
+      setState(() {
+        _reviewCount = count;
+        _averageRating = count > 0 ? totalRating / count : 0.0;
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _reviewCount = 0;
+          _averageRating = 0.0;
         });
       }
     }
@@ -308,10 +355,9 @@ class _ShopDetailScreenState extends State<ShopDetailScreen> {
               .where((item) => item.categoryName == _selectedCategory)
               .toList();
 
-    // Deterministic mock values matching style of screen shot
     final stallNumber = 'แผง A${(shop.shopId ?? 0) % 8 + 1}';
-    final rating = 4.5 + ((shop.shopId ?? 0) % 5) * 0.1;
-    final reviewsCount = 50 + ((shop.shopId ?? 0) % 6) * 15;
+    final rating = _reviewCount > 0 ? _averageRating : 0.0;
+    final reviewsCount = _reviewCount;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -446,7 +492,7 @@ class _ShopDetailScreenState extends State<ShopDetailScreen> {
                                   ),
                                   const SizedBox(width: 4),
                                   Text(
-                                    '${rating.toStringAsFixed(1)} ($reviewsCount+ รีวิว)',
+                                    '${rating.toStringAsFixed(1)} ($reviewsCount รีวิว)',
                                     style: GoogleFonts.outfit(
                                       fontSize: 13,
                                       color: const Color(0xFF64748B),

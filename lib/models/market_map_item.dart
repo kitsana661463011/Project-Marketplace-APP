@@ -13,7 +13,13 @@ class MarketMapItem {
   final int zIndex;
   final String size;
   final double price;
-  final String status; // 'available', 'occupied', 'repair'
+  final String rentalType; // 'daily' | 'monthly'
+  final double? dailyPrice;
+  final double? monthlyPrice;
+  final double? entryFee;
+  final double? securityDeposit;
+  final String
+  status; // 'available', 'occupied', 'approved', 'repair', 'maintenance', 'refund_requested', 'refunded'
   final Map<String, dynamic>? seller;
 
   MarketMapItem({
@@ -31,28 +37,63 @@ class MarketMapItem {
     required this.zIndex,
     required this.size,
     required this.price,
+    this.rentalType = 'daily',
+    this.dailyPrice,
+    this.monthlyPrice,
+    this.entryFee,
+    this.securityDeposit,
     required this.status,
     this.seller,
   });
 
   factory MarketMapItem.fromJson(Map<String, dynamic> json) {
+    double parseDouble(dynamic val, [double fallback = 0.0]) {
+      if (val == null) return fallback;
+      if (val is num) return val.toDouble();
+      return double.tryParse(val.toString()) ?? fallback;
+    }
+
+    double? parseNullableDouble(dynamic val) {
+      if (val == null) return null;
+      if (val is num) return val.toDouble();
+      return double.tryParse(val.toString());
+    }
+
+    final String rType = json['rental_type'] ?? 'daily';
+    final double mainPrice = parseDouble(json['price'], 500.0);
+
     return MarketMapItem(
       mapItemId: json['map_item_id']?.toString() ?? '',
       itemType: json['item_type'] ?? 'block',
-      stallId: json['stall_id'],
-      zoneId: json['zone_id'],
+      stallId: json['stall_id'] != null
+          ? int.tryParse(json['stall_id'].toString())
+          : null,
+      zoneId: json['zone_id'] != null
+          ? int.tryParse(json['zone_id'].toString())
+          : null,
       label: json['label'] ?? '',
-      x: (json['x'] ?? 0).toDouble(),
-      y: (json['y'] ?? 0).toDouble(),
-      width: (json['width'] ?? 80).toDouble(),
-      height: (json['height'] ?? 80).toDouble(),
+      x: parseDouble(json['x']),
+      y: parseDouble(json['y']),
+      width: parseDouble(json['width'], 80.0),
+      height: parseDouble(json['height'], 80.0),
       fillColor: json['fill_color'] ?? '#64748B',
       rotation: (json['rotation'] ?? 0).toInt(),
       zIndex: (json['z_index'] ?? 0).toInt(),
       size: json['size'] ?? '3x3 เมตร',
-      price: (json['price'] ?? 500).toDouble(),
+      price: mainPrice,
+      rentalType: rType,
+      dailyPrice:
+          parseNullableDouble(json['daily_price']) ??
+          (rType == 'daily' ? mainPrice : 500.0),
+      monthlyPrice:
+          parseNullableDouble(json['monthly_price']) ??
+          (rType == 'monthly' ? mainPrice : null),
+      entryFee: parseNullableDouble(json['entry_fee']),
+      securityDeposit: parseNullableDouble(json['security_deposit']),
       status: json['status'] ?? 'available',
-      seller: json['seller'] != null ? Map<String, dynamic>.from(json['seller']) : null,
+      seller: json['seller'] != null
+          ? Map<String, dynamic>.from(json['seller'])
+          : null,
     );
   }
 
@@ -61,8 +102,14 @@ class MarketMapItem {
   bool get isRoad => itemType == 'road';
   bool get isEntrance => itemType == 'entrance';
   bool get isAvailable => status == 'available';
-  bool get isOccupied => status == 'occupied';
-  bool get isRepair => status == 'repair';
+  bool get isPending => status == 'occupied' || status == 'pending';
+  bool get isApproved => status == 'approved';
+  bool get isOccupied => status == 'approved' || status == 'occupied';
+  bool get isRepair => status == 'repair' || status == 'maintenance';
+  bool get isRefundRequested => status == 'refund_requested';
+  bool get isRefunded => status == 'refunded';
+  bool get isDaily => rentalType == 'daily';
+  bool get isMonthly => rentalType == 'monthly';
 }
 
 class MarketMap {
