@@ -634,7 +634,16 @@ class _ProfileTabState extends State<_ProfileTab> {
           setState(() {
             final List<String> items = list
                 .where((e) => e != null)
-                .map((e) => e.toString())
+                .map((e) {
+                  if (e is Map && e.containsKey('interest_name')) {
+                    return e['interest_name']?.toString() ?? '';
+                  }
+                  if (e is Map && e.containsKey('name')) {
+                    return e['name']?.toString() ?? '';
+                  }
+                  return e.toString();
+                })
+                .where((e) => e.isNotEmpty)
                 .toList();
             _sortInterestsWithOthersAtEnd(items);
             _isLoadingInterests = false;
@@ -687,16 +696,9 @@ class _ProfileTabState extends State<_ProfileTab> {
     _pickedImageName = null;
 
     if (user?.interests != null) {
-      final dynamic raw = user!.interests;
-      final String rawInterests = (raw is List)
-          ? raw.join(',')
-          : raw.toString();
-      final userInterests = rawInterests
-          .split(',')
-          .map((e) => e.trim())
-          .where((e) => e.isNotEmpty);
+      final interestList = user!.interests;
       _selectedInterests.clear();
-      _selectedInterests.addAll(userInterests);
+      _selectedInterests.addAll(interestList.where((e) => e.isNotEmpty));
     }
   }
 

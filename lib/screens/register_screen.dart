@@ -42,8 +42,12 @@ class _RegisterScreenState extends State<RegisterScreen>
   }
 
   void _sortInterestsWithOthersAtEnd(List<String> list) {
-    final others = list.where((e) => e == 'อื่นๆ' || e.contains('อื่นๆ')).toList();
-    final normal = list.where((e) => e != 'อื่นๆ' && !e.contains('อื่นๆ')).toList();
+    final others = list
+        .where((e) => e == 'อื่นๆ' || e.contains('อื่นๆ'))
+        .toList();
+    final normal = list
+        .where((e) => e != 'อื่นๆ' && !e.contains('อื่นๆ'))
+        .toList();
     _interests = [...normal, ...others];
   }
 
@@ -54,7 +58,19 @@ class _RegisterScreenState extends State<RegisterScreen>
         final List<dynamic> list = response['data'] as List<dynamic>;
         if (mounted) {
           setState(() {
-            final List<String> items = list.where((e) => e != null).map((e) => e.toString()).toList();
+            final List<String> items = list
+                .where((e) => e != null)
+                .map((e) {
+                  if (e is Map && e.containsKey('interest_name')) {
+                    return e['interest_name']?.toString() ?? '';
+                  }
+                  if (e is Map && e.containsKey('name')) {
+                    return e['name']?.toString() ?? '';
+                  }
+                  return e.toString();
+                })
+                .where((e) => e.isNotEmpty)
+                .toList();
             _sortInterestsWithOthersAtEnd(items);
             _isLoadingInterests = false;
           });
@@ -68,7 +84,13 @@ class _RegisterScreenState extends State<RegisterScreen>
     if (mounted) {
       setState(() {
         if (_interests.isEmpty) {
-          _sortInterestsWithOthersAtEnd(['อาหาร', 'เครื่องดื่ม', 'ขนม', 'สตรีทฟู้ด', 'อื่นๆ']);
+          _sortInterestsWithOthersAtEnd([
+            'อาหาร',
+            'เครื่องดื่ม',
+            'ขนม',
+            'สตรีทฟู้ด',
+            'อื่นๆ',
+          ]);
         }
         _isLoadingInterests = false;
       });
@@ -277,7 +299,10 @@ class _RegisterScreenState extends State<RegisterScreen>
                       ),
                       AnimatedContainer(
                         duration: const Duration(milliseconds: 200),
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: _selectedInterests.length == _maxInterests
                               ? const Color(0xFFFEF2F2)
@@ -332,14 +357,21 @@ class _RegisterScreenState extends State<RegisterScreen>
                           spacing: 10,
                           runSpacing: 10,
                           children: _interests.map((interest) {
-                            final isSelected = _selectedInterests.contains(interest);
+                            final isSelected = _selectedInterests.contains(
+                              interest,
+                            );
                             return GestureDetector(
                               onTap: () {
                                 setState(() {
                                   if (!isSelected) {
-                                    if (_selectedInterests.length >= _maxInterests) {
-                                      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                                      ScaffoldMessenger.of(context).showSnackBar(
+                                    if (_selectedInterests.length >=
+                                        _maxInterests) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).hideCurrentSnackBar();
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
                                         SnackBar(
                                           content: Text(
                                             'เลือกหมวดหมู่ได้สูงสุด $_maxInterests หมวดหมู่',
@@ -348,12 +380,16 @@ class _RegisterScreenState extends State<RegisterScreen>
                                               color: Colors.white,
                                             ),
                                           ),
-                                          backgroundColor: const Color(0xFFDC2626),
+                                          backgroundColor: const Color(
+                                            0xFFDC2626,
+                                          ),
                                           behavior: SnackBarBehavior.floating,
                                           margin: const EdgeInsets.all(16),
                                           duration: const Duration(seconds: 2),
                                           shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(12),
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
                                           ),
                                         ),
                                       );
@@ -386,11 +422,12 @@ class _RegisterScreenState extends State<RegisterScreen>
                                   boxShadow: isSelected
                                       ? [
                                           BoxShadow(
-                                            color: const Color(0xFF1E88E5)
-                                                .withValues(alpha: 0.18),
+                                            color: const Color(
+                                              0xFF1E88E5,
+                                            ).withValues(alpha: 0.18),
                                             blurRadius: 8,
                                             offset: const Offset(0, 3),
-                                          )
+                                          ),
                                         ]
                                       : [],
                                 ),
@@ -398,13 +435,20 @@ class _RegisterScreenState extends State<RegisterScreen>
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     AnimatedSwitcher(
-                                      duration: const Duration(milliseconds: 200),
+                                      duration: const Duration(
+                                        milliseconds: 200,
+                                      ),
                                       transitionBuilder: (child, anim) =>
-                                          ScaleTransition(scale: anim, child: child),
+                                          ScaleTransition(
+                                            scale: anim,
+                                            child: child,
+                                          ),
                                       child: isSelected
                                           ? const Padding(
                                               key: ValueKey('check'),
-                                              padding: EdgeInsets.only(right: 6),
+                                              padding: EdgeInsets.only(
+                                                right: 6,
+                                              ),
                                               child: Icon(
                                                 Icons.check_circle_rounded,
                                                 size: 17,

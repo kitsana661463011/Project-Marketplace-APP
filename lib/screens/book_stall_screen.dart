@@ -779,19 +779,6 @@ class _BookStallScreenState extends State<BookStallScreen> {
           const SizedBox(height: 14),
 
           // Facilities & Highlights Badges
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              _stallFeatureBadge(Icons.bolt, 'ฟรีจุดไฟ'),
-              _stallFeatureBadge(Icons.water_drop, 'ฟรีจุดน้ำ'),
-              _stallFeatureBadge(Icons.shield_outlined, 'รปภ. 24 ชม.'),
-              _stallFeatureBadge(
-                Icons.cleaning_services_outlined,
-                'บริการเก็บขยะ',
-              ),
-            ],
-          ),
         ],
       ),
     );

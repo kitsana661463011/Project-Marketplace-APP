@@ -113,7 +113,33 @@ class _MarketMapScreenState extends State<MarketMapScreen>
   }
 
   Color _getStallColor(model.MarketMapItem item) {
-    if (!item.isBlock) return _parseColor(item.fillColor, opacity: 0.35);
+    if (item.isRoad) {
+      return const Color(0xFFE2E8F0);
+    }
+    if (item.isEntrance) {
+      return const Color(0xFFF97316);
+    }
+    if (item.isToilet) {
+      return const Color(0xFF06B6D4);
+    }
+    if (item.isExit) {
+      return const Color(0xFFDC2626);
+    }
+    if (item.isDining) {
+      return const Color(0xFFF59E0B);
+    }
+    if (item.isParking) {
+      return const Color(0xFF2563EB);
+    }
+    if (item.isInfo) {
+      return const Color(0xFF7C3AED);
+    }
+    if (item.isTrash) {
+      return const Color(0xFF334155);
+    }
+    if (item.isZone) {
+      return _parseColor(item.fillColor, opacity: 0.15);
+    }
 
     if (_isVacantForViewer(item)) {
       return const Color(0xFF22C55E); // Green (ว่าง)
@@ -128,8 +154,18 @@ class _MarketMapScreenState extends State<MarketMapScreen>
     } else if (item.isRefunded) {
       return const Color(0xFF7C3AED); // Deep Purple (คืนเงินแล้ว)
     } else {
-      return const Color(0xFF64748B); // Fallback
+      return const Color(0xFF64748B);
     }
+  }
+
+  Color _getFacilityBackground(model.MarketMapItem item) {
+    if (item.isToilet) return const Color(0xFF06B6D4);
+    if (item.isExit) return const Color(0xFFDC2626);
+    if (item.isDining) return const Color(0xFFF59E0B);
+    if (item.isParking) return const Color(0xFF2563EB);
+    if (item.isInfo) return const Color(0xFF7C3AED);
+    if (item.isTrash) return const Color(0xFF334155);
+    return _parseColor(item.fillColor, opacity: 0.8);
   }
 
   bool _shouldShow(model.MarketMapItem item) {
@@ -1160,6 +1196,8 @@ class _MarketMapScreenState extends State<MarketMapScreen>
       return _buildRoad(item, w, h);
     } else if (item.isEntrance) {
       return _buildEntrance(item, w, h);
+    } else if (item.isSpecialFacility) {
+      return _buildFacilityItem(item, w, h);
     } else {
       return _buildBlock(item, w, h);
     }
@@ -1271,6 +1309,68 @@ class _MarketMapScreenState extends State<MarketMapScreen>
         ),
       ),
     );
+  }
+
+  Widget _buildFacilityItem(model.MarketMapItem item, double w, double h) {
+    final icon = _getFacilityIcon(item);
+    final label = _getFacilityLabel(item);
+    final bgColor = _getFacilityBackground(item);
+    final textColor = Colors.white;
+    final iconSize = (h * 0.28).clamp(10.0, 32.0);
+    final fontSize = (h * 0.12).clamp(6.0, 10.0);
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        width: w,
+        height: h,
+        color: bgColor,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(icon, style: TextStyle(fontSize: iconSize)),
+            if (h > 36) ...[
+              const SizedBox(height: 4),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Text(
+                  label,
+                  style: GoogleFonts.outfit(
+                    fontSize: fontSize,
+                    fontWeight: FontWeight.bold,
+                    color: textColor,
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _getFacilityIcon(model.MarketMapItem item) {
+    if (item.isToilet) return '🚻';
+    if (item.isExit) return '🚪';
+    if (item.isDining) return '🍽️';
+    if (item.isParking) return '🅿️';
+    if (item.isInfo) return 'ℹ️';
+    if (item.isTrash) return '🗑️';
+    return '📍';
+  }
+
+  String _getFacilityLabel(model.MarketMapItem item) {
+    if (item.isToilet) return 'ห้องน้ำ';
+    if (item.isExit) return 'ทางออก';
+    if (item.isDining) return 'พักกินอาหาร';
+    if (item.isParking) return 'ที่จอดรถ';
+    if (item.isInfo) return 'ประชาสัมพันธ์';
+    if (item.isTrash) return 'จุดทิ้งขยะ';
+    return item.label.isNotEmpty ? item.label : 'สิ่งอำนวยความสะดวก';
   }
 
   Widget _buildBlock(model.MarketMapItem item, double w, double h) {

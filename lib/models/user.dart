@@ -33,7 +33,22 @@ class UserModel {
     List<String> parsedInterests = [];
     if (json['interests'] != null) {
       if (json['interests'] is List) {
-        parsedInterests = List<String>.from(json['interests']);
+        parsedInterests = (json['interests'] as List<dynamic>)
+            .map((item) {
+              if (item == null) return '';
+              if (item is String) return item.trim();
+              if (item is Map) {
+                if (item.containsKey('interest_name')) {
+                  return item['interest_name']?.toString().trim() ?? '';
+                }
+                if (item.containsKey('name')) {
+                  return item['name']?.toString().trim() ?? '';
+                }
+              }
+              return item.toString().trim();
+            })
+            .where((e) => e.isNotEmpty)
+            .toList();
       } else if (json['interests'] is String) {
         parsedInterests = (json['interests'] as String)
             .split(',')

@@ -101,6 +101,14 @@ class MarketMapItem {
   bool get isZone => itemType == 'zone';
   bool get isRoad => itemType == 'road';
   bool get isEntrance => itemType == 'entrance';
+  bool get isToilet => itemType == 'toilet';
+  bool get isExit => itemType == 'exit';
+  bool get isDining => itemType == 'dining';
+  bool get isParking => itemType == 'parking';
+  bool get isInfo => itemType == 'info';
+  bool get isTrash => itemType == 'trash';
+  bool get isSpecialFacility =>
+      isToilet || isExit || isDining || isParking || isInfo || isTrash;
   bool get isAvailable => status == 'available';
   bool get isPending => status == 'occupied' || status == 'pending';
   bool get isApproved => status == 'approved';
