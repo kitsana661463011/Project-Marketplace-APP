@@ -142,6 +142,53 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<Map<String, dynamic>> sendForgotPasswordCode(String email) async {
+    try {
+      final response = await ApiService.post(
+        ApiConfig.forgotPassword,
+        {'email': email},
+      );
+      return response;
+    } catch (e) {
+      return {'status': false, 'message': 'เกิดข้อผิดพลาดในการส่งข้อมูล: $e'};
+    }
+  }
+
+  Future<Map<String, dynamic>> verifyResetCode(String email, String code) async {
+    try {
+      final response = await ApiService.post(
+        ApiConfig.verifyResetCode,
+        {'email': email, 'code': code},
+      );
+      return response;
+    } catch (e) {
+      return {'status': false, 'message': 'เกิดข้อผิดพลาดในการส่งข้อมูล: $e'};
+    }
+  }
+
+  Future<Map<String, dynamic>> resetPassword({
+    required String email,
+    required String code,
+    required String password,
+  }) async {
+    try {
+      final response = await ApiService.post(
+        ApiConfig.resetPassword,
+        {
+          'email': email,
+          'code': code,
+          'password': password,
+        },
+      );
+      return response;
+    } catch (e) {
+      return {
+        'status': false,
+        'message': 'เกิดข้อผิดพลาดในการบันทึกรหัสผ่านใหม่: $e',
+      };
+    }
+  }
+
   Future<void> _saveUserData() async {
     if (_currentUser != null) {
       final prefs = await SharedPreferences.getInstance();

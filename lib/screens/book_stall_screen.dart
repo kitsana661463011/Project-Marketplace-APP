@@ -21,7 +21,8 @@ class _BookStallScreenState extends State<BookStallScreen> {
   MarketMapItem? _stallItem;
 
   DateTime _startDate = DateTime.now();
-  int _selectedDurationMonths = 1; // Can be selected from 1 to 12 months
+  int _selectedDurationMonths = 1; // Can be selected from 1 to 12 months for monthly stalls
+  int _selectedDurationDays = 1; // Can be selected from 1 to 5 days for daily stalls
   final _phoneController = TextEditingController();
   final _noteController = TextEditingController();
 
@@ -90,24 +91,35 @@ class _BookStallScreenState extends State<BookStallScreen> {
     }
   }
 
-  /// Calculate safe end date for 1-12 months duration without day overflow bugs
+  bool get _isMonthly => _stallItem?.isMonthly ?? false;
+
+  String get _durationLabel => _isMonthly
+      ? '$_selectedDurationMonths เดือน'
+      : '$_selectedDurationDays วัน';
+
+  /// Calculate safe end date for 1-12 months or 1-5 days duration
   DateTime get _endDate {
-    final year = _startDate.year;
-    final month = _startDate.month + _selectedDurationMonths;
-    final day = _startDate.day;
-    int targetYear = year + (month - 1) ~/ 12;
-    int targetMonth = (month - 1) % 12 + 1;
-    int maxDays = DateTime(targetYear, targetMonth + 1, 0).day;
-    int targetDay = day > maxDays ? maxDays : day;
-    return DateTime(targetYear, targetMonth, targetDay);
+    if (_isMonthly) {
+      final year = _startDate.year;
+      final month = _startDate.month + _selectedDurationMonths;
+      final day = _startDate.day;
+      int targetYear = year + (month - 1) ~/ 12;
+      int targetMonth = (month - 1) % 12 + 1;
+      int maxDays = DateTime(targetYear, targetMonth + 1, 0).day;
+      int targetDay = day > maxDays ? maxDays : day;
+      return DateTime(targetYear, targetMonth, targetDay);
+    } else {
+      return _startDate.add(Duration(days: _selectedDurationDays - 1));
+    }
   }
 
   // Correct price fields from DB
-  bool get _isMonthly => _stallItem?.isMonthly ?? false;
   double get _rentalRate => _isMonthly
       ? (_stallItem?.monthlyPrice ?? _stallItem?.price ?? 5000)
       : (_stallItem?.dailyPrice ?? _stallItem?.price ?? 500);
-  double get _rentTotal => _rentalRate * _selectedDurationMonths;
+  double get _rentTotal => _isMonthly
+      ? (_rentalRate * _selectedDurationMonths)
+      : (_rentalRate * _selectedDurationDays);
   double get _entryFeeAmount => _isMonthly ? (_stallItem?.entryFee ?? 0) : 0;
   double get _securityDepositAmount => _isMonthly ? (_stallItem?.securityDeposit ?? 0) : 0;
   double get _grandTotal => _rentTotal + _entryFeeAmount + _securityDepositAmount;
@@ -225,6 +237,29 @@ class _BookStallScreenState extends State<BookStallScreen> {
             style: GoogleFonts.outfit(),
           ),
           backgroundColor: const Color(0xFFDC2626),
+        ),
+      );
+      return;
+    }
+
+    if (_slipBytes == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'กรุณาแนบหลักฐานการโอนเงิน (สลิปโอนเงิน) ก่อนทำรายการจอง',
+                  style: GoogleFonts.outfit(),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: const Color(0xFFEA580C),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
       );
       return;
@@ -373,7 +408,7 @@ class _BookStallScreenState extends State<BookStallScreen> {
                     const SizedBox(height: 8),
                     _dialogSummaryRow(
                       'ระยะเวลาเช่า',
-                      '$_selectedDurationMonths เดือน',
+                      _durationLabel,
                     ),
                     const SizedBox(height: 8),
                     _dialogSummaryRow('เริ่มสัญญา', _formatDate(_startDate)),
@@ -909,6 +944,11 @@ class _BookStallScreenState extends State<BookStallScreen> {
   }
 
   Widget _buildDurationCard() {
+    final bool isMonthly = _isMonthly;
+    final int maxDuration = isMonthly ? 12 : 5;
+    final int currentDuration =
+        isMonthly ? _selectedDurationMonths : _selectedDurationDays;
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -934,9 +974,9 @@ class _BookStallScreenState extends State<BookStallScreen> {
                   color: const Color(0xFFEFF6FF),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(
-                  Icons.calendar_month_outlined,
-                  color: Color(0xFF2563EB),
+                child: Icon(
+                  isMonthly ? Icons.calendar_month_outlined : Icons.today_outlined,
+                  color: const Color(0xFF2563EB),
                   size: 20,
                 ),
               ),
@@ -1041,7 +1081,9 @@ class _BookStallScreenState extends State<BookStallScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'เลื่อนเลือกจำนวนเดือน (1 - 12 เดือน)',
+                isMonthly
+                    ? 'เลื่อนเลือกจำนวนเดือน (1 - 12 เดือน)'
+                    : 'เลือกจำนวนวันเช่า (1 - 5 วัน)',
                 style: GoogleFonts.outfit(
                   fontSize: 13.5,
                   fontWeight: FontWeight.w600,
@@ -1068,11 +1110,9 @@ class _BookStallScreenState extends State<BookStallScreen> {
                   ],
                 ),
                 child: Text(
-                  '$_selectedDurationMonths เดือน${_selectedDurationMonths == 12
-                      ? ' (1 ปี)'
-                      : _selectedDurationMonths == 6
-                      ? ' (ครึ่งปี)'
-                      : ''}',
+                  isMonthly
+                      ? '$_selectedDurationMonths เดือน${_selectedDurationMonths == 12 ? ' (1 ปี)' : _selectedDurationMonths == 6 ? ' (ครึ่งปี)' : ''}'
+                      : '$_selectedDurationDays วัน',
                   style: GoogleFonts.outfit(
                     fontSize: 13.5,
                     fontWeight: FontWeight.bold,
@@ -1099,12 +1139,20 @@ class _BookStallScreenState extends State<BookStallScreen> {
                     // Stepper (-)
                     IconButton(
                       icon: const Icon(Icons.remove_circle_outline),
-                      color: _selectedDurationMonths > 1
+                      color: currentDuration > 1
                           ? const Color(0xFF2563EB)
                           : const Color(0xFFCBD5E1),
                       iconSize: 24,
-                      onPressed: _selectedDurationMonths > 1
-                          ? () => setState(() => _selectedDurationMonths--)
+                      onPressed: currentDuration > 1
+                          ? () {
+                              setState(() {
+                                if (isMonthly) {
+                                  _selectedDurationMonths--;
+                                } else {
+                                  _selectedDurationDays--;
+                                }
+                              });
+                            }
                           : null,
                     ),
                     Expanded(
@@ -1130,14 +1178,20 @@ class _BookStallScreenState extends State<BookStallScreen> {
                           inactiveTickMarkColor: const Color(0xFFCBD5E1),
                         ),
                         child: Slider(
-                          value: _selectedDurationMonths.toDouble(),
+                          value: currentDuration.toDouble(),
                           min: 1.0,
-                          max: 12.0,
-                          divisions: 11,
-                          label: '$_selectedDurationMonths เดือน',
+                          max: maxDuration.toDouble(),
+                          divisions: isMonthly ? 11 : 4,
+                          label: isMonthly
+                              ? '$_selectedDurationMonths เดือน'
+                              : '$_selectedDurationDays วัน',
                           onChanged: (val) {
                             setState(() {
-                              _selectedDurationMonths = val.round();
+                              if (isMonthly) {
+                                _selectedDurationMonths = val.round();
+                              } else {
+                                _selectedDurationDays = val.round();
+                              }
                             });
                           },
                         ),
@@ -1146,12 +1200,20 @@ class _BookStallScreenState extends State<BookStallScreen> {
                     // Stepper (+)
                     IconButton(
                       icon: const Icon(Icons.add_circle_outline),
-                      color: _selectedDurationMonths < 12
+                      color: currentDuration < maxDuration
                           ? const Color(0xFF2563EB)
                           : const Color(0xFFCBD5E1),
                       iconSize: 24,
-                      onPressed: _selectedDurationMonths < 12
-                          ? () => setState(() => _selectedDurationMonths++)
+                      onPressed: currentDuration < maxDuration
+                          ? () {
+                              setState(() {
+                                if (isMonthly) {
+                                  _selectedDurationMonths++;
+                                } else {
+                                  _selectedDurationDays++;
+                                }
+                              });
+                            }
                           : null,
                     ),
                   ],
@@ -1164,30 +1226,55 @@ class _BookStallScreenState extends State<BookStallScreen> {
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        '1 เดือน',
-                        style: GoogleFonts.outfit(
-                          fontSize: 11,
-                          color: const Color(0xFF64748B),
-                        ),
-                      ),
-                      Text(
-                        '6 เดือน',
-                        style: GoogleFonts.outfit(
-                          fontSize: 11,
-                          color: const Color(0xFF64748B),
-                        ),
-                      ),
-                      Text(
-                        '12 เดือน (1 ปี)',
-                        style: GoogleFonts.outfit(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: const Color(0xFF2563EB),
-                        ),
-                      ),
-                    ],
+                    children: isMonthly
+                        ? [
+                            Text(
+                              '1 เดือน',
+                              style: GoogleFonts.outfit(
+                                fontSize: 11,
+                                color: const Color(0xFF64748B),
+                              ),
+                            ),
+                            Text(
+                              '6 เดือน',
+                              style: GoogleFonts.outfit(
+                                fontSize: 11,
+                                color: const Color(0xFF64748B),
+                              ),
+                            ),
+                            Text(
+                              '12 เดือน (1 ปี)',
+                              style: GoogleFonts.outfit(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFF2563EB),
+                              ),
+                            ),
+                          ]
+                        : [
+                            Text(
+                              '1 วัน',
+                              style: GoogleFonts.outfit(
+                                fontSize: 11,
+                                color: const Color(0xFF64748B),
+                              ),
+                            ),
+                            Text(
+                              '3 วัน',
+                              style: GoogleFonts.outfit(
+                                fontSize: 11,
+                                color: const Color(0xFF64748B),
+                              ),
+                            ),
+                            Text(
+                              '5 วัน (สูงสุด)',
+                              style: GoogleFonts.outfit(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFF2563EB),
+                              ),
+                            ),
+                          ],
                   ),
                 ),
               ],
@@ -1196,14 +1283,14 @@ class _BookStallScreenState extends State<BookStallScreen> {
 
           const SizedBox(height: 12),
 
-          // Quick preset buttons (1, 3, 6, 12 เดือน) for fast shortcut selection
+          // Quick preset buttons for fast shortcut selection
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
-              children: [1, 3, 6, 12].map((m) {
-                final isSel = _selectedDurationMonths == m;
-                String label = '$m เดือน';
-                if (m == 12) label = '12 เดือน (1 ปี)';
+              children: (isMonthly ? [1, 3, 6, 12] : [1, 2, 3, 4, 5]).map((val) {
+                final isSel = currentDuration == val;
+                String label = isMonthly ? '$val เดือน' : '$val วัน';
+                if (isMonthly && val == 12) label = '12 เดือน (1 ปี)';
                 return Padding(
                   padding: const EdgeInsets.only(right: 8),
                   child: ChoiceChip(
@@ -1226,7 +1313,13 @@ class _BookStallScreenState extends State<BookStallScreen> {
                     showCheckmark: false,
                     onSelected: (selected) {
                       if (selected) {
-                        setState(() => _selectedDurationMonths = m);
+                        setState(() {
+                          if (isMonthly) {
+                            _selectedDurationMonths = val;
+                          } else {
+                            _selectedDurationDays = val;
+                          }
+                        });
                       }
                     },
                   ),
@@ -1248,7 +1341,7 @@ class _BookStallScreenState extends State<BookStallScreen> {
             child: Row(
               children: [
                 const Icon(
-                  Icons.event_available,
+                  Icons.info_outline,
                   color: Color(0xFF2563EB),
                   size: 20,
                 ),
@@ -1349,7 +1442,7 @@ class _BookStallScreenState extends State<BookStallScreen> {
           _costRow(
             _isMonthly
                 ? 'ค่าเช่า (฿${_formatCurrency(_rentalRate)}/เดือน × $_selectedDurationMonths เดือน)'
-                : 'ค่าเช่า (฿${_formatCurrency(_rentalRate)}/วัน)',
+                : 'ค่าเช่า (฿${_formatCurrency(_rentalRate)}/วัน × $_selectedDurationDays วัน)',
             '฿${_formatCurrency(_rentTotal)}',
           ),
           if (_isMonthly && _entryFeeAmount > 0) ...[
@@ -1853,7 +1946,7 @@ class _BookStallScreenState extends State<BookStallScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'ยอดชำระสุทธิ ($_selectedDurationMonths เดือน)',
+                  'ยอดชำระสุทธิ ($_durationLabel)',
                   style: GoogleFonts.outfit(
                     fontSize: 11.5,
                     color: const Color(0xFF64748B),

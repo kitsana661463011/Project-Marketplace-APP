@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import '../services/announcement_service.dart';
 import '../services/api_service.dart';
+import '../services/auth_service.dart';
 import '../models/announcement.dart';
 
 class AnnouncementScreen extends StatefulWidget {
@@ -15,6 +17,7 @@ class _AnnouncementScreenState extends State<AnnouncementScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   List<Announcement> _announcements = [];
+  Set<String> _readIds = {};
   bool _isLoading = true;
 
   @override
@@ -34,6 +37,7 @@ class _AnnouncementScreenState extends State<AnnouncementScreen>
     setState(() => _isLoading = true);
     try {
       final data = await AnnouncementService.getActiveAnnouncements();
+      final readIds = await AnnouncementService.getReadAnnouncementIds();
       if (mounted) {
         data.sort((a, b) {
           int priority(String? type) =>
@@ -44,6 +48,7 @@ class _AnnouncementScreenState extends State<AnnouncementScreen>
         });
         setState(() {
           _announcements = data;
+          _readIds = readIds;
           _isLoading = false;
         });
       }
@@ -352,6 +357,11 @@ class _AnnouncementScreenState extends State<AnnouncementScreen>
 
   @override
   Widget build(BuildContext context) {
+    final auth = Provider.of<AuthService>(context);
+    final user = auth.currentUser;
+    final bool isVendor = user != null &&
+        (user.role == 'seller' || user.role == 'vendor' || user.role == 'admin');
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -374,64 +384,72 @@ class _AnnouncementScreenState extends State<AnnouncementScreen>
             fontSize: 18,
           ),
         ),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(48.0),
-          child: Column(
-            children: [
-              TabBar(
-                controller: _tabController,
-                indicatorSize: TabBarIndicatorSize.label,
-                indicator: const UnderlineTabIndicator(
-                  borderSide: BorderSide(color: Color(0xFF1E88E5), width: 4.0),
-                  borderRadius: BorderRadius.all(Radius.circular(2)),
+        bottom: isVendor
+            ? PreferredSize(
+                preferredSize: const Size.fromHeight(48.0),
+                child: Column(
+                  children: [
+                    TabBar(
+                      controller: _tabController,
+                      indicatorSize: TabBarIndicatorSize.label,
+                      indicator: const UnderlineTabIndicator(
+                        borderSide:
+                            BorderSide(color: Color(0xFF1E88E5), width: 4.0),
+                        borderRadius: BorderRadius.all(Radius.circular(2)),
+                      ),
+                      labelColor: const Color(0xFF1E88E5),
+                      unselectedLabelColor: const Color(0xFF64748B),
+                      labelStyle: GoogleFonts.outfit(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
+                      unselectedLabelStyle: GoogleFonts.outfit(
+                        fontWeight: FontWeight.w500,
+                        fontSize: 15,
+                      ),
+                      tabs: const [
+                        Tab(text: 'ทั้งหมด'),
+                        Tab(text: 'ประกาศ'),
+                        Tab(text: 'ประกาศด่วน'),
+                        Tab(text: 'กิจกรรม'),
+                      ],
+                    ),
+                    Container(color: const Color(0xFFE2E8F0), height: 1.0),
+                  ],
                 ),
-                labelColor: const Color(0xFF1E88E5),
-                unselectedLabelColor: const Color(0xFF64748B),
-                labelStyle: GoogleFonts.outfit(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 15,
-                ),
-                unselectedLabelStyle: GoogleFonts.outfit(
-                  fontWeight: FontWeight.w500,
-                  fontSize: 15,
-                ),
-                tabs: const [
-                  Tab(text: 'ทั้งหมด'),
-                  Tab(text: 'ประกาศ'),
-                  Tab(text: 'ประกาศด่วน'),
-                  Tab(text: 'กิจกรรม'),
-                ],
+              )
+            : PreferredSize(
+                preferredSize: const Size.fromHeight(1.0),
+                child: Container(color: const Color(0xFFE2E8F0), height: 1.0),
               ),
-              Container(color: const Color(0xFFE2E8F0), height: 1.0),
-            ],
-          ),
-        ),
       ),
       body: _isLoading
           ? const Center(
               child: CircularProgressIndicator(color: Color(0xFF1E88E5)),
             )
-          : TabBarView(
-              controller: _tabController,
-              children: [
-                _buildAnnouncementList(_announcements), // ทั้งหมด
-                _buildAnnouncementList(
-                  _announcements
-                      .where((a) => a.announcementType == 'general')
-                      .toList(),
-                ), // ประกาศ (general)
-                _buildAnnouncementList(
-                  _announcements
-                      .where((a) => a.announcementType == 'urgent')
-                      .toList(),
-                ), // ประกาศด่วน (urgent)
-                _buildAnnouncementList(
-                  _announcements
-                      .where((a) => a.announcementType == 'activity')
-                      .toList(),
-                ), // กิจกรรม (activity)
-              ],
-            ),
+          : isVendor
+              ? TabBarView(
+                  controller: _tabController,
+                  children: [
+                    _buildAnnouncementList(_announcements), // ทั้งหมด
+                    _buildAnnouncementList(
+                      _announcements
+                          .where((a) => a.announcementType == 'general')
+                          .toList(),
+                    ), // ประกาศ (general)
+                    _buildAnnouncementList(
+                      _announcements
+                          .where((a) => a.announcementType == 'urgent')
+                          .toList(),
+                    ), // ประกาศด่วน (urgent)
+                    _buildAnnouncementList(
+                      _announcements
+                          .where((a) => a.announcementType == 'activity')
+                          .toList(),
+                    ), // กิจกรรม (activity)
+                  ],
+                )
+              : _buildAnnouncementList(_announcements),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: Colors.white,
@@ -538,6 +556,8 @@ class _AnnouncementScreenState extends State<AnnouncementScreen>
         final item = list[index];
         final isUrgent = item.announcementType == 'urgent';
         final isActivity = item.announcementType == 'activity';
+        final itemKey = AnnouncementService.getAnnouncementKey(item);
+        final isUnread = !_readIds.contains(itemKey);
 
         // Set list circle icon color based on backend type
         Color circleColor = const Color(0xFFE8EAF6);
@@ -551,21 +571,50 @@ class _AnnouncementScreenState extends State<AnnouncementScreen>
         }
 
         return InkWell(
-          onTap: () => _showDetailDialog(item),
+          onTap: () async {
+            if (isUnread) {
+              await AnnouncementService.markAsRead(item);
+              if (mounted) {
+                setState(() {
+                  _readIds.add(itemKey);
+                });
+              }
+            }
+            _showDetailDialog(item);
+          },
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Circular Megaphone Icon
-                Container(
-                  width: 50,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    color: circleColor,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(Icons.campaign, color: iconColor, size: 26),
+                // Circular Megaphone Icon with unread badge dot
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Container(
+                      width: 50,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        color: circleColor,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.campaign, color: iconColor, size: 26),
+                    ),
+                    if (isUnread)
+                      Positioned(
+                        top: 0,
+                        right: 0,
+                        child: Container(
+                          width: 12,
+                          height: 12,
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 2),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
                 const SizedBox(width: 16),
                 // Content
@@ -578,14 +627,43 @@ class _AnnouncementScreenState extends State<AnnouncementScreen>
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Expanded(
-                            child: Text(
-                              item.title,
-                              style: GoogleFonts.outfit(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: const Color(0xFF0F172A),
-                                height: 1.4,
-                              ),
+                            child: Row(
+                              children: [
+                                if (isUnread) ...[
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.red,
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Text(
+                                      'ใหม่',
+                                      style: GoogleFonts.outfit(
+                                        color: Colors.white,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                ],
+                                Expanded(
+                                  child: Text(
+                                    item.title,
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 16,
+                                      fontWeight: isUnread
+                                          ? FontWeight.bold
+                                          : FontWeight.w600,
+                                      color: const Color(0xFF0F172A),
+                                      height: 1.4,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                           const SizedBox(width: 8),

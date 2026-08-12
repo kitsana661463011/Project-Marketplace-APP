@@ -395,143 +395,117 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
               ),
               const SizedBox(height: 28),
 
-              // Photo Upload Row (Optional - Visual mockups matching the design)
+              // Photo Upload Row (Compact 76x76 size)
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
                     'เพิ่มรูปภาพประกอบ ( ไม่บังคับ )',
                     style: GoogleFonts.outfit(
-                      fontSize: 16,
+                      fontSize: 15,
                       fontWeight: FontWeight.bold,
                       color: const Color(0xFF0F172A),
                     ),
                   ),
                   Text(
-                    'สูงสุด 3 รูป',
+                    '${_reviewImageBytes.length}/3 รูป',
                     style: GoogleFonts.outfit(
                       fontSize: 12,
-                      color: const Color(0xFF94A3B8),
+                      fontWeight: FontWeight.bold,
+                      color: _reviewImageBytes.isNotEmpty
+                          ? const Color(0xFF1E88E5)
+                          : const Color(0xFF94A3B8),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  for (var index = 0; index < 3; index++) ...[
-                    Expanded(
-                      child: AspectRatio(
-                        aspectRatio: 1,
-                        child: GestureDetector(
-                          onTap:
-                              index == _reviewImageBytes.length &&
-                                  _reviewImageBytes.length < 3
-                              ? _pickReviewImages
-                              : null,
-                          child: Container(
+              const SizedBox(height: 10),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    // Render uploaded image thumbnails
+                    for (int i = 0; i < _reviewImageBytes.length; i++) ...[
+                      Stack(
+                        children: [
+                          Container(
+                            width: 76,
+                            height: 76,
                             decoration: BoxDecoration(
-                              color: index < _reviewImageBytes.length
-                                  ? Colors.white
-                                  : const Color(0xFFF8FAFC),
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                color: const Color(0xFFE2E8F0),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(14),
+                              child: Image.memory(
+                                _reviewImageBytes[i],
+                                width: 76,
+                                height: 76,
+                                fit: BoxFit.cover,
                               ),
                             ),
-                            child: index < _reviewImageBytes.length
-                                ? Stack(
-                                    children: [
-                                      ClipRRect(
-                                        borderRadius: BorderRadius.circular(16),
-                                        child: Image.memory(
-                                          _reviewImageBytes[index],
-                                          width: double.infinity,
-                                          height: double.infinity,
-                                          fit: BoxFit.cover,
-                                        ),
-                                      ),
-                                      Positioned(
-                                        right: 6,
-                                        top: 6,
-                                        child: GestureDetector(
-                                          onTap: () =>
-                                              _removeReviewImage(index),
-                                          child: Container(
-                                            width: 24,
-                                            height: 24,
-                                            decoration: const BoxDecoration(
-                                              color: Colors.black54,
-                                              shape: BoxShape.circle,
-                                            ),
-                                            child: const Icon(
-                                              Icons.close,
-                                              size: 16,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  )
-                                : Center(
-                                    child: Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Icon(
-                                          index == _reviewImageBytes.length &&
-                                                  _reviewImageBytes.length < 3
-                                              ? Icons
-                                                    .add_photo_alternate_outlined
-                                              : Icons.image_outlined,
-                                          color:
-                                              index ==
-                                                      _reviewImageBytes
-                                                          .length &&
-                                                  _reviewImageBytes.length < 3
-                                              ? const Color(0xFF1E88E5)
-                                              : const Color(0xFFCBD5E1),
-                                          size: 28,
-                                        ),
-                                        const SizedBox(height: 6),
-                                        Text(
-                                          index == _reviewImageBytes.length &&
-                                                  _reviewImageBytes.length < 3
-                                              ? 'อัปโหลด'
-                                              : 'ยังไม่มีรูป',
-                                          style: GoogleFonts.outfit(
-                                            fontSize: 12,
-                                            color:
-                                                index ==
-                                                        _reviewImageBytes
-                                                            .length &&
-                                                    _reviewImageBytes.length < 3
-                                                ? const Color(0xFF1E88E5)
-                                                : const Color(0xFF94A3B8),
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                          textAlign: TextAlign.center,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
+                          ),
+                          Positioned(
+                            top: 4,
+                            right: 4,
+                            child: GestureDetector(
+                              onTap: () => _removeReviewImage(i),
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: const BoxDecoration(
+                                  color: Color(0xB3000000),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.close_rounded,
+                                  size: 12,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(width: 10),
+                    ],
+
+                    // Upload button (if < 3 images)
+                    if (_reviewImageBytes.length < 3)
+                      GestureDetector(
+                        onTap: _pickReviewImages,
+                        child: Container(
+                          width: 76,
+                          height: 76,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: const Color(0xFFBFDBFE),
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(
+                                Icons.add_a_photo_outlined,
+                                color: Color(0xFF1E88E5),
+                                size: 22,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '+ เพิ่มรูป',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: const Color(0xFF1E88E5),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
-                    ),
-                    if (index < 2) const SizedBox(width: 12),
                   ],
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                _reviewImageBytes.isNotEmpty
-                    ? 'คุณเลือกแล้ว ${_reviewImageBytes.length}/3 รูป'
-                    : 'กดช่องแรกเพื่อเลือกภาพประกอบ',
-                style: GoogleFonts.outfit(
-                  fontSize: 13,
-                  color: const Color(0xFF64748B),
                 ),
               ),
               const SizedBox(height: 14),

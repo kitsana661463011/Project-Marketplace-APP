@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../widgets/app_dialog.dart';
+import 'package:provider/provider.dart';
+import '../services/auth_service.dart';
+import 'verify_otp_screen.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -20,25 +22,66 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     super.dispose();
   }
 
-  void _resetPassword() {
+  Future<void> _resetPassword() async {
     if (!_formKey.currentState!.validate()) return;
 
+    final String email = _emailController.text.trim();
     setState(() => _isLoading = true);
 
-    // Simulate sending email API request
-    Future.delayed(const Duration(milliseconds: 1500), () {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final response = await authService.sendForgotPasswordCode(email);
 
-      AppDialog.showSuccess(
-        context,
-        title: 'ส่งอีเมลสำเร็จ',
-        message: 'ระบบได้ส่งลิงก์สำหรับตั้งค่ารหัสผ่านใหม่ไปยังอีเมลของคุณเรียบร้อยแล้ว กรุณาคลิกลิงก์ภายในเวลาที่กำหนด',
-        onConfirm: () {
-          Navigator.pop(context);
-        },
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    if (response['status'] == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle_outline, color: Colors.white),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  response['message'] ?? 'ส่งรหัสยืนยันไปยังอีเมลแล้ว',
+                  style: GoogleFonts.outfit(),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: const Color(0xFF16A34A),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
       );
-    });
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => VerifyOtpScreen(email: email),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.error_outline, color: Colors.white),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  response['message'] ?? 'ไม่สามารถส่งอีเมลได้',
+                  style: GoogleFonts.outfit(),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: const Color(0xFFDC2626),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+    }
   }
 
   @override
@@ -71,7 +114,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         ),
       ),
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 30),
           child: Form(
             key: _formKey,
@@ -91,7 +134,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 const SizedBox(height: 12),
                 // Subtitles
                 Text(
-                  'ระบบจะจัดส่งลิงก์สำหรับรีเซ็ตรหัสผ่านไปยังอีเมลที่ใช้ลงทะเบียน หลังจากได้รับอีเมลกรุณาคลิกลิงก์เพื่อกำหนดรหัสผ่านใหม่ภายในเวลาที่กำหนด',
+                  'ระบบจะจัดส่งรหัสยืนยัน (OTP) สำหรับรีเซ็ตรหัสผ่านไปยังอีเมลที่ใช้ลงทะเบียน กรุณากรอกอีเมลของคุณเพื่อดำเนินการต่อ',
                   style: GoogleFonts.outfit(
                     color: const Color(0xFF64748B),
                     fontSize: 15,
@@ -117,7 +160,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   keyboardType: TextInputType.emailAddress,
                   style: GoogleFonts.outfit(color: Colors.black, fontWeight: FontWeight.w500),
                   decoration: InputDecoration(
-                    hintText: 'อีเมลของคุณ',
+                    hintText: 'อีเมลของคุณ (เช่น name@example.com)',
                     hintStyle: GoogleFonts.outfit(color: const Color(0xFF94A3B8), fontSize: 15),
                     filled: true,
                     fillColor: Colors.white,
@@ -140,12 +183,15 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     ),
                   ),
                   validator: (v) {
-                    if (v == null || v.isEmpty) return 'กรุณากรอกอีเมล';
-                    if (!v.contains('@')) return 'อีเมลไม่ถูกต้อง';
+                    final trimmed = v?.trim() ?? '';
+                    if (trimmed.isEmpty) return 'กรุณากรอกอีเมล';
+                    if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(trimmed)) {
+                      return 'รูปแบบอีเมลไม่ถูกต้อง';
+                    }
                     return null;
                   },
                 ),
-                const Spacer(),
+                const SizedBox(height: 40),
 
                 // Reset Button
                 SizedBox(
@@ -171,7 +217,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                             ),
                           )
                         : Text(
-                            'รีเซ็ตรหัสผ่าน',
+                            'ส่งรหัส OTP',
                             style: GoogleFonts.outfit(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
@@ -179,7 +225,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                           ),
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 16),
               ],
             ),
           ),

@@ -12,6 +12,7 @@ class ReviewItem {
   final String userAvatar;
   final double rating;
   final String timeAgo;
+  final DateTime? reviewDate;
   final String reviewText;
   final List<String> images;
   int likes;
@@ -24,6 +25,7 @@ class ReviewItem {
     required this.userAvatar,
     required this.rating,
     required this.timeAgo,
+    this.reviewDate,
     required this.reviewText,
     this.images = const [],
     this.likes = 0,
@@ -104,11 +106,12 @@ class _ShopReviewsScreenState extends State<ShopReviewsScreen> {
                 ? ApiService.getImagePath(profileImgStr)
                 : '';
 
+            DateTime? parsedDate;
             String timeAgo = 'ไม่ระบุเวลา';
             if (json['review_date'] != null) {
               try {
-                final date = DateTime.parse(json['review_date']);
-                final diff = DateTime.now().difference(date);
+                parsedDate = DateTime.parse(json['review_date']);
+                final diff = DateTime.now().difference(parsedDate);
                 if (diff.inDays > 30) {
                   timeAgo = '${(diff.inDays / 30).floor()} เดือนที่แล้ว';
                 } else if (diff.inDays > 0) {
@@ -146,6 +149,7 @@ class _ShopReviewsScreenState extends State<ShopReviewsScreen> {
               userAvatar: avatar,
               rating: (json['rating'] as num? ?? 5.0).toDouble(),
               timeAgo: timeAgo,
+              reviewDate: parsedDate,
               reviewText: json['comment'] ?? '',
               images: reviewImages
                   .map((src) => ApiService.getImagePath(src))
@@ -192,12 +196,27 @@ class _ShopReviewsScreenState extends State<ShopReviewsScreen> {
   Widget build(BuildContext context) {
     // Sort reviews based on tab selection
     final sortedReviews = List<ReviewItem>.from(_reviews);
-    if (!_isLatestTab) {
-      // Sort by rating descending, then likes descending
+    if (_isLatestTab) {
+      // Sort by newest reviewDate / reviewId descending
       sortedReviews.sort((a, b) {
-        int cmp = b.rating.compareTo(a.rating);
-        if (cmp != 0) return cmp;
-        return b.likes.compareTo(a.likes);
+        if (a.reviewDate != null && b.reviewDate != null) {
+          int cmpDate = b.reviewDate!.compareTo(a.reviewDate!);
+          if (cmpDate != 0) return cmpDate;
+        }
+        return b.reviewId.compareTo(a.reviewId);
+      });
+    } else {
+      // Sort by likes descending first (most liked on top), then rating descending, then reviewDate/reviewId descending
+      sortedReviews.sort((a, b) {
+        int cmpLikes = b.likes.compareTo(a.likes);
+        if (cmpLikes != 0) return cmpLikes;
+        int cmpRating = b.rating.compareTo(a.rating);
+        if (cmpRating != 0) return cmpRating;
+        if (a.reviewDate != null && b.reviewDate != null) {
+          int cmpDate = b.reviewDate!.compareTo(a.reviewDate!);
+          if (cmpDate != 0) return cmpDate;
+        }
+        return b.reviewId.compareTo(a.reviewId);
       });
     }
 

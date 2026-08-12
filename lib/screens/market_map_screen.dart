@@ -21,6 +21,11 @@ class _MarketMapScreenState extends State<MarketMapScreen>
   bool _isLoading = true;
   String? _error;
   model.MarketMapItem? _selectedItem;
+  String? _targetStallNum;
+  bool _hasFocusedTarget = false;
+
+  late AnimationController _blinkController;
+  late Animation<double> _blinkAnimation;
 
   // Transform controller for zoom/pan
   final TransformationController _transformationController =
@@ -37,11 +42,42 @@ class _MarketMapScreenState extends State<MarketMapScreen>
   @override
   void initState() {
     super.initState();
+    _blinkController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 750),
+    )..repeat(reverse: true);
+
+    _blinkAnimation = Tween<double>(begin: 0.25, end: 1.0).animate(
+      CurvedAnimation(parent: _blinkController, curve: Curves.easeInOut),
+    );
+
     _loadMap();
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args != null) {
+      if (args is String) {
+        _targetStallNum = args;
+      } else if (args is Map) {
+        _targetStallNum = args['stall_number']?.toString() ??
+            args['stall_id']?.toString() ??
+            args['stall']?.toString();
+        final shopObj = args['shop'];
+        if (shopObj != null && shopObj is Shop) {
+          _targetStallNum ??= shopObj.stallNumber;
+        }
+      } else if (args is Shop) {
+        _targetStallNum = args.stallNumber;
+      }
+    }
+  }
+
+  @override
   void dispose() {
+    _blinkController.dispose();
     _transformationController.dispose();
     super.dispose();
   }
@@ -57,7 +93,11 @@ class _MarketMapScreenState extends State<MarketMapScreen>
         setState(() {
           _map = map;
           _isLoading = false;
-          if (map == null) _error = 'ไม่สามารถโหลดแผนที่ได้';
+          if (map == null) {
+            _error = 'ไม่สามารถโหลดแผนที่ได้';
+          } else {
+            _checkAndFocusTargetStall();
+          }
         });
       }
     } catch (e) {
@@ -67,6 +107,41 @@ class _MarketMapScreenState extends State<MarketMapScreen>
           _error = 'เกิดข้อผิดพลาด: $e';
         });
       }
+    }
+  }
+
+  void _checkAndFocusTargetStall() {
+    if (_map == null || _targetStallNum == null || _hasFocusedTarget) return;
+
+    final String targetClean = _targetStallNum!
+        .replaceAll(RegExp(r'[^a-zA-Z0-9]'), '')
+        .toUpperCase();
+    if (targetClean.isEmpty) return;
+
+    model.MarketMapItem? matchedItem;
+    for (final item in _map!.items) {
+      if (!item.isBlock) continue;
+      final labelClean = item.label
+          .replaceAll(RegExp(r'[^a-zA-Z0-9]'), '')
+          .toUpperCase();
+      final itemIdClean = item.mapItemId
+          .replaceAll(RegExp(r'[^a-zA-Z0-9]'), '')
+          .toUpperCase();
+      final stallIdClean = item.stallId?.toString() ?? '';
+
+      if (labelClean == targetClean ||
+          itemIdClean == targetClean ||
+          stallIdClean == targetClean ||
+          labelClean.contains(targetClean) ||
+          targetClean.contains(labelClean)) {
+        matchedItem = item;
+        break;
+      }
+    }
+
+    if (matchedItem != null) {
+      _selectedItem = matchedItem;
+      _hasFocusedTarget = true;
     }
   }
 
@@ -630,6 +705,7 @@ class _MarketMapScreenState extends State<MarketMapScreen>
                           description: description.toString(),
                           shopPhone: shopPhone.toString(),
                           shopImage: shopImage?.toString(),
+                          status: item.status,
                         );
                         Navigator.pushNamed(
                           context,
@@ -917,8 +993,17 @@ class _MarketMapScreenState extends State<MarketMapScreen>
     ];
 
     return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
@@ -933,52 +1018,70 @@ class _MarketMapScreenState extends State<MarketMapScreen>
                   final isActive = _filterStatus == f['key'];
                   final Color itemColor = f['color'] as Color;
                   return Padding(
-                    padding: const EdgeInsets.only(right: 6),
+                    padding: const EdgeInsets.only(right: 8),
                     child: GestureDetector(
                       onTap: () =>
                           setState(() => _filterStatus = f['key'] as String),
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 200),
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
+                          horizontal: 14,
+                          vertical: 7,
                         ),
                         decoration: BoxDecoration(
                           color: isActive
-                              ? itemColor.withValues(alpha: 0.15)
-                              : const Color(0xFFF1F5F9),
-                          borderRadius: BorderRadius.circular(16),
+                              ? itemColor.withValues(alpha: 0.12)
+                              : const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(20),
                           border: Border.all(
                             color: isActive
                                 ? itemColor
                                 : const Color(0xFFE2E8F0),
-                            width: 1.2,
+                            width: isActive ? 1.8 : 1.0,
                           ),
+                          boxShadow: isActive
+                              ? [
+                                  BoxShadow(
+                                    color: itemColor.withValues(alpha: 0.2),
+                                    blurRadius: 6,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ]
+                              : [],
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             if (f['key'] != 'all') ...[
                               Container(
-                                width: 7,
-                                height: 7,
+                                width: 9,
+                                height: 9,
                                 decoration: BoxDecoration(
                                   color: itemColor,
                                   shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: itemColor.withValues(alpha: 0.4),
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 1),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              const SizedBox(width: 5),
+                              const SizedBox(width: 6),
                             ],
                             Text(
                               f['label'] as String,
                               style: GoogleFonts.outfit(
-                                fontSize: 11.5,
+                                fontSize: 13.5,
                                 fontWeight: isActive
                                     ? FontWeight.bold
-                                    : FontWeight.w500,
+                                    : FontWeight.w600,
                                 color: isActive
-                                    ? itemColor
-                                    : const Color(0xFF64748B),
+                                    ? (f['key'] == 'all'
+                                        ? const Color(0xFF1E88E5)
+                                        : itemColor)
+                                    : const Color(0xFF475569),
                               ),
                             ),
                           ],
@@ -990,25 +1093,36 @@ class _MarketMapScreenState extends State<MarketMapScreen>
               ],
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 10),
           // Row 2: Rental Type Filters
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             physics: const BouncingScrollPhysics(),
             child: Row(
               children: [
-                Text(
-                  'สัญญา: ',
-                  style: GoogleFonts.outfit(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: const Color(0xFF94A3B8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    'สัญญา:',
+                    style: GoogleFonts.outfit(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF475569),
+                    ),
                   ),
                 ),
+                const SizedBox(width: 8),
                 ...rentalTypeFilters.map((rf) {
                   final isActive = _filterRentalType == rf['key'];
                   return Padding(
-                    padding: const EdgeInsets.only(right: 6),
+                    padding: const EdgeInsets.only(right: 8),
                     child: GestureDetector(
                       onTap: () => setState(
                         () => _filterRentalType = rf['key'] as String,
@@ -1016,31 +1130,41 @@ class _MarketMapScreenState extends State<MarketMapScreen>
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 200),
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 3,
+                          horizontal: 14,
+                          vertical: 6,
                         ),
                         decoration: BoxDecoration(
                           color: isActive
-                              ? const Color(0xFFEFF6FF)
+                              ? const Color(0xFF1E88E5)
                               : const Color(0xFFF8FAFC),
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(18),
                           border: Border.all(
                             color: isActive
-                                ? const Color(0xFF2563EB)
+                                ? const Color(0xFF1E88E5)
                                 : const Color(0xFFE2E8F0),
-                            width: 1.2,
+                            width: isActive ? 1.5 : 1.0,
                           ),
+                          boxShadow: isActive
+                              ? [
+                                  BoxShadow(
+                                    color: const Color(0xFF1E88E5)
+                                        .withValues(alpha: 0.25),
+                                    blurRadius: 6,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ]
+                              : [],
                         ),
                         child: Text(
                           rf['label'] as String,
                           style: GoogleFonts.outfit(
-                            fontSize: 11,
+                            fontSize: 13,
                             fontWeight: isActive
                                 ? FontWeight.bold
                                 : FontWeight.w500,
                             color: isActive
-                                ? const Color(0xFF2563EB)
-                                : const Color(0xFF64748B),
+                                ? Colors.white
+                                : const Color(0xFF475569),
                           ),
                         ),
                       ),
@@ -1398,7 +1522,7 @@ class _MarketMapScreenState extends State<MarketMapScreen>
       displayText = '';
     }
 
-    return AnimatedContainer(
+    final blockWidget = AnimatedContainer(
       duration: const Duration(milliseconds: 150),
       width: w,
       height: h,
@@ -1460,6 +1584,88 @@ class _MarketMapScreenState extends State<MarketMapScreen>
           ],
         ),
       ),
+    );
+
+    if (!isSelected) {
+      return blockWidget;
+    }
+
+    return AnimatedBuilder(
+      animation: _blinkAnimation,
+      builder: (context, child) {
+        final double opacity = _blinkAnimation.value;
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            // Pulsing glow ring around target stall
+            Positioned(
+              left: -6,
+              top: -6,
+              right: -6,
+              bottom: -6,
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: const Color(0xFF2563EB).withValues(alpha: opacity),
+                    width: 3,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF3B82F6).withValues(alpha: opacity * 0.8),
+                      blurRadius: 12,
+                      spreadRadius: 3,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            blockWidget,
+            // Floating pin location badge above stall
+            Positioned(
+              top: -34,
+              left: (w - 130) / 2,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0F172A),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: const Color(0xFF60A5FA).withValues(alpha: opacity),
+                    width: 1.5,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.2),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.location_on,
+                      color: Color(0xFF38BDF8),
+                      size: 13,
+                    ),
+                    const SizedBox(width: 3),
+                    Text(
+                      'แผง ${item.label}',
+                      style: GoogleFonts.outfit(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

@@ -25,4 +25,7 @@ class ApiConfig {
   static const String shopReviews = '/v1/shop-reviews';
   static const String reviewReports = '/v1/review-reports';
   static const String categories = '/v1/categories';
+  static const String forgotPassword = '/v1/forgot-password';
+  static const String verifyResetCode = '/v1/verify-reset-code';
+  static const String resetPassword = '/v1/reset-password';
 }

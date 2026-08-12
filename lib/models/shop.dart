@@ -10,6 +10,11 @@ class Shop {
   final Map<String, dynamic>? category;
   final Map<String, dynamic>? owner;
   final int followerCount;
+  final double? avgRating;
+  final int reviewCount;
+  final String? stallNumber;
+  final String? zoneName;
+  final String status;
 
   Shop({
     this.shopId,
@@ -23,9 +28,22 @@ class Shop {
     this.category,
     this.owner,
     this.followerCount = 0,
+    this.avgRating,
+    this.reviewCount = 0,
+    this.stallNumber,
+    this.zoneName,
+    this.status = 'เปิดบริการอยู่',
   });
 
   factory Shop.fromJson(Map<String, dynamic> json) {
+    final rawStatus = json['status']?.toString();
+    final parsedStatus =
+        (rawStatus != null && rawStatus.trim().isNotEmpty)
+            ? rawStatus.trim()
+            : (json['is_open'] == false || json['is_open'] == 0
+                ? 'ปิดบริการชั่วคราว'
+                : 'เปิดบริการอยู่');
+
     return Shop(
       shopId: json['shop_id'],
       shopName: json['shop_name'] ?? '',
@@ -35,18 +53,40 @@ class Shop {
       socialLinks: json['social_links'],
       shopImage: json['shop_image'],
       userId: json['user_id'],
-      category: json['category'] != null
-          ? Map<String, dynamic>.from(json['category'])
-          : null,
-      owner: json['owner'] != null
-          ? Map<String, dynamic>.from(json['owner'])
-          : null,
-      followerCount: json['follows_count'] is int
-          ? json['follows_count'] as int
-          : int.tryParse(json['follows_count']?.toString() ?? '') ?? 0,
+      category:
+          json['category'] != null
+              ? Map<String, dynamic>.from(json['category'])
+              : null,
+      owner:
+          json['owner'] != null
+              ? Map<String, dynamic>.from(json['owner'])
+              : null,
+      followerCount:
+          json['follows_count'] is int
+              ? json['follows_count'] as int
+              : int.tryParse(json['follows_count']?.toString() ?? '') ?? 0,
+      avgRating:
+          json['avg_rating'] != null
+              ? (double.tryParse(json['avg_rating'].toString()) ?? 0.0)
+              : null,
+      reviewCount:
+          json['review_count'] is int
+              ? json['review_count'] as int
+              : int.tryParse(json['review_count']?.toString() ?? '') ?? 0,
+      stallNumber: json['stall_number']?.toString(),
+      zoneName: json['zone_name']?.toString(),
+      status: parsedStatus,
     );
   }
 
   String get categoryName => category?['category_name'] ?? 'ไม่ระบุหมวดหมู่';
   String get ownerName => owner?['username'] ?? 'ไม่ทราบ';
+
+  bool get isOpen {
+    final s = status.trim().toLowerCase();
+    if (s == 'ปิดบริการชั่วคราว' || s == 'closed' || s == 'inactive') {
+      return false;
+    }
+    return true;
+  }
 }

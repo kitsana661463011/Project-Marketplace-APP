@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../services/shop_service.dart';
 import '../services/review_service.dart';
+import '../services/announcement_service.dart';
 import '../models/shop.dart';
 import '../models/user.dart';
 import '../services/api_service.dart';
@@ -134,6 +135,78 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
+class _FuzzySearch {
+  static String normalize(String str) {
+    return str
+        .toLowerCase()
+        .replaceAll(RegExp(r'[\u0E48-\u0E4C\u0E4D\u0E3A]'), '')
+        .trim();
+  }
+
+  static int levenshtein(String s1, String s2) {
+    if (s1 == s2) return 0;
+    if (s1.isEmpty) return s2.length;
+    if (s2.isEmpty) return s1.length;
+
+    List<int> v0 = List<int>.generate(s2.length + 1, (i) => i);
+    List<int> v1 = List<int>.filled(s2.length + 1, 0);
+
+    for (int i = 0; i < s1.length; i++) {
+      v1[0] = i + 1;
+      for (int j = 0; j < s2.length; j++) {
+        int cost = (s1[i] == s2[j]) ? 0 : 1;
+        v1[j + 1] = [
+          v1[j] + 1,
+          v0[j + 1] + 1,
+          v0[j] + cost,
+        ].reduce((a, b) => a < b ? a : b);
+      }
+      for (int j = 0; j <= s2.length; j++) {
+        v0[j] = v1[j];
+      }
+    }
+    return v1[s2.length];
+  }
+
+  static double matchScore(String rawQuery, String rawTarget) {
+    final q = normalize(rawQuery);
+    final target = normalize(rawTarget);
+
+    if (q.isEmpty || target.isEmpty) return 0.0;
+
+    if (target.contains(q)) {
+      return target.startsWith(q) ? 1.0 : 0.9;
+    }
+
+    double bestScore = 0.0;
+    final qLen = q.length;
+
+    final words = target.split(RegExp(r'[\s,\.\-\/\(\)]+'));
+    for (final word in words) {
+      if (word.isEmpty) continue;
+      if (word.contains(q)) return 0.85;
+
+      final dist = levenshtein(q, word);
+      final maxLen = qLen > word.length ? qLen : word.length;
+      final sim = 1.0 - (dist / maxLen);
+      if (sim > bestScore) bestScore = sim;
+    }
+
+    final targetLen = target.length;
+    for (int len = qLen - 1; len <= qLen + 2; len++) {
+      if (len <= 0) continue;
+      for (int i = 0; i <= targetLen - len; i++) {
+        final sub = target.substring(i, i + len);
+        final dist = levenshtein(q, sub);
+        final sim = 1.0 - (dist / qLen);
+        if (sim > bestScore) bestScore = sim;
+      }
+    }
+
+    return bestScore;
+  }
+}
+
 class _HomeTab extends StatefulWidget {
   const _HomeTab();
 
@@ -144,13 +217,71 @@ class _HomeTab extends StatefulWidget {
 class _HomeTabState extends State<_HomeTab> {
   List<Shop> _shops = [];
   List<Shop> _followedShops = [];
+  int _unreadNotificationCount = 0;
+  final TextEditingController _searchController = TextEditingController();
+  OverlayEntry? _searchOverlayEntry;
+  final LayerLink _searchLayerLink = LayerLink();
   String _searchQuery = '';
+  String _selectedCategory = 'ทั้งหมด';
+  List<String> _categories = ['ทั้งหมด'];
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
     _loadShops();
+  }
+
+  @override
+  void dispose() {
+    _hideSearchOverlay();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _updateSearchOverlay() {
+    if (_searchQuery.trim().isEmpty) {
+      _hideSearchOverlay();
+      return;
+    }
+    if (_searchOverlayEntry != null) {
+      _searchOverlayEntry!.markNeedsBuild();
+    } else {
+      _showSearchOverlay();
+    }
+  }
+
+  void _showSearchOverlay() {
+    _hideSearchOverlay();
+    if (!mounted) return;
+
+    final renderBox = context.findRenderObject() as RenderBox?;
+    final size = renderBox?.size ?? Size.zero;
+    final overlayWidth = size.width > 40
+        ? size.width - 40
+        : MediaQuery.of(context).size.width - 40;
+
+    _searchOverlayEntry = OverlayEntry(
+      builder: (context) => Positioned(
+        width: overlayWidth,
+        child: CompositedTransformFollower(
+          link: _searchLayerLink,
+          showWhenUnlinked: false,
+          offset: const Offset(0, 52),
+          child: Material(
+            color: Colors.transparent,
+            child: _buildSearchDropdown(),
+          ),
+        ),
+      ),
+    );
+
+    Overlay.of(context).insert(_searchOverlayEntry!);
+  }
+
+  void _hideSearchOverlay() {
+    _searchOverlayEntry?.remove();
+    _searchOverlayEntry = null;
   }
 
   Future<void> _loadShops() async {
@@ -185,10 +316,36 @@ class _HomeTabState extends State<_HomeTab> {
         return 0;
       });
 
+      final Set<String> catSet = {'ทั้งหมด'};
+      try {
+        final catRes = await ApiService.get('/v1/categories');
+        if (catRes['status'] == true && catRes['data'] is List) {
+          for (final c in catRes['data']) {
+            if (c is Map && c['category_name'] != null) {
+              final name = c['category_name'].toString().trim();
+              if (name.isNotEmpty) catSet.add(name);
+            }
+          }
+        }
+      } catch (_) {}
+
+      for (final s in shops) {
+        if (s.categoryName.isNotEmpty && s.categoryName != 'ไม่ระบุหมวดหมู่') {
+          catSet.add(s.categoryName.trim());
+        }
+      }
+
+      int unreadCount = 0;
+      try {
+        unreadCount = await AnnouncementService.getUnreadCount();
+      } catch (_) {}
+
       if (mounted) {
         setState(() {
           _shops = shops;
           _followedShops = followedShops;
+          _categories = catSet.toList();
+          _unreadNotificationCount = unreadCount;
           _isLoading = false;
         });
       }
@@ -198,13 +355,43 @@ class _HomeTabState extends State<_HomeTab> {
   }
 
   List<Shop> get _filteredShops {
-    if (_searchQuery.trim().isEmpty) return _shops;
-    final q = _searchQuery.trim().toLowerCase();
-    return _shops.where((shop) {
-      final nameMatches = shop.shopName.toLowerCase().contains(q);
-      final categoryMatches = shop.categoryName.toLowerCase().contains(q);
-      return nameMatches || categoryMatches;
-    }).toList();
+    return _shops;
+  }
+
+  List<Shop> get _searchResultShops {
+    final q = _searchQuery.trim();
+
+    List<Shop> baseList = _shops;
+    if (_selectedCategory != 'ทั้งหมด') {
+      baseList = baseList
+          .where((shop) => shop.categoryName.trim() == _selectedCategory.trim())
+          .toList();
+    }
+
+    if (q.isEmpty) return baseList;
+
+    final List<MapEntry<Shop, double>> scoredShops = [];
+
+    for (final shop in baseList) {
+      final nameScore = _FuzzySearch.matchScore(q, shop.shopName);
+      final categoryScore = _FuzzySearch.matchScore(q, shop.categoryName);
+      final descScore = shop.description != null
+          ? _FuzzySearch.matchScore(q, shop.description!) * 0.7
+          : 0.0;
+      final stallScore = shop.stallNumber != null
+          ? _FuzzySearch.matchScore(q, 'แผง ${shop.stallNumber}')
+          : 0.0;
+
+      final maxScore = [nameScore, categoryScore, descScore, stallScore]
+          .reduce((a, b) => a > b ? a : b);
+
+      if (maxScore >= 0.38) {
+        scoredShops.add(MapEntry(shop, maxScore));
+      }
+    }
+
+    scoredShops.sort((a, b) => b.value.compareTo(a.value));
+    return scoredShops.map((e) => e.key).toList();
   }
 
   Future<void> _navigateToShopDetail(Shop shop) async {
@@ -279,8 +466,9 @@ class _HomeTabState extends State<_HomeTab> {
                   ),
                   // Notification bell
                   GestureDetector(
-                    onTap: () {
-                      Navigator.pushNamed(context, '/announcements');
+                    onTap: () async {
+                      await Navigator.pushNamed(context, '/announcements');
+                      _loadShops();
                     },
                     child: Stack(
                       children: [
@@ -297,25 +485,37 @@ class _HomeTabState extends State<_HomeTab> {
                             size: 24,
                           ),
                         ),
-                        Positioned(
-                          right: 2,
-                          top: 2,
-                          child: Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: const BoxDecoration(
-                              color: Colors.red,
-                              shape: BoxShape.circle,
-                            ),
-                            child: Text(
-                              '1',
-                              style: GoogleFonts.outfit(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
+                        if (_unreadNotificationCount > 0)
+                          Positioned(
+                            right: 2,
+                            top: 2,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 5,
+                                vertical: 2,
+                              ),
+                              constraints: const BoxConstraints(
+                                minWidth: 18,
+                                minHeight: 18,
+                              ),
+                              decoration: const BoxDecoration(
+                                color: Colors.red,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Center(
+                                child: Text(
+                                  _unreadNotificationCount > 99
+                                      ? '99+'
+                                      : '$_unreadNotificationCount',
+                                  style: GoogleFonts.outfit(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                               ),
                             ),
                           ),
-                        ),
                       ],
                     ),
                   ),
@@ -323,41 +523,68 @@ class _HomeTabState extends State<_HomeTab> {
               ),
               const SizedBox(height: 20),
 
-              // Search Bar
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.03),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: TextField(
-                  onChanged: (val) => setState(() => _searchQuery = val),
-                  style: GoogleFonts.outfit(color: Colors.black),
-                  decoration: InputDecoration(
-                    hintText: 'ค้นหาร้าน หรือ ร้านค้า...',
-                    hintStyle: GoogleFonts.outfit(
-                      color: const Color(0xFF94A3B8),
-                      fontSize: 15,
-                    ),
-                    prefixIcon: const Icon(
-                      Icons.search,
-                      color: Color(0xFF94A3B8),
-                      size: 22,
-                    ),
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(
-                      vertical: 14,
-                      horizontal: 16,
+              // Search Bar with Floating Autocomplete Dropdown Overlay
+              CompositedTransformTarget(
+                link: _searchLayerLink,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.04),
+                        blurRadius: 10,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: TextField(
+                    controller: _searchController,
+                    onChanged: (val) {
+                      setState(() => _searchQuery = val);
+                      _updateSearchOverlay();
+                    },
+                    style: GoogleFonts.outfit(color: Colors.black),
+                    decoration: InputDecoration(
+                      hintText: 'ค้นหาร้าน หรือ ร้านค้า...',
+                      hintStyle: GoogleFonts.outfit(
+                        color: const Color(0xFF94A3B8),
+                        fontSize: 15,
+                      ),
+                      prefixIcon: const Icon(
+                        Icons.search,
+                        color: Color(0xFF94A3B8),
+                        size: 22,
+                      ),
+                      suffixIcon: _searchQuery.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(
+                                Icons.clear,
+                                color: Color(0xFF94A3B8),
+                                size: 20,
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  _searchQuery = '';
+                                  _searchController.clear();
+                                });
+                                _hideSearchOverlay();
+                              },
+                            )
+                          : null,
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(
+                        vertical: 14,
+                        horizontal: 16,
+                      ),
                     ),
                   ),
                 ),
               ),
+              const SizedBox(height: 14),
+
+              // Category Filter Chips
+              _buildCategoryFilterChips(),
               const SizedBox(height: 24),
 
               // Followed Shops Section
@@ -500,9 +727,9 @@ class _HomeTabState extends State<_HomeTab> {
                   : _filteredShops.isEmpty
                   ? Center(
                       child: Text(
-                        _searchQuery.trim().isEmpty
+                        _selectedCategory == 'ทั้งหมด'
                             ? 'ยังไม่มีร้านแนะนำในขณะนี้'
-                            : 'ไม่พบร้านค้าตามคำค้นหา',
+                            : 'ไม่พบร้านค้าในหมวดหมู่ "$_selectedCategory"',
                         style: GoogleFonts.outfit(
                           color: const Color(0xFF94A3B8),
                         ),
@@ -521,6 +748,13 @@ class _HomeTabState extends State<_HomeTab> {
   }
 
   Widget _buildRecommendedCard(Shop shop) {
+    final hasRating = shop.avgRating != null && shop.avgRating! > 0;
+    final ratingText = hasRating ? shop.avgRating!.toStringAsFixed(1) : 'ใหม่';
+    final reviewCountText = shop.reviewCount > 0 ? '(${shop.reviewCount})' : '';
+    final stallLocation = shop.stallNumber != null && shop.stallNumber!.isNotEmpty
+        ? 'แผง ${shop.stallNumber}'
+        : 'โซนตลาด';
+
     return GestureDetector(
       onTap: () => _navigateToShopDetail(shop),
       child: Container(
@@ -530,55 +764,316 @@ class _HomeTabState extends State<_HomeTab> {
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
+              color: const Color(0xFF0F172A).withValues(alpha: 0.06),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
             ),
           ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Cover Image
-            ClipRRect(
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(20),
-              ),
-              child: AspectRatio(
-                aspectRatio: 1.6,
-                child: shop.shopImage != null && shop.shopImage!.isNotEmpty
-                    ? (shop.shopImage!.startsWith('http')
-                          ? Image.network(shop.shopImage!, fit: BoxFit.cover)
-                          : Image.network(
-                              ApiService.getImagePath(shop.shopImage),
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) =>
-                                  _buildCoverPlaceholder(),
-                            ))
-                    : _buildCoverPlaceholder(),
-              ),
+            // Cover Image Stack with Badges
+            Stack(
+              children: [
+                ClipRRect(
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(20),
+                  ),
+                  child: AspectRatio(
+                    aspectRatio: 1.7,
+                    child: shop.shopImage != null && shop.shopImage!.isNotEmpty
+                        ? (shop.shopImage!.startsWith('http')
+                            ? Image.network(shop.shopImage!, fit: BoxFit.cover)
+                            : Image.network(
+                                ApiService.getImagePath(shop.shopImage),
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) =>
+                                    _buildCoverPlaceholder(),
+                              ))
+                        : _buildCoverPlaceholder(),
+                  ),
+                ),
+                // Gradient Overlay at the bottom of image for contrast
+                Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(20),
+                      ),
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.black.withValues(alpha: 0.25),
+                          Colors.transparent,
+                          Colors.black.withValues(alpha: 0.45),
+                        ],
+                        stops: const [0.0, 0.4, 1.0],
+                      ),
+                    ),
+                  ),
+                ),
+                // Top Left: Category Badge Pill (High-Contrast Solid Badge)
+                Positioned(
+                  top: 12,
+                  left: 12,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0F172A),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.25),
+                        width: 1,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.25),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _getCategoryIcon(shop.categoryName),
+                          color: const Color(0xFF60A5FA),
+                          size: 13,
+                        ),
+                        const SizedBox(width: 5),
+                        Text(
+                          shop.categoryName,
+                          style: GoogleFonts.outfit(
+                            color: Colors.white,
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.2,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                // Top Right: Follower Count / Status Badge
+                Positioned(
+                  top: 12,
+                  right: 12,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E88E5),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF1E88E5).withValues(alpha: 0.4),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.favorite,
+                          color: Colors.white,
+                          size: 13,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${shop.followerCount}',
+                          style: GoogleFonts.outfit(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                // Bottom Left: Floating Stall Badge
+                Positioned(
+                  bottom: 10,
+                  left: 12,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.15),
+                          blurRadius: 6,
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.storefront_rounded,
+                          color: Color(0xFF1E88E5),
+                          size: 14,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          stallLocation,
+                          style: GoogleFonts.outfit(
+                            color: const Color(0xFF0F172A),
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        if (shop.zoneName != null && shop.zoneName!.isNotEmpty) ...[
+                          Text(
+                            ' (${shop.zoneName})',
+                            style: GoogleFonts.outfit(
+                              color: const Color(0xFF64748B),
+                              fontSize: 11,
+                              fontWeight: FontWeight.normal,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
+
             // Info Section
             Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    shop.shopName,
-                    style: GoogleFonts.outfit(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: const Color(0xFF0F172A),
-                    ),
+                  // Row 1: Shop Name & Rating Badge
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          shop.shopName,
+                          style: GoogleFonts.outfit(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF0F172A),
+                            height: 1.2,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Rating Badge Pill
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFFBEB),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: const Color(0xFFFCD34D),
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.star_rounded,
+                              color: Color(0xFFF59E0B),
+                              size: 16,
+                            ),
+                            const SizedBox(width: 3),
+                            Text(
+                              ratingText,
+                              style: GoogleFonts.outfit(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: const Color(0xFFB45309),
+                              ),
+                            ),
+                            if (reviewCountText.isNotEmpty) ...[
+                              const SizedBox(width: 2),
+                              Text(
+                                reviewCountText,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 11,
+                                  color: const Color(0xFFD97706),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 4),
+
+                  const SizedBox(height: 6),
+
+                  // Row 2: Description (High contrast dark slate color)
                   Text(
-                    shop.description ?? 'ร้านค้าคุณภาพสำหรับคุณ',
+                    shop.description ?? 'ร้านค้าคุณภาพ คัดสรรมาเพื่อคุณ',
                     style: GoogleFonts.outfit(
-                      fontSize: 14,
-                      color: const Color(0xFF64748B),
+                      fontSize: 13.5,
+                      color: const Color(0xFF334155),
+                      height: 1.4,
+                      fontWeight: FontWeight.w400,
                     ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+
+                  const SizedBox(height: 12),
+                  const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                  const SizedBox(height: 10),
+
+                  // Row 3: Action Footer
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.check_circle_rounded,
+                            size: 15,
+                            color: Color(0xFF10B981),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'พร้อมให้บริการ',
+                            style: GoogleFonts.outfit(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFF059669),
+                            ),
+                          ),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          Text(
+                            'เข้าชมร้านค้า',
+                            style: GoogleFonts.outfit(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: const Color(0xFF1E88E5),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          const Icon(
+                            Icons.arrow_forward_ios_rounded,
+                            size: 12,
+                            color: Color(0xFF1E88E5),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -587,6 +1082,538 @@ class _HomeTabState extends State<_HomeTab> {
         ),
       ),
     );
+  }
+
+  Widget _buildSearchDropdown() {
+    final results = _searchResultShops;
+
+    return Material(
+      color: Colors.transparent,
+      elevation: 0,
+      child: Container(
+        constraints: const BoxConstraints(maxHeight: 340),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF0F172A).withValues(alpha: 0.12),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
+            ),
+          ],
+          border: Border.all(
+            color: const Color(0xFFE2E8F0),
+            width: 1,
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'ผลการค้นหาร้านค้า',
+                    style: GoogleFonts.outfit(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF64748B),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE0F2FE),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      '${results.length} รายการ',
+                      style: GoogleFonts.outfit(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF0284C7),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1, color: Color(0xFFF1F5F9)),
+            if (results.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.search_off_rounded,
+                        size: 36,
+                        color: Color(0xFF94A3B8),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'ไม่พบร้านค้าที่ตรงกับ "$_searchQuery"',
+                        style: GoogleFonts.outfit(
+                          fontSize: 14,
+                          color: const Color(0xFF64748B),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              Flexible(
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  itemCount: results.length > 6 ? 6 : results.length,
+                  separatorBuilder: (ctx, i) => const Divider(
+                    height: 1,
+                    color: Color(0xFFF8FAFC),
+                    indent: 68,
+                  ),
+                  itemBuilder: (context, index) {
+                    final shop = results[index];
+                    final hasRating =
+                        shop.avgRating != null && shop.avgRating! > 0;
+                    final ratingText =
+                        hasRating ? shop.avgRating!.toStringAsFixed(1) : 'ใหม่';
+                    final stallInfo =
+                        shop.stallNumber != null && shop.stallNumber!.isNotEmpty
+                            ? 'แผง ${shop.stallNumber}'
+                            : 'โซนตลาด';
+
+                    return InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () {
+                        FocusScope.of(context).unfocus();
+                        setState(() {
+                          _searchQuery = '';
+                          _searchController.clear();
+                        });
+                        _navigateToShopDetail(shop);
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
+                        child: Row(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: Container(
+                                width: 44,
+                                height: 44,
+                                color: const Color(0xFFF1F5F9),
+                                child: shop.shopImage != null &&
+                                        shop.shopImage!.isNotEmpty
+                                    ? (shop.shopImage!.startsWith('http')
+                                        ? Image.network(
+                                            shop.shopImage!,
+                                            fit: BoxFit.cover,
+                                          )
+                                        : Image.network(
+                                            ApiService.getImagePath(
+                                              shop.shopImage,
+                                            ),
+                                            fit: BoxFit.cover,
+                                            errorBuilder:
+                                                (ctx, err, stack) => const Icon(
+                                                  Icons.storefront,
+                                                  color: Color(0xFF64748B),
+                                                  size: 24,
+                                                ),
+                                          ))
+                                    : const Icon(
+                                        Icons.storefront,
+                                        color: Color(0xFF64748B),
+                                        size: 24,
+                                      ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    shop.shopName,
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      color: const Color(0xFF0F172A),
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '${shop.categoryName} • $stallInfo',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 12,
+                                      color: const Color(0xFF64748B),
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 7,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFFFBEB),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: const Color(0xFFFCD34D),
+                                  width: 1,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.star_rounded,
+                                    color: Color(0xFFF59E0B),
+                                    size: 14,
+                                  ),
+                                  const SizedBox(width: 2),
+                                  Text(
+                                    ratingText,
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: const Color(0xFFB45309),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            const Icon(
+                              Icons.arrow_forward_ios_rounded,
+                              size: 12,
+                              color: Color(0xFFCBD5E1),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showCategoryBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.75,
+          ),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 12),
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFCBD5E1),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 8,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'เลือกหมวดหมู่ร้านค้า',
+                      style: GoogleFonts.outfit(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF0F172A),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.close_rounded,
+                        color: Color(0xFF64748B),
+                      ),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1, color: Color(0xFFF1F5F9)),
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(20),
+                  child: Wrap(
+                    spacing: 10,
+                    runSpacing: 12,
+                    children: _categories.map((cat) {
+                      final isSelected = _selectedCategory == cat;
+                      final icon = _getCategoryIcon(cat);
+                      final count = cat == 'ทั้งหมด'
+                          ? _shops.length
+                          : _shops
+                              .where((s) => s.categoryName.trim() == cat.trim())
+                              .length;
+
+                      return GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _selectedCategory = cat;
+                          });
+                          Navigator.pop(ctx);
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? const Color(0xFF1E88E5)
+                                : const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: isSelected
+                                  ? const Color(0xFF1E88E5)
+                                  : const Color(0xFFE2E8F0),
+                              width: 1.5,
+                            ),
+                            boxShadow: isSelected
+                                ? [
+                                    BoxShadow(
+                                      color: const Color(
+                                        0xFF1E88E5,
+                                      ).withValues(alpha: 0.3),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 3),
+                                    ),
+                                  ]
+                                : [],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                icon,
+                                size: 18,
+                                color: isSelected
+                                    ? Colors.white
+                                    : const Color(0xFF475569),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                cat,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 14,
+                                  fontWeight: isSelected
+                                      ? FontWeight.bold
+                                      : FontWeight.w600,
+                                  color: isSelected
+                                      ? Colors.white
+                                      : const Color(0xFF1E293B),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? Colors.white.withValues(alpha: 0.25)
+                                      : const Color(0xFFE2E8F0),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Text(
+                                  '$count',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: isSelected
+                                        ? Colors.white
+                                        : const Color(0xFF64748B),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildCategoryFilterChips() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        children: [
+          // Main Category Selector Button (Opens Bottom Sheet)
+          GestureDetector(
+            onTap: _showCategoryBottomSheet,
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 8,
+              ),
+              decoration: BoxDecoration(
+                color: _selectedCategory != 'ทั้งหมด'
+                    ? const Color(0xFF1E88E5)
+                    : const Color(0xFF0F172A),
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.06),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.tune_rounded,
+                    size: 16,
+                    color: Colors.white,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    _selectedCategory == 'ทั้งหมด'
+                        ? 'หมวดหมู่ร้านค้า (${_categories.length - 1})'
+                        : 'หมวดหมู่: $_selectedCategory',
+                    style: GoogleFonts.outfit(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  const Icon(
+                    Icons.keyboard_arrow_down_rounded,
+                    size: 18,
+                    color: Colors.white,
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(width: 8),
+
+          // Reset Filter Chip (If a specific category is selected)
+          if (_selectedCategory != 'ทั้งหมด')
+            GestureDetector(
+              onTap: () {
+                setState(() {
+                  _selectedCategory = 'ทั้งหมด';
+                });
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF2F2),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: const Color(0xFFFCA5A5),
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.close_rounded,
+                      size: 15,
+                      color: Color(0xFFEF4444),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'ล้างตัวกรอง',
+                      style: GoogleFonts.outfit(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFFEF4444),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  IconData _getCategoryIcon(String cat) {
+    if (cat == 'ทั้งหมด') return Icons.grid_view_rounded;
+    if (cat.contains('อาหาร')) return Icons.restaurant_rounded;
+    if (cat.contains('เครื่องดื่ม') ||
+        cat.contains('กาแฟ') ||
+        cat.contains('ชา')) {
+      return Icons.local_cafe_rounded;
+    }
+    if (cat.contains('ขนม') || cat.contains('เบเกอรี่')) {
+      return Icons.bakery_dining_rounded;
+    }
+    if (cat.contains('สตรีทฟู้ด') || cat.contains('ทานเล่น')) {
+      return Icons.fastfood_rounded;
+    }
+    if (cat.contains('ของใช้') || cat.contains('เสื้อผ้า')) {
+      return Icons.shopping_bag_rounded;
+    }
+    if (cat.contains('ผลไม้') || cat.contains('ผัก')) {
+      return Icons.eco_rounded;
+    }
+    return Icons.storefront_rounded;
   }
 
   Widget _buildCoverPlaceholder() {
@@ -614,6 +1641,7 @@ class _ProfileTabState extends State<_ProfileTab> {
   final ImagePicker _picker = ImagePicker();
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
+  int _unreadNotificationCount = 0;
 
   List<String> _dbInterests = [];
   bool _isLoadingInterests = true;
@@ -623,6 +1651,14 @@ class _ProfileTabState extends State<_ProfileTab> {
   void initState() {
     super.initState();
     _fetchInterestsFromDb();
+    _loadNotificationCount();
+  }
+
+  Future<void> _loadNotificationCount() async {
+    try {
+      final unread = await AnnouncementService.getUnreadCount();
+      if (mounted) setState(() => _unreadNotificationCount = unread);
+    } catch (_) {}
   }
 
   Future<void> _fetchInterestsFromDb() async {
@@ -932,8 +1968,9 @@ class _ProfileTabState extends State<_ProfileTab> {
                       ),
                     ),
                     GestureDetector(
-                      onTap: () {
-                        Navigator.pushNamed(context, '/announcements');
+                      onTap: () async {
+                        await Navigator.pushNamed(context, '/announcements');
+                        _loadNotificationCount();
                       },
                       child: Stack(
                         children: [
@@ -950,25 +1987,37 @@ class _ProfileTabState extends State<_ProfileTab> {
                               size: 24,
                             ),
                           ),
-                          Positioned(
-                            right: 2,
-                            top: 2,
-                            child: Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: const BoxDecoration(
-                                color: Colors.red,
-                                shape: BoxShape.circle,
-                              ),
-                              child: Text(
-                                '1',
-                                style: GoogleFonts.outfit(
-                                  color: Colors.white,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
+                          if (_unreadNotificationCount > 0)
+                            Positioned(
+                              right: 2,
+                              top: 2,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 5,
+                                  vertical: 2,
+                                ),
+                                constraints: const BoxConstraints(
+                                  minWidth: 18,
+                                  minHeight: 18,
+                                ),
+                                decoration: const BoxDecoration(
+                                  color: Colors.red,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    _unreadNotificationCount > 99
+                                        ? '99+'
+                                        : '$_unreadNotificationCount',
+                                    style: GoogleFonts.outfit(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
                         ],
                       ),
                     ),
@@ -1369,8 +2418,9 @@ class _ProfileTabState extends State<_ProfileTab> {
               Align(
                 alignment: Alignment.topRight,
                 child: GestureDetector(
-                  onTap: () {
-                    Navigator.pushNamed(context, '/announcements');
+                  onTap: () async {
+                    await Navigator.pushNamed(context, '/announcements');
+                    _loadNotificationCount();
                   },
                   child: Stack(
                     children: [
@@ -1387,25 +2437,37 @@ class _ProfileTabState extends State<_ProfileTab> {
                           size: 24,
                         ),
                       ),
-                      Positioned(
-                        right: 2,
-                        top: 2,
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: const BoxDecoration(
-                            color: Colors.red,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Text(
-                            '1',
-                            style: GoogleFonts.outfit(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
+                      if (_unreadNotificationCount > 0)
+                        Positioned(
+                          right: 2,
+                          top: 2,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 2,
+                            ),
+                            constraints: const BoxConstraints(
+                              minWidth: 18,
+                              minHeight: 18,
+                            ),
+                            decoration: const BoxDecoration(
+                              color: Colors.red,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Center(
+                              child: Text(
+                                _unreadNotificationCount > 99
+                                    ? '99+'
+                                    : '$_unreadNotificationCount',
+                                style: GoogleFonts.outfit(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                             ),
                           ),
                         ),
-                      ),
                     ],
                   ),
                 ),
@@ -1722,11 +2784,20 @@ class _FollowedTabState extends State<_FollowedTab> {
   Map<int, double> _shopRatings = {};
   bool _isLoading = true;
   String _searchQuery = '';
+  int _unreadNotificationCount = 0;
 
   @override
   void initState() {
     super.initState();
     _loadShops();
+    _loadNotificationCount();
+  }
+
+  Future<void> _loadNotificationCount() async {
+    try {
+      final unread = await AnnouncementService.getUnreadCount();
+      if (mounted) setState(() => _unreadNotificationCount = unread);
+    } catch (_) {}
   }
 
   Future<void> _loadShops() async {
@@ -1923,8 +2994,9 @@ class _FollowedTabState extends State<_FollowedTab> {
                     ),
                     // Notification bell
                     GestureDetector(
-                      onTap: () {
-                        Navigator.pushNamed(context, '/announcements');
+                      onTap: () async {
+                        await Navigator.pushNamed(context, '/announcements');
+                        _loadNotificationCount();
                       },
                       child: Stack(
                         children: [
@@ -1941,25 +3013,37 @@ class _FollowedTabState extends State<_FollowedTab> {
                               size: 24,
                             ),
                           ),
-                          Positioned(
-                            right: 2,
-                            top: 2,
-                            child: Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: const BoxDecoration(
-                                color: Colors.red,
-                                shape: BoxShape.circle,
-                              ),
-                              child: Text(
-                                '1',
-                                style: GoogleFonts.outfit(
-                                  color: Colors.white,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
+                          if (_unreadNotificationCount > 0)
+                            Positioned(
+                              right: 2,
+                              top: 2,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 5,
+                                  vertical: 2,
+                                ),
+                                constraints: const BoxConstraints(
+                                  minWidth: 18,
+                                  minHeight: 18,
+                                ),
+                                decoration: const BoxDecoration(
+                                  color: Colors.red,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    _unreadNotificationCount > 99
+                                        ? '99+'
+                                        : '$_unreadNotificationCount',
+                                    style: GoogleFonts.outfit(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
                         ],
                       ),
                     ),

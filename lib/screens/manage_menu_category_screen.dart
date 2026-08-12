@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/item.dart';
+import '../services/api_service.dart';
 
 class ManageMenuCategoryScreen extends StatefulWidget {
   const ManageMenuCategoryScreen({super.key});
@@ -494,37 +495,37 @@ class _ManageMenuCategoryScreenState extends State<ManageMenuCategoryScreen> {
                                 // Item Image
                                 ClipRRect(
                                   borderRadius: BorderRadius.circular(12),
-                                  child: Image.network(
-                                    'http://10.0.2.2:8000/storage/custom_images/${item.itemImage}',
+                                  child: Container(
                                     width: 56,
                                     height: 56,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) {
-                                      return Image.asset(
-                                        'assets/${item.itemImage}',
-                                        width: 56,
-                                        height: 56,
-                                        fit: BoxFit.cover,
-                                        errorBuilder:
-                                            (context, error, stackTrace) {
-                                              return Container(
-                                                width: 56,
-                                                height: 56,
-                                                decoration: BoxDecoration(
-                                                  color: const Color(
-                                                    0xFFEFF6FF,
-                                                  ),
-                                                  borderRadius:
-                                                      BorderRadius.circular(12),
-                                                ),
-                                                child: const Icon(
-                                                  Icons.fastfood,
+                                    color: const Color(0xFFEFF6FF),
+                                    child:
+                                        item.itemImage != null &&
+                                                item.itemImage!.isNotEmpty
+                                            ? Image.network(
+                                              ApiService.getImagePath(
+                                                item.itemImage,
+                                              ),
+                                              width: 56,
+                                              height: 56,
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (
+                                                context,
+                                                error,
+                                                stackTrace,
+                                              ) {
+                                                return const Icon(
+                                                  Icons.fastfood_rounded,
                                                   color: Color(0xFF2563EB),
-                                                ),
-                                              );
-                                            },
-                                      );
-                                    },
+                                                  size: 26,
+                                                );
+                                              },
+                                            )
+                                            : const Icon(
+                                              Icons.fastfood_rounded,
+                                              color: Color(0xFF2563EB),
+                                              size: 26,
+                                            ),
                                   ),
                                 ),
                                 const SizedBox(width: 14),

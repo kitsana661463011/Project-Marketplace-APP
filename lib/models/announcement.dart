@@ -37,4 +37,23 @@ class Announcement {
 
   bool get isUrgent => announcementType == 'urgent';
   bool get isActivity => announcementType == 'activity';
+  bool get isGeneral =>
+      announcementType == 'general' || (!isUrgent && !isActivity);
+
+  /// กรองประกาศตามบทบาทผู้ใช้:
+  /// - ลูกค้า (buyer): แสดงเฉพาะประกาศทั่วไป (general)
+  /// - ผู้ค้า (seller/vendor/admin): แสดงประกาศทุกประเภท
+  static List<Announcement> filterByRole(
+    List<Announcement> list,
+    String? userRole,
+  ) {
+    final role = (userRole ?? 'buyer').toLowerCase();
+    final isVendor = role == 'seller' || role == 'vendor' || role == 'admin';
+
+    if (isVendor) {
+      return list;
+    }
+
+    return list.where((item) => item.isGeneral).toList();
+  }
 }

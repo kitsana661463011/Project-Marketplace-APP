@@ -69,6 +69,7 @@ class ShopService {
     int? categoryId,
     String? description,
     String? shopPhone,
+    String? status,
     String? fileName,
     dynamic fileBytes,
   }) async {
@@ -81,6 +82,10 @@ class ShopService {
 
       if (categoryId != null) {
         fields['category_id'] = categoryId.toString();
+      }
+
+      if (status != null) {
+        fields['status'] = status;
       }
 
       if (fileName != null) {
@@ -101,6 +106,30 @@ class ShopService {
     } catch (e) {
       // Catch exceptions
     }
+    return null;
+  }
+
+  static Future<Shop?> updateShopStatus(int shopId, String status) async {
+    try {
+      final response = await ApiService.put('/v1/shops/$shopId', {
+        'status': status,
+      });
+      if (response['status'] == true && response['data'] != null) {
+        return Shop.fromJson(response['data']);
+      }
+    } catch (_) {}
+
+    // Fallback: try multipart PUT endpoint if PUT JSON is not supported
+    try {
+      final response = await ApiService.postMultipart(
+        '/v1/shops/$shopId?_method=PUT',
+        {'status': status},
+      );
+      if (response['status'] == true && response['data'] != null) {
+        return Shop.fromJson(response['data']);
+      }
+    } catch (_) {}
+
     return null;
   }
 
