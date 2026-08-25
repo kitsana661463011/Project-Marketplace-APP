@@ -24,28 +24,37 @@ class _ShopDetailScreenState extends State<ShopDetailScreen> {
   List<Item> _items = [];
   bool _isLoading = true;
   int _originTabIndex = 0;
-  late Shop _shop;
+  Shop _shop = Shop(shopName: 'ร้านค้า');
   int _reviewCount = 0;
   double _averageRating = 0.0;
+  int _followerCount = 0;
+  bool _isInitialized = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final args = ModalRoute.of(context)!.settings.arguments;
-    if (args is Shop) {
-      _shop = args;
-      _originTabIndex = 0;
-    } else if (args is Map) {
-      _shop = args['shop'] as Shop;
-      _originTabIndex = args['tabIndex'] as int? ?? 0;
-    }
-    _loadItems(_shop.shopId);
-    _loadReviewSummary(_shop.shopId);
-    final auth = Provider.of<AuthService>(context, listen: false);
-    if (auth.currentUser != null &&
-        auth.currentUser!.userId != null &&
-        _shop.shopId != null) {
-      _checkFollowStatus(auth.currentUser!.userId!, _shop.shopId!);
+    if (!_isInitialized) {
+      final args = ModalRoute.of(context)?.settings.arguments;
+      if (args is Shop) {
+        _shop = args;
+        _originTabIndex = 0;
+      } else if (args is Map) {
+        _shop = args['shop'] as Shop? ?? Shop(shopName: 'ร้านค้า');
+        _originTabIndex = args['tabIndex'] as int? ?? 0;
+      }
+      _followerCount = _shop.followerCount;
+      if (_shop.shopId != null) {
+        _loadItems(_shop.shopId);
+        _loadReviewSummary(_shop.shopId);
+        final auth = Provider.of<AuthService>(context, listen: false);
+        if (auth.currentUser != null &&
+            auth.currentUser!.userId != null) {
+          _checkFollowStatus(auth.currentUser!.userId!, _shop.shopId!);
+        }
+      } else {
+        setState(() => _isLoading = false);
+      }
+      _isInitialized = true;
     }
   }
 
@@ -62,9 +71,32 @@ class _ShopDetailScreenState extends State<ShopDetailScreen> {
   Future<void> _toggleFollow() async {
     final auth = Provider.of<AuthService>(context, listen: false);
     final user = auth.currentUser;
-    if (user == null || user.userId == null || _shop.shopId == null) return;
+    if (user == null || user.userId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'กรุณาเข้าสู่ระบบก่อนกดติดตามร้านค้า',
+            style: GoogleFonts.outfit(),
+          ),
+          backgroundColor: Colors.orangeAccent,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+    if (_shop.shopId == null) return;
 
-    setState(() => _isFavorite = !_isFavorite);
+    final willFollow = !_isFavorite;
+    setState(() {
+      _isFavorite = willFollow;
+      if (willFollow) {
+        _followerCount += 1;
+      } else {
+        _followerCount = (_followerCount - 1).clamp(0, 999999);
+      }
+    });
+
     final res = await ShopService.toggleFollowShop(
       userId: user.userId!,
       shopId: _shop.shopId!,
@@ -73,7 +105,10 @@ class _ShopDetailScreenState extends State<ShopDetailScreen> {
       ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(res['message'] ?? 'อัปเดตการติดตามเรียบร้อยแล้ว'),
+          content: Text(
+            res['message'] ?? (willFollow ? 'ติดตามร้านค้าเรียบร้อยแล้ว' : 'ยกเลิกการติดตามเรียบร้อยแล้ว'),
+            style: GoogleFonts.outfit(),
+          ),
           duration: const Duration(seconds: 2),
           behavior: SnackBarBehavior.floating,
         ),
@@ -412,54 +447,114 @@ class _ShopDetailScreenState extends State<ShopDetailScreen> {
                 ),
                 const SizedBox(height: 12),
 
-                // Card 3: Stall Location Info
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF8FAFC),
+                // Card 3: Stall Location Info (Tap to navigate to market map)
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
                     borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF59E0B).withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: const Icon(
-                          Icons.storefront_rounded,
-                          color: Color(0xFFF59E0B),
-                          size: 22,
-                        ),
+                    onTap: () {
+                      Navigator.pop(context);
+                      final String targetStall = _shop.stallNumber ?? 'C01';
+                      Navigator.pushNamed(
+                        context,
+                        '/market_map',
+                        arguments: {
+                          'shop': _shop,
+                          'stall_number': targetStall,
+                        },
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
                       ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'ตำแหน่งแผงค้าในตลาด',
-                              style: GoogleFonts.outfit(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: const Color(0xFF64748B),
-                              ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF59E0B).withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(14),
                             ),
-                            const SizedBox(height: 2),
-                            Text(
-                              '$stallLocation ($zoneInfo)',
-                              style: GoogleFonts.outfit(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                                color: const Color(0xFF0F172A),
-                              ),
+                            child: const Icon(
+                              Icons.storefront_rounded,
+                              color: Color(0xFFF59E0B),
+                              size: 22,
                             ),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      'ตำแหน่งแผงค้าในตลาด',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: const Color(0xFF64748B),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 7,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFECFDF5),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(
+                                          color: const Color(0xFFA7F3D0),
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(
+                                            Icons.map_outlined,
+                                            size: 11,
+                                            color: Color(0xFF059669),
+                                          ),
+                                          const SizedBox(width: 3),
+                                          Text(
+                                            'ดูแผนที่',
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                              color: const Color(0xFF059669),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '$stallLocation ($zoneInfo)',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: const Color(0xFF0F172A),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(
+                            Icons.arrow_forward_ios_rounded,
+                            size: 15,
+                            color: Color(0xFF94A3B8),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 24),
@@ -903,29 +998,49 @@ class _ShopDetailScreenState extends State<ShopDetailScreen> {
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                       const SizedBox(height: 4),
-                                      Row(
-                                        children: [
-                                          const Icon(
-                                            Icons.place_rounded,
-                                            color: Color(0xFF2563EB),
-                                            size: 14,
-                                          ),
-                                          const SizedBox(width: 3),
-                                          Expanded(
-                                            child: Text(
-                                              '$stallLocation ($zoneInfo)',
-                                              style: GoogleFonts.outfit(
-                                                color: const Color(
-                                                  0xFF1E40AF,
-                                                ),
-                                                fontSize: 12.5,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
+                                      GestureDetector(
+                                        onTap: () {
+                                          final String targetStall =
+                                              shop.stallNumber ?? 'C01';
+                                          Navigator.pushNamed(
+                                            context,
+                                            '/market_map',
+                                            arguments: {
+                                              'shop': shop,
+                                              'stall_number': targetStall,
+                                            },
+                                          );
+                                        },
+                                        child: Row(
+                                          children: [
+                                            const Icon(
+                                              Icons.place_rounded,
+                                              color: Color(0xFF2563EB),
+                                              size: 14,
                                             ),
-                                          ),
-                                        ],
+                                            const SizedBox(width: 3),
+                                            Expanded(
+                                              child: Text(
+                                                '$stallLocation ($zoneInfo)',
+                                                style: GoogleFonts.outfit(
+                                                  color: const Color(
+                                                    0xFF1E40AF,
+                                                  ),
+                                                  fontSize: 12.5,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 2),
+                                            const Icon(
+                                              Icons.arrow_forward_ios_rounded,
+                                              size: 10,
+                                              color: Color(0xFF2563EB),
+                                            ),
+                                          ],
+                                        ),
                                       ),
                                       const SizedBox(height: 8),
                                       Wrap(
@@ -1017,6 +1132,36 @@ class _ShopDetailScreenState extends State<ShopDetailScreen> {
                                               ),
                                             ),
                                           ),
+                                          // Shop Tags
+                                          ...shop.tags.map(
+                                            (tag) => Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 3,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFFEFF6FF),
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
+                                                border: Border.all(
+                                                  color: const Color(
+                                                    0xFFBFDBFE,
+                                                  ),
+                                                ),
+                                              ),
+                                              child: Text(
+                                                '#$tag',
+                                                style: GoogleFonts.outfit(
+                                                  color: const Color(
+                                                    0xFF1D4ED8,
+                                                  ),
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
                                         ],
                                       ),
                                     ],
@@ -1103,37 +1248,87 @@ class _ShopDetailScreenState extends State<ShopDetailScreen> {
                                 ),
                               ),
 
-                              // Followers Badge
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 6,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFF1F5F9),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: const Color(0xFFE2E8F0),
+                              // Interactive Follow Button (กดติดตามร้านค้าได้ทันที เด่น ชัดเจน)
+                              GestureDetector(
+                                onTap: _toggleFollow,
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 200),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 6,
                                   ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(
-                                      Icons.favorite_rounded,
-                                      color: Colors.redAccent,
-                                      size: 15,
+                                  decoration: BoxDecoration(
+                                    color: _isFavorite
+                                        ? const Color(0xFFFEF2F2)
+                                        : const Color(0xFFEFF6FF),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: _isFavorite
+                                          ? const Color(0xFFFECACA)
+                                          : const Color(0xFFBFDBFE),
+                                      width: 1.2,
                                     ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      '${shop.followerCount} ผู้ติดตาม',
-                                      style: GoogleFonts.outfit(
-                                        color: const Color(0xFF475569),
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.bold,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: _isFavorite
+                                            ? const Color(0xFFE11D48)
+                                                .withValues(alpha: 0.08)
+                                            : const Color(0xFF2563EB)
+                                                .withValues(alpha: 0.08),
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 2),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        _isFavorite
+                                            ? Icons.favorite_rounded
+                                            : Icons.favorite_border_rounded,
+                                        color: _isFavorite
+                                            ? const Color(0xFFE11D48)
+                                            : const Color(0xFF2563EB),
+                                        size: 16,
+                                      ),
+                                      const SizedBox(width: 5),
+                                      Text(
+                                        _isFavorite ? 'กำลังติดตาม' : 'ติดตาม',
+                                        style: GoogleFonts.outfit(
+                                          color: _isFavorite
+                                              ? const Color(0xFFE11D48)
+                                              : const Color(0xFF1D4ED8),
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 1.5,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: _isFavorite
+                                              ? const Color(0xFFFEE2E2)
+                                              : const Color(0xFFDBEAFE),
+                                          borderRadius:
+                                              BorderRadius.circular(10),
+                                        ),
+                                        child: Text(
+                                          '$_followerCount',
+                                          style: GoogleFonts.outfit(
+                                            color: _isFavorite
+                                                ? const Color(0xFFBE123C)
+                                                : const Color(0xFF1E40AF),
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
                             ],

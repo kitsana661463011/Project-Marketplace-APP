@@ -269,7 +269,7 @@ class _ProblemHistoryScreenState extends State<ProblemHistoryScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          'แจ้งปัญหา / ประวัติ',
+          'แจ้งปัญหา',
           style: GoogleFonts.outfit(
             color: const Color(0xFF0F172A),
             fontWeight: FontWeight.bold,

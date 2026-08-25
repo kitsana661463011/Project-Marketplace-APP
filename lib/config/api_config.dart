@@ -23,6 +23,7 @@ class ApiConfig {
   static const String bookings = '/v1/bookings';
   static const String announcements = '/v1/admin/announcements';
   static const String shopReviews = '/v1/shop-reviews';
+  static const String reviewReactions = '/v1/shop-reviews/reaction';
   static const String reviewReports = '/v1/review-reports';
   static const String categories = '/v1/categories';
   static const String forgotPassword = '/v1/forgot-password';

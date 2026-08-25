@@ -15,6 +15,7 @@ class Shop {
   final String? stallNumber;
   final String? zoneName;
   final String status;
+  final List<String> tags;
 
   Shop({
     this.shopId,
@@ -33,6 +34,7 @@ class Shop {
     this.stallNumber,
     this.zoneName,
     this.status = 'เปิดบริการอยู่',
+    this.tags = const [],
   });
 
   factory Shop.fromJson(Map<String, dynamic> json) {
@@ -43,6 +45,20 @@ class Shop {
             : (json['is_open'] == false || json['is_open'] == 0
                 ? 'ปิดบริการชั่วคราว'
                 : 'เปิดบริการอยู่');
+
+    final rawTags = json['tags'];
+    final List<String> parsedTags = [];
+    if (rawTags is List) {
+      for (var t in rawTags) {
+        if (t != null && t.toString().trim().isNotEmpty) {
+          parsedTags.add(t.toString().trim());
+        }
+      }
+    } else if (rawTags is String && rawTags.trim().isNotEmpty) {
+      parsedTags.addAll(
+        rawTags.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty),
+      );
+    }
 
     return Shop(
       shopId: json['shop_id'],
@@ -76,6 +92,7 @@ class Shop {
       stallNumber: json['stall_number']?.toString(),
       zoneName: json['zone_name']?.toString(),
       status: parsedStatus,
+      tags: parsedTags,
     );
   }
 

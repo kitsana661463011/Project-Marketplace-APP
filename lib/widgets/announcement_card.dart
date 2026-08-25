@@ -145,7 +145,7 @@ class AnnouncementCard extends StatelessWidget {
       case 'activity':
         return 'กิจกรรม';
       default:
-        return 'ทั่วไป';
+        return 'ประกาศทั่วไป';
     }
   }
 }

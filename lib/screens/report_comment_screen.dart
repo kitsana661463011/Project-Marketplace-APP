@@ -13,7 +13,14 @@ class ReportCommentScreen extends StatefulWidget {
 }
 
 class _ReportCommentScreenState extends State<ReportCommentScreen> {
-  late ReviewItem _review;
+  ReviewItem _review = ReviewItem(
+    reviewId: 0,
+    userName: 'ผู้ใช้ทั่วไป',
+    userAvatar: '',
+    rating: 5.0,
+    timeAgo: 'เมื่อสักครู่',
+    reviewText: '',
+  );
   final _reasonController = TextEditingController();
   final List<String> _selectedTags = [];
   bool _isSubmitting = false;
@@ -28,10 +35,10 @@ class _ReportCommentScreenState extends State<ReportCommentScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final args = ModalRoute.of(context)!.settings.arguments;
+    final args = ModalRoute.of(context)?.settings.arguments;
     if (args is ReviewItem) {
       _review = args;
-    } else if (args is Map) {
+    } else if (args is Map && args['review'] is ReviewItem) {
       _review = args['review'] as ReviewItem;
     }
   }
@@ -180,10 +187,32 @@ class _ReportCommentScreenState extends State<ReportCommentScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         CircleAvatar(
                           radius: 20,
-                          backgroundImage: NetworkImage(_review.userAvatar),
+                          backgroundColor: const Color(0xFFF1F5F9),
+                          child: _review.userAvatar.isNotEmpty
+                              ? ClipOval(
+                                  child: Image.network(
+                                    _review.userAvatar,
+                                    width: 40,
+                                    height: 40,
+                                    fit: BoxFit.cover,
+                                    errorBuilder:
+                                        (context, error, stackTrace) =>
+                                            const Icon(
+                                              Icons.person,
+                                              color: Color(0xFF94A3B8),
+                                              size: 22,
+                                            ),
+                                  ),
+                                )
+                              : const Icon(
+                                  Icons.person,
+                                  color: Color(0xFF94A3B8),
+                                  size: 22,
+                                ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -197,26 +226,85 @@ class _ReportCommentScreenState extends State<ReportCommentScreen> {
                                   fontWeight: FontWeight.bold,
                                   color: const Color(0xFF0F172A),
                                 ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
-                              const SizedBox(height: 2),
-                              Text(
-                                _review.timeAgo,
-                                style: GoogleFonts.outfit(
-                                  fontSize: 12,
-                                  color: const Color(0xFF64748B),
-                                ),
+                              const SizedBox(height: 3),
+                              Row(
+                                children: [
+                                  const Icon(
+                                    Icons.access_time_rounded,
+                                    size: 12,
+                                    color: Color(0xFF94A3B8),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    _review.timeAgo,
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 12,
+                                      color: const Color(0xFF64748B),
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
                         ),
-                        Row(
-                          children: List.generate(5, (starIndex) {
-                            return Icon(
-                              starIndex < _review.rating.floor() ? Icons.star : Icons.star_border,
-                              color: Colors.amber,
-                              size: 16,
-                            );
-                          }),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFFBEB),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: const Color(0xFFFDE68A),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                _review.rating % 1 == 0
+                                    ? '${_review.rating.toInt()}.0'
+                                    : _review.rating.toStringAsFixed(1),
+                                style: GoogleFonts.outfit(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: const Color(0xFFB45309),
+                                ),
+                              ),
+                              const SizedBox(width: 5),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: List.generate(5, (starIndex) {
+                                  final starVal = starIndex + 1;
+                                  if (starVal <= _review.rating.floor()) {
+                                    return const Icon(
+                                      Icons.star_rounded,
+                                      color: Color(0xFFF59E0B),
+                                      size: 15,
+                                    );
+                                  } else if (starVal - 0.5 <= _review.rating) {
+                                    return const Icon(
+                                      Icons.star_half_rounded,
+                                      color: Color(0xFFF59E0B),
+                                      size: 15,
+                                    );
+                                  } else {
+                                    return const Icon(
+                                      Icons.star_border_rounded,
+                                      color: Color(0xFFCBD5E1),
+                                      size: 15,
+                                    );
+                                  }
+                                }),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),

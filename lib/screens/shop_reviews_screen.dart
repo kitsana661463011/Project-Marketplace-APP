@@ -2,8 +2,10 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import '../models/shop.dart';
 import '../services/review_service.dart';
+import '../services/auth_service.dart';
 import '../services/api_service.dart';
 
 class ReviewItem {
@@ -42,7 +44,7 @@ class ShopReviewsScreen extends StatefulWidget {
 }
 
 class _ShopReviewsScreenState extends State<ShopReviewsScreen> {
-  late Shop _shop;
+  Shop _shop = Shop(shopName: 'ร้านค้า');
   int _originTabIndex = 0;
   bool _isLatestTab = true;
   bool _isLoading = true;
@@ -66,18 +68,23 @@ class _ShopReviewsScreenState extends State<ShopReviewsScreen> {
     _reviews = [];
   }
 
+  bool _isInitialized = false;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final args = ModalRoute.of(context)!.settings.arguments;
-    if (args is Shop) {
-      _shop = args;
-      _originTabIndex = 0;
-    } else if (args is Map) {
-      _shop = args['shop'] as Shop;
-      _originTabIndex = args['tabIndex'] as int? ?? 0;
+    if (!_isInitialized) {
+      final args = ModalRoute.of(context)?.settings.arguments;
+      if (args is Shop) {
+        _shop = args;
+        _originTabIndex = 0;
+      } else if (args is Map) {
+        _shop = args['shop'] as Shop? ?? Shop(shopName: 'ร้านค้า');
+        _originTabIndex = args['tabIndex'] as int? ?? 0;
+      }
+      _loadReviews(_shop.shopId);
+      _isInitialized = true;
     }
-    _loadReviews(_shop.shopId);
   }
 
   Future<void> _loadReviews(int? shopId) async {
@@ -92,7 +99,12 @@ class _ShopReviewsScreenState extends State<ShopReviewsScreen> {
     }
 
     setState(() => _isLoading = true);
-    final apiReviews = await ReviewService.getReviewsByShop(shopId);
+    final auth = Provider.of<AuthService>(context, listen: false);
+    final currentUserId = auth.currentUser?.userId;
+    final apiReviews = await ReviewService.getReviewsByShop(
+      shopId,
+      userId: currentUserId,
+    );
 
     if (mounted) {
       setState(() {
@@ -155,6 +167,8 @@ class _ShopReviewsScreenState extends State<ShopReviewsScreen> {
                   .map((src) => ApiService.getImagePath(src))
                   .toList(),
               likes: (json['likes'] ?? 0) as int,
+              isLiked: json['is_liked'] == true,
+              isDisliked: json['is_disliked'] == true,
             );
           }).toList();
 
@@ -189,6 +203,89 @@ class _ShopReviewsScreenState extends State<ShopReviewsScreen> {
         }
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _handleReaction(ReviewItem review, String reactionType) async {
+    final auth = Provider.of<AuthService>(context, listen: false);
+    final user = auth.currentUser;
+
+    if (user == null || user.userId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'กรุณาเข้าสู่ระบบก่อนกดความรู้สึก',
+            style: GoogleFonts.outfit(),
+          ),
+          backgroundColor: Colors.orangeAccent,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    final prevLikes = review.likes;
+    final prevIsLiked = review.isLiked;
+    final prevIsDisliked = review.isDisliked;
+
+    // Optimistic UI update
+    setState(() {
+      if (reactionType == 'like') {
+        if (review.isLiked) {
+          review.likes = (review.likes - 1).clamp(0, 999999);
+          review.isLiked = false;
+        } else {
+          review.likes += 1;
+          review.isLiked = true;
+          if (review.isDisliked) {
+            review.isDisliked = false;
+          }
+        }
+      } else if (reactionType == 'dislike') {
+        if (review.isDisliked) {
+          review.isDisliked = false;
+        } else {
+          review.isDisliked = true;
+          if (review.isLiked) {
+            review.likes = (review.likes - 1).clamp(0, 999999);
+            review.isLiked = false;
+          }
+        }
+      }
+    });
+
+    final res = await ReviewService.toggleReviewReaction(
+      reviewId: review.reviewId,
+      userId: user.userId!,
+      reactionType: reactionType,
+    );
+
+    if (mounted) {
+      if (res != null) {
+        setState(() {
+          review.likes = (res['likes'] ?? review.likes) as int;
+          review.isLiked = res['is_liked'] == true;
+          review.isDisliked = res['is_disliked'] == true;
+        });
+      } else {
+        // Rollback on failure
+        setState(() {
+          review.likes = prevLikes;
+          review.isLiked = prevIsLiked;
+          review.isDisliked = prevIsDisliked;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'ไม่สามารถบันทึกข้อมูลได้ กรุณาลองใหม่อีกครั้ง',
+              style: GoogleFonts.outfit(),
+            ),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
   }
 
@@ -556,13 +653,14 @@ class _ShopReviewsScreenState extends State<ShopReviewsScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // User Info & Stars Header Row
+                            // User Info & Stars Header Row (Clear 3-Column Layout)
                             Row(
                               crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
+                                // Column 1: Avatar
                                 CircleAvatar(
                                   radius: 20,
-                                  backgroundColor: const Color(0xFFE4E6EB),
+                                  backgroundColor: const Color(0xFFF1F5F9),
                                   child: review.userAvatar.isNotEmpty
                                       ? ClipOval(
                                           child: Image.network(
@@ -574,18 +672,19 @@ class _ShopReviewsScreenState extends State<ShopReviewsScreen> {
                                                 (context, error, stackTrace) =>
                                                     const Icon(
                                                       Icons.person,
-                                                      color: Color(0xFF8A8D91),
-                                                      size: 24,
+                                                      color: Color(0xFF94A3B8),
+                                                      size: 22,
                                                     ),
                                           ),
                                         )
                                       : const Icon(
                                           Icons.person,
-                                          color: Color(0xFF8A8D91),
-                                          size: 24,
+                                          color: Color(0xFF94A3B8),
+                                          size: 22,
                                         ),
                                 ),
                                 const SizedBox(width: 12),
+                                // Column 2: User Name & Time Ago
                                 Expanded(
                                   child: Column(
                                     crossAxisAlignment:
@@ -598,29 +697,87 @@ class _ShopReviewsScreenState extends State<ShopReviewsScreen> {
                                           fontWeight: FontWeight.bold,
                                           color: const Color(0xFF0F172A),
                                         ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
                                       ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        review.timeAgo,
-                                        style: GoogleFonts.outfit(
-                                          fontSize: 12,
-                                          color: const Color(0xFF64748B),
-                                        ),
+                                      const SizedBox(height: 3),
+                                      Row(
+                                        children: [
+                                          const Icon(
+                                            Icons.access_time_rounded,
+                                            size: 12,
+                                            color: Color(0xFF94A3B8),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            review.timeAgo,
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 12,
+                                              color: const Color(0xFF64748B),
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ],
                                   ),
                                 ),
-                                // Rating Stars Row on the Right
-                                Row(
-                                  children: List.generate(5, (starIndex) {
-                                    return Icon(
-                                      starIndex < review.rating.floor()
-                                          ? Icons.star
-                                          : Icons.star_border,
-                                      color: Colors.amber,
-                                      size: 16,
-                                    );
-                                  }),
+                                const SizedBox(width: 8),
+                                // Column 3: Rating Score & Stars Badge
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFFFBEB),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: const Color(0xFFFDE68A),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        review.rating % 1 == 0
+                                            ? '${review.rating.toInt()}.0'
+                                            : review.rating.toStringAsFixed(1),
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                          color: const Color(0xFFB45309),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 5),
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: List.generate(5, (starIndex) {
+                                          final starVal = starIndex + 1;
+                                          if (starVal <= review.rating.floor()) {
+                                            return const Icon(
+                                              Icons.star_rounded,
+                                              color: Color(0xFFF59E0B),
+                                              size: 15,
+                                            );
+                                          } else if (starVal - 0.5 <=
+                                              review.rating) {
+                                            return const Icon(
+                                              Icons.star_half_rounded,
+                                              color: Color(0xFFF59E0B),
+                                              size: 15,
+                                            );
+                                          } else {
+                                            return const Icon(
+                                              Icons.star_border_rounded,
+                                              color: Color(0xFFCBD5E1),
+                                              size: 15,
+                                            );
+                                          }
+                                        }),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ],
                             ),
@@ -668,64 +825,61 @@ class _ShopReviewsScreenState extends State<ShopReviewsScreen> {
                                   children: [
                                     // Like Icon Button
                                     GestureDetector(
-                                      onTap: () {
-                                        setState(() {
-                                          if (review.isLiked) {
-                                            review.likes -= 1;
-                                            review.isLiked = false;
-                                          } else {
-                                            review.likes += 1;
-                                            review.isLiked = true;
-                                            if (review.isDisliked) {
-                                              review.isDisliked = false;
-                                            }
-                                          }
-                                        });
-                                      },
-                                      child: Icon(
-                                        review.isLiked
-                                            ? Icons.thumb_up
-                                            : Icons.thumb_up_outlined,
-                                        size: 18,
-                                        color: review.isLiked
-                                            ? const Color(0xFF1E88E5)
-                                            : const Color(0xFF94A3B8),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    if (review.likes > 0)
-                                      Text(
-                                        review.likes.toString(),
-                                        style: GoogleFonts.outfit(
-                                          fontSize: 13,
-                                          color: const Color(0xFF64748B),
-                                          fontWeight: FontWeight.bold,
+                                      behavior: HitTestBehavior.opaque,
+                                      onTap: () => _handleReaction(review, 'like'),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 4,
+                                          horizontal: 4,
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              review.isLiked
+                                                  ? Icons.thumb_up_rounded
+                                                  : Icons.thumb_up_outlined,
+                                              size: 18,
+                                              color: review.isLiked
+                                                  ? const Color(0xFF1E88E5)
+                                                  : const Color(0xFF94A3B8),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              review.likes > 0
+                                                  ? review.likes.toString()
+                                                  : '',
+                                              style: GoogleFonts.outfit(
+                                                fontSize: 13,
+                                                color: review.isLiked
+                                                    ? const Color(0xFF1E88E5)
+                                                    : const Color(0xFF64748B),
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
-                                    const SizedBox(width: 16),
+                                    ),
+                                    const SizedBox(width: 12),
                                     // Dislike Icon Button
                                     GestureDetector(
-                                      onTap: () {
-                                        setState(() {
-                                          if (review.isDisliked) {
-                                            review.isDisliked = false;
-                                          } else {
-                                            review.isDisliked = true;
-                                            if (review.isLiked) {
-                                              review.likes -= 1;
-                                              review.isLiked = false;
-                                            }
-                                          }
-                                        });
-                                      },
-                                      child: Icon(
-                                        review.isDisliked
-                                            ? Icons.thumb_down
-                                            : Icons.thumb_down_outlined,
-                                        size: 18,
-                                        color: review.isDisliked
-                                            ? const Color(0xFFE11D48)
-                                            : const Color(0xFF94A3B8),
+                                      behavior: HitTestBehavior.opaque,
+                                      onTap: () => _handleReaction(review, 'dislike'),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 4,
+                                          horizontal: 4,
+                                        ),
+                                        child: Icon(
+                                          review.isDisliked
+                                              ? Icons.thumb_down_rounded
+                                              : Icons.thumb_down_outlined,
+                                          size: 18,
+                                          color: review.isDisliked
+                                              ? const Color(0xFFE11D48)
+                                              : const Color(0xFF94A3B8),
+                                        ),
                                       ),
                                     ),
                                   ],

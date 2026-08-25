@@ -21,7 +21,7 @@ class _RegisterScreenState extends State<RegisterScreen>
   static const int _maxInterests = 5;
   List<String> _interests = [];
   bool _isLoadingInterests = true;
-  final Set<String> _selectedInterests = {};
+  final List<String> _selectedInterests = [];
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
 
@@ -328,17 +328,40 @@ class _RegisterScreenState extends State<RegisterScreen>
                     ],
                   ),
                   const SizedBox(height: 6),
-                  Text(
-                    'เลือกหมวดหมู่ที่คุณสนใจเพื่อรับข้อมูลที่ตรงใจคุณ (สูงสุด $_maxInterests หมวดหมู่)',
-                    style: GoogleFonts.outfit(
-                      color: const Color(0xFF64748B),
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w400,
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFDBEAFE)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.info_outline_rounded,
+                          size: 16,
+                          color: Color(0xFF2563EB),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'แตะเพื่อเลือกตามลำดับความสนใจ (1 = สนใจมากที่สุด, สูงสุด $_maxInterests ลำดับ)',
+                            style: GoogleFonts.outfit(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: const Color(0xFF1E40AF),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 16),
 
-                  // Interest Chips Wrap with Micro-Animations
+                  // Interest Chips Wrap with Micro-Animations & Order Badges
                   _isLoadingInterests
                       ? const Padding(
                           padding: EdgeInsets.symmetric(vertical: 20),
@@ -360,6 +383,10 @@ class _RegisterScreenState extends State<RegisterScreen>
                             final isSelected = _selectedInterests.contains(
                               interest,
                             );
+                            final int orderIndex = isSelected
+                                ? _selectedInterests.indexOf(interest) + 1
+                                : 0;
+
                             return GestureDetector(
                               onTap: () {
                                 setState(() {
@@ -374,7 +401,7 @@ class _RegisterScreenState extends State<RegisterScreen>
                                       ).showSnackBar(
                                         SnackBar(
                                           content: Text(
-                                            'เลือกหมวดหมู่ได้สูงสุด $_maxInterests หมวดหมู่',
+                                            'เลือกความสนใจได้สูงสุด $_maxInterests อันดับ',
                                             style: GoogleFonts.outfit(
                                               fontWeight: FontWeight.bold,
                                               color: Colors.white,
@@ -405,12 +432,12 @@ class _RegisterScreenState extends State<RegisterScreen>
                                 duration: const Duration(milliseconds: 200),
                                 curve: Curves.easeOutCubic,
                                 padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 10,
+                                  horizontal: 14,
+                                  vertical: 9,
                                 ),
                                 decoration: BoxDecoration(
                                   color: isSelected
-                                      ? const Color(0xFFE3F2FD)
+                                      ? const Color(0xFFEFF6FF)
                                       : const Color(0xFFF8FAFC),
                                   borderRadius: BorderRadius.circular(24),
                                   border: Border.all(
@@ -434,31 +461,27 @@ class _RegisterScreenState extends State<RegisterScreen>
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    AnimatedSwitcher(
-                                      duration: const Duration(
-                                        milliseconds: 200,
-                                      ),
-                                      transitionBuilder: (child, anim) =>
-                                          ScaleTransition(
-                                            scale: anim,
-                                            child: child,
+                                    if (isSelected) ...[
+                                      Container(
+                                        width: 20,
+                                        height: 20,
+                                        margin: const EdgeInsets.only(right: 6),
+                                        decoration: const BoxDecoration(
+                                          color: Color(0xFF1E88E5),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        alignment: Alignment.center,
+                                        child: Text(
+                                          '$orderIndex',
+                                          style: GoogleFonts.outfit(
+                                            color: Colors.white,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            height: 1.0,
                                           ),
-                                      child: isSelected
-                                          ? const Padding(
-                                              key: ValueKey('check'),
-                                              padding: EdgeInsets.only(
-                                                right: 6,
-                                              ),
-                                              child: Icon(
-                                                Icons.check_circle_rounded,
-                                                size: 17,
-                                                color: Color(0xFF1E88E5),
-                                              ),
-                                            )
-                                          : const SizedBox.shrink(
-                                              key: ValueKey('empty'),
-                                            ),
-                                    ),
+                                        ),
+                                      ),
+                                    ],
                                     Text(
                                       interest,
                                       style: GoogleFonts.outfit(
@@ -468,7 +491,7 @@ class _RegisterScreenState extends State<RegisterScreen>
                                         fontWeight: isSelected
                                             ? FontWeight.bold
                                             : FontWeight.w500,
-                                        fontSize: 14.5,
+                                        fontSize: 14,
                                       ),
                                     ),
                                   ],

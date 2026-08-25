@@ -409,7 +409,7 @@ class _AnnouncementScreenState extends State<AnnouncementScreen>
                       ),
                       tabs: const [
                         Tab(text: 'ทั้งหมด'),
-                        Tab(text: 'ประกาศ'),
+                        Tab(text: 'ประกาศทั่วไป'),
                         Tab(text: 'ประกาศด่วน'),
                         Tab(text: 'กิจกรรม'),
                       ],

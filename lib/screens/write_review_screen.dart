@@ -17,7 +17,7 @@ class WriteReviewScreen extends StatefulWidget {
 }
 
 class _WriteReviewScreenState extends State<WriteReviewScreen> {
-  late Shop _shop;
+  Shop _shop = Shop(shopName: 'ร้านค้า');
   double _rating = 0; // 0 means unrated
   final _commentController = TextEditingController();
   final List<Uint8List> _reviewImageBytes = [];
@@ -26,10 +26,10 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final args = ModalRoute.of(context)!.settings.arguments;
+    final args = ModalRoute.of(context)?.settings.arguments;
     if (args is Shop) {
       _shop = args;
-    } else if (args is Map) {
+    } else if (args is Map && args['shop'] is Shop) {
       _shop = args['shop'] as Shop;
     }
   }
@@ -144,7 +144,7 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
     final result = await ReviewService.createReview(
       userId: currentUser.userId!,
       shopId: _shop.shopId ?? 0,
-      rating: _rating.toInt(),
+      rating: _rating,
       comment: _commentController.text.trim(),
       reviewImages: imageFiles.isNotEmpty ? imageFiles : null,
     );
@@ -175,13 +175,33 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
     }
   }
 
+  String _formatRating(double rating) {
+    return rating % 1 == 0
+        ? rating.toInt().toString()
+        : rating.toStringAsFixed(1);
+  }
+
+  String _getRatingLabel(double rating) {
+    if (rating >= 5.0) return 'ยอดเยี่ยมมากที่สุด (${_formatRating(rating)}/5)';
+    if (rating >= 4.5) return 'ดีเยี่ยม (${_formatRating(rating)}/5)';
+    if (rating >= 4.0) return 'ดีมาก (${_formatRating(rating)}/5)';
+    if (rating >= 3.5) return 'ค่อนข้างดี (${_formatRating(rating)}/5)';
+    if (rating >= 3.0) return 'ปานกลาง (${_formatRating(rating)}/5)';
+    if (rating >= 2.5) return 'พอใช้ (${_formatRating(rating)}/5)';
+    if (rating >= 2.0) return 'ควรปรับปรุง (${_formatRating(rating)}/5)';
+    if (rating >= 1.5) return 'ไม่ประทับใจ (${_formatRating(rating)}/5)';
+    if (rating >= 1.0) return 'แย่ (${_formatRating(rating)}/5)';
+    if (rating >= 0.5) return 'แย่มาก (${_formatRating(rating)}/5)';
+    return 'แตะหรือลากเพื่อเลือกคะแนน (เลือกครึ่งดาวได้)';
+  }
+
   void _validateAndConfirm() {
-    if (_rating == 0) {
+    if (_rating <= 0) {
       // Show warning if user has not selected a rating yet
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'กรุณาเลือกคะแนนความพึงพอใจอย่างน้อย 1 ดาวค่ะ',
+            'กรุณาเลือกคะแนนความพึงพอใจอย่างน้อย 0.5 ดาวค่ะ',
             style: GoogleFonts.outfit(),
           ),
           backgroundColor: Colors.orangeAccent,
@@ -208,7 +228,7 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
             textAlign: TextAlign.center,
           ),
           content: Text(
-            'คุณต้องการส่งรีวิวจำนวน ${_rating.toInt()} ดาว ให้กับร้าน ${_shop.shopName} ใช่หรือไม่?',
+            'คุณต้องการส่งรีวิวจำนวน ${_formatRating(_rating)} ดาว ให้กับร้าน ${_shop.shopName} ใช่หรือไม่?',
             style: GoogleFonts.outfit(
               color: const Color(0xFF64748B),
               fontSize: 15,
@@ -336,18 +356,56 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
               const SizedBox(height: 28),
 
               // Rating Stars Box
-              Text(
-                'คะแนนความพึงพอใจ',
-                style: GoogleFonts.outfit(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: const Color(0xFF0F172A),
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'คะแนนความพึงพอใจ',
+                    style: GoogleFonts.outfit(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF0F172A),
+                    ),
+                  ),
+                  if (_rating > 0)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFFBEB),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: const Color(0xFFFCD34D),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.star_rounded,
+                            color: Color(0xFFF59E0B),
+                            size: 15,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${_formatRating(_rating)} / 5.0',
+                            style: GoogleFonts.outfit(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: const Color(0xFFB45309),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
               ),
               const SizedBox(height: 12),
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 24),
+                padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 16),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF8FAFC),
                   borderRadius: BorderRadius.circular(16),
@@ -355,39 +413,53 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
                 ),
                 child: Column(
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: List.generate(5, (index) {
-                        final starValue = index + 1;
-                        final isSelected = starValue <= _rating;
+                    LayoutBuilder(
+                      builder: (context, constraints) {
                         return GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _rating = starValue.toDouble();
-                            });
+                          behavior: HitTestBehavior.opaque,
+                          onHorizontalDragUpdate: (details) {
+                            final rowWidth = 5 * 52.0;
+                            final startX = (constraints.maxWidth - rowWidth) / 2;
+                            final relativeX = (details.localPosition.dx - startX)
+                                .clamp(0.0, rowWidth);
+                            final raw = (relativeX / rowWidth) * 5.0;
+                            double snapped = (raw * 2).round() / 2.0;
+                            if (snapped < 0.5) snapped = 0.5;
+                            if (snapped > 5.0) snapped = 5.0;
+                            if (_rating != snapped) {
+                              setState(() {
+                                _rating = snapped;
+                              });
+                            }
                           },
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 6),
-                            child: Icon(
-                              isSelected ? Icons.star : Icons.star,
-                              color: isSelected
-                                  ? Colors.amber
-                                  : const Color(0xFFE2E8F0),
-                              size: 38,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: List.generate(
+                              5,
+                              (index) => _buildSingleStar(index),
                             ),
                           ),
                         );
-                      }),
+                      },
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      _rating == 0
-                          ? 'แตะเพื่อเลือกคะแนน'
-                          : 'แตะเพื่อเลือกคะแนน (${_rating.toInt()}/5)',
+                      _getRatingLabel(_rating),
                       style: GoogleFonts.outfit(
-                        fontSize: 13,
-                        color: const Color(0xFF64748B),
-                        fontWeight: FontWeight.w500,
+                        fontSize: 13.5,
+                        color: _rating == 0
+                            ? const Color(0xFF64748B)
+                            : const Color(0xFF1E293B),
+                        fontWeight:
+                            _rating == 0 ? FontWeight.w500 : FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'แตะฝั่งซ้ายเพื่อเลือกครึ่งดาว (.5) หรือฝั่งขวาเพื่อเลือกเต็มดาว',
+                      style: GoogleFonts.outfit(
+                        fontSize: 11.5,
+                        color: const Color(0xFF94A3B8),
                       ),
                     ),
                   ],
@@ -610,4 +682,98 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
       ),
     );
   }
+
+  Widget _buildSingleStar(int index) {
+    final double starValue = index + 1.0;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: SizedBox(
+        width: 44,
+        height: 44,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            _buildStarIcon(index),
+            // Left Half Tap Target (starValue - 0.5)
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: 22,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  setState(() {
+                    _rating = starValue - 0.5;
+                  });
+                },
+              ),
+            ),
+            // Right Half Tap Target (starValue)
+            Positioned(
+              right: 0,
+              top: 0,
+              bottom: 0,
+              width: 22,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  setState(() {
+                    _rating = starValue;
+                  });
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStarIcon(int index) {
+    final double starValue = index + 1.0;
+    if (_rating >= starValue) {
+      return const Icon(
+        Icons.star_rounded,
+        color: Color(0xFFF59E0B),
+        size: 42,
+      );
+    } else if (_rating >= starValue - 0.5) {
+      return Stack(
+        alignment: Alignment.center,
+        children: [
+          const Icon(
+            Icons.star_rounded,
+            color: Color(0xFFE2E8F0),
+            size: 42,
+          ),
+          ClipRect(
+            clipper: _HalfStarClipper(),
+            child: const Icon(
+              Icons.star_rounded,
+              color: Color(0xFFF59E0B),
+              size: 42,
+            ),
+          ),
+        ],
+      );
+    } else {
+      return const Icon(
+        Icons.star_rounded,
+        color: Color(0xFFE2E8F0),
+        size: 42,
+      );
+    }
+  }
 }
+
+class _HalfStarClipper extends CustomClipper<Rect> {
+  @override
+  Rect getClip(Size size) {
+    return Rect.fromLTRB(0, 0, size.width / 2, size.height);
+  }
+
+  @override
+  bool shouldReclip(CustomClipper<Rect> oldClipper) => false;
+}
+

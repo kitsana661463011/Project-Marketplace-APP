@@ -299,21 +299,51 @@ class _HomeTabState extends State<_HomeTab> {
 
       final userInterests = currentUser?.interests ?? [];
 
-      shops.sort((a, b) {
-        final aInterestMatch = userInterests.any(
-          (interest) =>
-              a.categoryName.contains(interest) ||
-              (a.description ?? '').contains(interest),
-        );
-        final bInterestMatch = userInterests.any(
-          (interest) =>
-              b.categoryName.contains(interest) ||
-              (b.description ?? '').contains(interest),
-        );
-        if (aInterestMatch && !bInterestMatch) return -1;
-        if (!aInterestMatch && bInterestMatch) return 1;
+      int calculateInterestScore(Shop shop) {
+        if (userInterests.isEmpty) return 0;
+        int score = 0;
+        for (int i = 0; i < userInterests.length; i++) {
+          final interest = userInterests[i];
+          final cleanInterest = interest.trim().toLowerCase();
+          if (cleanInterest.isEmpty) continue;
 
-        return 0;
+          // Rank 1 (Index 0) gets highest weight multiplier (5), decreasing down to Rank 5 (1)
+          final int rankMultiplier = (5 - i).clamp(1, 5);
+
+          // 1. Direct match with Shop Tags (Highest Priority: 5 pts * rankMultiplier -> Rank 1 = 25 pts, Rank 5 = 5 pts)
+          if (shop.tags.any((tag) {
+            final t = tag.trim().toLowerCase();
+            return t == cleanInterest ||
+                t.contains(cleanInterest) ||
+                cleanInterest.contains(t);
+          })) {
+            score += 5 * rankMultiplier;
+          }
+          // 2. Match with Category Name (2 pts * rankMultiplier -> Rank 1 = 10 pts, Rank 5 = 2 pts)
+          else if (shop.categoryName.toLowerCase().contains(cleanInterest)) {
+            score += 2 * rankMultiplier;
+          }
+          // 3. Match with Description (1 pt * rankMultiplier -> Rank 1 = 5 pts, Rank 5 = 1 pt)
+          else if ((shop.description ?? '')
+              .toLowerCase()
+              .contains(cleanInterest)) {
+            score += 1 * rankMultiplier;
+          }
+        }
+        return score;
+      }
+
+      shops.sort((a, b) {
+        final aScore = calculateInterestScore(a);
+        final bScore = calculateInterestScore(b);
+        if (aScore != bScore) {
+          return bScore.compareTo(aScore); // Higher match score first
+        }
+        // If equal score, sort by rating / follower popularity
+        final aRating = a.avgRating ?? 0.0;
+        final bRating = b.avgRating ?? 0.0;
+        if (aRating != bRating) return bRating.compareTo(aRating);
+        return b.followerCount.compareTo(a.followerCount);
       });
 
       final Set<String> catSet = {'ทั้งหมด'};
@@ -400,6 +430,9 @@ class _HomeTabState extends State<_HomeTab> {
       '/shop_detail',
       arguments: {'shop': shop, 'tabIndex': 0},
     );
+    if (mounted) {
+      _loadShops();
+    }
     if (result != null && result is int && mounted) {
       final homeState = context.findAncestorStateOfType<_HomeScreenState>();
       if (homeState != null) {
@@ -754,6 +787,28 @@ class _HomeTabState extends State<_HomeTab> {
     final stallLocation = shop.stallNumber != null && shop.stallNumber!.isNotEmpty
         ? 'แผง ${shop.stallNumber}'
         : 'โซนตลาด';
+    final bool isFollowed = _followedShops.any((f) => f.shopId == shop.shopId);
+
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final userInterests = authService.currentUser?.interests ?? [];
+    final matchingTags = shop.tags.where((tag) {
+      final t = tag.trim().toLowerCase();
+      return userInterests.any((i) => i.trim().toLowerCase() == t);
+    }).toList();
+
+    final sortedShopTags = List<String>.from(shop.tags);
+    sortedShopTags.sort((a, b) {
+      final aMatch = userInterests.indexWhere(
+        (i) => i.trim().toLowerCase() == a.trim().toLowerCase(),
+      );
+      final bMatch = userInterests.indexWhere(
+        (i) => i.trim().toLowerCase() == b.trim().toLowerCase(),
+      );
+      if (aMatch != -1 && bMatch != -1) return aMatch.compareTo(bMatch);
+      if (aMatch != -1) return -1;
+      if (bMatch != -1) return 1;
+      return 0;
+    });
 
     return GestureDetector(
       onTap: () => _navigateToShopDetail(shop),
@@ -814,85 +869,161 @@ class _HomeTabState extends State<_HomeTab> {
                     ),
                   ),
                 ),
-                // Top Left: Category Badge Pill (High-Contrast Solid Badge)
+                // Top Bar Badges: Category (Left) + Rating & Followers (Right)
                 Positioned(
                   top: 12,
                   left: 12,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0F172A),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.25),
-                        width: 1,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.25),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          _getCategoryIcon(shop.categoryName),
-                          color: const Color(0xFF60A5FA),
-                          size: 13,
-                        ),
-                        const SizedBox(width: 5),
-                        Text(
-                          shop.categoryName,
-                          style: GoogleFonts.outfit(
-                            color: Colors.white,
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.2,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                // Top Right: Follower Count / Status Badge
-                Positioned(
-                  top: 12,
                   right: 12,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1E88E5),
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF1E88E5).withValues(alpha: 0.4),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.favorite,
-                          color: Colors.white,
-                          size: 13,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${shop.followerCount}',
-                          style: GoogleFonts.outfit(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      // Category Badge Pill (Left)
+                      Flexible(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF0F172A),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.25),
+                              width: 1,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.25),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                _getCategoryIcon(shop.categoryName),
+                                color: const Color(0xFF60A5FA),
+                                size: 13,
+                              ),
+                              const SizedBox(width: 5),
+                              Flexible(
+                                child: Text(
+                                  shop.categoryName,
+                                  style: GoogleFonts.outfit(
+                                    color: Colors.white,
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 0.2,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Rating & Follower Badges (Right)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Rating Badge Pill
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4.5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.15),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.star_rounded,
+                                  color: Color(0xFFF59E0B),
+                                  size: 15,
+                                ),
+                                const SizedBox(width: 3),
+                                Text(
+                                  ratingText,
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.bold,
+                                    color: const Color(0xFF0F172A),
+                                  ),
+                                ),
+                                if (reviewCountText.isNotEmpty) ...[
+                                  const SizedBox(width: 2),
+                                  Text(
+                                    reviewCountText,
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 10,
+                                      color: const Color(0xFF64748B),
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          // Follower Count Badge (Red when followed by user, Blue when not)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 9,
+                              vertical: 4.5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isFollowed
+                                  ? const Color(0xFFE11D48)
+                                  : const Color(0xFF1E88E5),
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: (isFollowed
+                                          ? const Color(0xFFE11D48)
+                                          : const Color(0xFF1E88E5))
+                                      .withValues(alpha: 0.4),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.favorite,
+                                  color: Colors.white,
+                                  size: 12,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '${shop.followerCount}',
+                                  style: GoogleFonts.outfit(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
                 // Bottom Left: Floating Stall Badge
@@ -951,67 +1082,17 @@ class _HomeTabState extends State<_HomeTab> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Row 1: Shop Name & Rating Badge
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          shop.shopName,
-                          style: GoogleFonts.outfit(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: const Color(0xFF0F172A),
-                            height: 1.2,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      // Rating Badge Pill
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFFFBEB),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: const Color(0xFFFCD34D),
-                            width: 1,
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.star_rounded,
-                              color: Color(0xFFF59E0B),
-                              size: 16,
-                            ),
-                            const SizedBox(width: 3),
-                            Text(
-                              ratingText,
-                              style: GoogleFonts.outfit(
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                                color: const Color(0xFFB45309),
-                              ),
-                            ),
-                            if (reviewCountText.isNotEmpty) ...[
-                              const SizedBox(width: 2),
-                              Text(
-                                reviewCountText,
-                                style: GoogleFonts.outfit(
-                                  fontSize: 11,
-                                  color: const Color(0xFFD97706),
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ],
+                  // Row 1: Shop Name (Full width)
+                  Text(
+                    shop.shopName,
+                    style: GoogleFonts.outfit(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF0F172A),
+                      height: 1.2,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
 
                   const SizedBox(height: 6),
@@ -1028,6 +1109,59 @@ class _HomeTabState extends State<_HomeTab> {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
+
+                  if (sortedShopTags.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: sortedShopTags.map((tag) {
+                        final isMatched = matchingTags.contains(tag);
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isMatched
+                                ? const Color(0xFFEFF6FF)
+                                : const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: isMatched
+                                  ? const Color(0xFF93C5FD)
+                                  : const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (isMatched) ...[
+                                const Icon(
+                                  Icons.auto_awesome,
+                                  size: 11,
+                                  color: Color(0xFF2563EB),
+                                ),
+                                const SizedBox(width: 3),
+                              ],
+                              Text(
+                                '#$tag',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 11,
+                                  fontWeight: isMatched
+                                      ? FontWeight.bold
+                                      : FontWeight.w500,
+                                  color: isMatched
+                                      ? const Color(0xFF1D4ED8)
+                                      : const Color(0xFF64748B),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
 
                   const SizedBox(height: 12),
                   const Divider(height: 1, color: Color(0xFFF1F5F9)),
@@ -1645,7 +1779,7 @@ class _ProfileTabState extends State<_ProfileTab> {
 
   List<String> _dbInterests = [];
   bool _isLoadingInterests = true;
-  final Set<String> _selectedInterests = {};
+  final List<String> _selectedInterests = [];
 
   @override
   void initState() {
@@ -2209,19 +2343,65 @@ class _ProfileTabState extends State<_ProfileTab> {
                       'สิ่งที่สนใจ',
                       style: GoogleFonts.outfit(
                         fontSize: 14,
-                        color: const Color(0xFF475569),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    Text(
-                      'เลือกแล้ว ${_selectedInterests.length}/5',
-                      style: GoogleFonts.outfit(
-                        fontSize: 12,
-                        color: const Color(0xFF1E88E5),
+                        color: const Color(0xFF334155),
                         fontWeight: FontWeight.bold,
                       ),
                     ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _selectedInterests.length == 5
+                            ? const Color(0xFF22C55E).withValues(alpha: 0.1)
+                            : const Color(0xFF1E88E5).withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        'เลือกแล้ว ${_selectedInterests.length}/5',
+                        style: GoogleFonts.outfit(
+                          fontSize: 12,
+                          color: _selectedInterests.length == 5
+                              ? const Color(0xFF16A34A)
+                              : const Color(0xFF1E88E5),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
                   ],
+                ),
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFF6FF),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFDBEAFE)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.info_outline_rounded,
+                        size: 16,
+                        color: Color(0xFF2563EB),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'แตะเพื่อเลือกตามลำดับความสนใจ (1 = สนใจมากที่สุด)',
+                          style: GoogleFonts.outfit(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: const Color(0xFF1E40AF),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 12),
                 _isLoadingInterests
@@ -2241,23 +2421,16 @@ class _ProfileTabState extends State<_ProfileTab> {
                           final isSelected = _selectedInterests.contains(
                             interest,
                           );
-                          return FilterChip(
-                            selected: isSelected,
-                            label: Text(
-                              interest,
-                              style: GoogleFonts.outfit(
-                                fontSize: 14,
-                                fontWeight: isSelected
-                                    ? FontWeight.bold
-                                    : FontWeight.normal,
-                                color: isSelected
-                                    ? const Color(0xFF1E88E5)
-                                    : const Color(0xFF64748B),
-                              ),
-                            ),
-                            onSelected: (selected) {
+                          final int orderIndex = isSelected
+                              ? _selectedInterests.indexOf(interest) + 1
+                              : 0;
+
+                          return GestureDetector(
+                            onTap: () {
                               setState(() {
-                                if (selected) {
+                                if (isSelected) {
+                                  _selectedInterests.remove(interest);
+                                } else {
                                   if (_selectedInterests.length >= 5) {
                                     ScaffoldMessenger.of(
                                       context,
@@ -2265,7 +2438,7 @@ class _ProfileTabState extends State<_ProfileTab> {
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(
                                         content: Text(
-                                          'เลือกหมวดหมู่ได้สูงสุด 5 หมวดหมู่',
+                                          'เลือกความสนใจได้สูงสุด 5 อันดับ',
                                           style: GoogleFonts.outfit(
                                             fontWeight: FontWeight.bold,
                                           ),
@@ -2280,21 +2453,75 @@ class _ProfileTabState extends State<_ProfileTab> {
                                     return;
                                   }
                                   _selectedInterests.add(interest);
-                                } else {
-                                  _selectedInterests.remove(interest);
                                 }
                               });
                             },
-                            selectedColor: const Color(0xFFE3F2FD),
-                            checkmarkColor: const Color(0xFF1E88E5),
-                            backgroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
-                              side: BorderSide(
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 180),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
                                 color: isSelected
-                                    ? const Color(0xFF1E88E5)
-                                    : const Color(0xFFCBD5E1),
-                                width: 1,
+                                    ? const Color(0xFFEFF6FF)
+                                    : Colors.white,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: isSelected
+                                      ? const Color(0xFF2563EB)
+                                      : const Color(0xFFCBD5E1),
+                                  width: isSelected ? 1.5 : 1,
+                                ),
+                                boxShadow: isSelected
+                                    ? [
+                                        BoxShadow(
+                                          color: const Color(
+                                            0xFF2563EB,
+                                          ).withValues(alpha: 0.15),
+                                          blurRadius: 6,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ]
+                                    : null,
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (isSelected) ...[
+                                    Container(
+                                      width: 18,
+                                      height: 18,
+                                      margin: const EdgeInsets.only(right: 6),
+                                      decoration: const BoxDecoration(
+                                        color: Color(0xFF2563EB),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: Text(
+                                        '$orderIndex',
+                                        style: GoogleFonts.outfit(
+                                          color: Colors.white,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          height: 1.0,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                  Text(
+                                    interest,
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 13.5,
+                                      fontWeight: isSelected
+                                          ? FontWeight.bold
+                                          : FontWeight.w500,
+                                      color: isSelected
+                                          ? const Color(0xFF1E40AF)
+                                          : const Color(0xFF475569),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           );

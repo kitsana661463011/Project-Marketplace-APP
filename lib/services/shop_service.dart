@@ -32,6 +32,7 @@ class ShopService {
     required int userId,
     String? fileName,
     dynamic fileBytes,
+    List<String>? tags,
   }) async {
     try {
       final fields = {
@@ -41,6 +42,10 @@ class ShopService {
         'shop_phone': shopPhone ?? '',
         'user_id': userId.toString(),
       };
+
+      if (tags != null && tags.isNotEmpty) {
+        fields['tags'] = tags.join(',');
+      }
 
       if (fileName != null) {
         fields['shop_image'] = fileName;
@@ -72,6 +77,7 @@ class ShopService {
     String? status,
     String? fileName,
     dynamic fileBytes,
+    List<String>? tags,
   }) async {
     try {
       final fields = {
@@ -79,6 +85,10 @@ class ShopService {
         'description': description ?? '',
         'shop_phone': shopPhone ?? '',
       };
+
+      if (tags != null) {
+        fields['tags'] = tags.join(',');
+      }
 
       if (categoryId != null) {
         fields['category_id'] = categoryId.toString();
