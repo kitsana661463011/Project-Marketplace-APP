@@ -62,7 +62,15 @@ class _AnnouncementScreenState extends State<AnnouncementScreen>
     }
   }
 
-  void _showDetailDialog(Announcement item) {
+  void _showDetailDialog(Announcement item) async {
+    await AnnouncementService.markAsRead(item);
+    if (mounted) {
+      setState(() {
+        _readIds.add(AnnouncementService.getAnnouncementKey(item));
+      });
+    }
+
+    if (!mounted) return;
     showGeneralDialog(
       context: context,
       barrierDismissible: false,
@@ -384,6 +392,33 @@ class _AnnouncementScreenState extends State<AnnouncementScreen>
             fontSize: 18,
           ),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(
+              Icons.done_all_rounded,
+              color: Color(0xFF2563EB),
+              size: 22,
+            ),
+            tooltip: 'อ่านแล้วทั้งหมด',
+            onPressed: () async {
+              final messenger = ScaffoldMessenger.of(context);
+              await AnnouncementService.markAllAsRead();
+              final readIds = await AnnouncementService.getReadAnnouncementIds();
+              if (mounted) {
+                setState(() {
+                  _readIds = readIds;
+                });
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Text('ทำเครื่องหมายอ่านแล้วทั้งหมด', style: GoogleFonts.outfit()),
+                    backgroundColor: const Color(0xFF10B981),
+                    duration: const Duration(seconds: 1),
+                  ),
+                );
+              }
+            },
+          ),
+        ],
         bottom: isVendor
             ? PreferredSize(
                 preferredSize: const Size.fromHeight(48.0),

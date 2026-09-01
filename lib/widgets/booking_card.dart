@@ -25,12 +25,27 @@ class BookingCard extends StatelessWidget {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
           children: [
-            Icon(Icons.currency_exchange, color: Colors.purple),
-            SizedBox(width: 8),
-            Text('ยื่นคำขอคืนเงิน', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFAF5FF),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.currency_exchange, color: Color(0xFF9333EA), size: 20),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              'ยื่นคำขอคืนเงิน',
+              style: GoogleFonts.outfit(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: const Color(0xFF0F172A),
+              ),
+            ),
           ],
         ),
         content: SingleChildScrollView(
@@ -38,53 +53,114 @@ class BookingCard extends StatelessWidget {
             key: formKey,
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'กรุณากรอกข้อมูลบัญชีธนาคารสำหรับรับเงินโอนคืน',
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                  style: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF64748B)),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
                 TextFormField(
                   controller: bankController,
-                  decoration: const InputDecoration(
+                  style: GoogleFonts.outfit(fontSize: 14, color: const Color(0xFF0F172A)),
+                  decoration: InputDecoration(
                     labelText: 'ชื่อธนาคาร (เช่น กสิกรไทย, ไทยพาณิชย์)',
-                    prefixIcon: Icon(Icons.account_balance),
-                    border: OutlineInputBorder(),
+                    labelStyle: GoogleFonts.outfit(color: const Color(0xFF64748B)),
+                    prefixIcon: const Icon(Icons.account_balance, color: Color(0xFF64748B), size: 20),
+                    filled: true,
+                    fillColor: const Color(0xFFF8FAFC),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFF9333EA), width: 1.8),
+                    ),
                     isDense: true,
                   ),
                   validator: (v) => (v == null || v.trim().isEmpty) ? 'กรุณากรอกชื่อธนาคาร' : null,
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
                 TextFormField(
                   controller: accountNumberController,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
+                  style: GoogleFonts.outfit(fontSize: 14, color: const Color(0xFF0F172A)),
+                  decoration: InputDecoration(
                     labelText: 'เลขที่บัญชี',
-                    prefixIcon: Icon(Icons.numbers),
-                    border: OutlineInputBorder(),
+                    labelStyle: GoogleFonts.outfit(color: const Color(0xFF64748B)),
+                    prefixIcon: const Icon(Icons.numbers, color: Color(0xFF64748B), size: 20),
+                    filled: true,
+                    fillColor: const Color(0xFFF8FAFC),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFF9333EA), width: 1.8),
+                    ),
                     isDense: true,
                   ),
                   validator: (v) => (v == null || v.trim().isEmpty) ? 'กรุณากรอกเลขที่บัญชี' : null,
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
                 TextFormField(
                   controller: accountNameController,
-                  decoration: const InputDecoration(
+                  style: GoogleFonts.outfit(fontSize: 14, color: const Color(0xFF0F172A)),
+                  decoration: InputDecoration(
                     labelText: 'ชื่อบัญชีผู้รับเงิน',
-                    prefixIcon: Icon(Icons.person),
-                    border: OutlineInputBorder(),
+                    labelStyle: GoogleFonts.outfit(color: const Color(0xFF64748B)),
+                    prefixIcon: const Icon(Icons.person, color: Color(0xFF64748B), size: 20),
+                    filled: true,
+                    fillColor: const Color(0xFFF8FAFC),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFF9333EA), width: 1.8),
+                    ),
                     isDense: true,
                   ),
                   validator: (v) => (v == null || v.trim().isEmpty) ? 'กรุณากรอกชื่อบัญชี' : null,
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
                 TextFormField(
                   controller: reasonController,
                   maxLines: 2,
-                  decoration: const InputDecoration(
+                  style: GoogleFonts.outfit(fontSize: 14, color: const Color(0xFF0F172A)),
+                  decoration: InputDecoration(
                     labelText: 'เหตุผลในการขอคืนเงิน',
-                    prefixIcon: Icon(Icons.notes),
-                    border: OutlineInputBorder(),
+                    labelStyle: GoogleFonts.outfit(color: const Color(0xFF64748B)),
+                    prefixIcon: const Icon(Icons.notes, color: Color(0xFF64748B), size: 20),
+                    filled: true,
+                    fillColor: const Color(0xFFF8FAFC),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFF9333EA), width: 1.8),
+                    ),
                     isDense: true,
                   ),
                   validator: (v) => (v == null || v.trim().isEmpty) ? 'กรุณาระบุเหตุผล' : null,
@@ -96,12 +172,21 @@ class BookingCard extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('ยกเลิก'),
+            child: Text(
+              'ยกเลิก',
+              style: GoogleFonts.outfit(
+                color: const Color(0xFF64748B),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.purple,
+              backgroundColor: const Color(0xFF9333EA),
               foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
             ),
             onPressed: () async {
               if (formKey.currentState!.validate() && booking.bookingId != null) {
@@ -283,7 +368,16 @@ class BookingCard extends StatelessWidget {
                         showDialog(
                           context: context,
                           builder: (ctx) => AlertDialog(
-                            title: const Text('หลักฐานการโอนเงินคืน', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                            backgroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                            title: Text(
+                              'หลักฐานการโอนเงินคืน',
+                              style: GoogleFonts.outfit(
+                                fontSize: 17,
+                                fontWeight: FontWeight.bold,
+                                color: const Color(0xFF0F172A),
+                              ),
+                            ),
                             content: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -292,13 +386,13 @@ class BookingCard extends StatelessWidget {
                                   child: Image.network(
                                     imageUrl,
                                     fit: BoxFit.contain,
-                                    errorBuilder: (context, error, stackTrace) => const Padding(
-                                      padding: EdgeInsets.all(16.0),
+                                    errorBuilder: (context, error, stackTrace) => Padding(
+                                      padding: const EdgeInsets.all(16.0),
                                       child: Column(
                                         children: [
-                                          Icon(Icons.broken_image, size: 48, color: Colors.grey),
-                                          SizedBox(height: 8),
-                                          Text('ไม่สามารถโหลดภาพสลิปได้', style: TextStyle(color: Colors.grey)),
+                                          const Icon(Icons.broken_image, size: 48, color: Color(0xFF94A3B8)),
+                                          const SizedBox(height: 8),
+                                          Text('ไม่สามารถโหลดภาพสลิปได้', style: GoogleFonts.outfit(color: const Color(0xFF64748B))),
                                         ],
                                       ),
                                     ),
@@ -309,7 +403,13 @@ class BookingCard extends StatelessWidget {
                             actions: [
                               TextButton(
                                 onPressed: () => Navigator.pop(ctx),
-                                child: const Text('ปิด'),
+                                child: Text(
+                                  'ปิด',
+                                  style: GoogleFonts.outfit(
+                                    color: const Color(0xFF64748B),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
                               ),
                             ],
                           ),

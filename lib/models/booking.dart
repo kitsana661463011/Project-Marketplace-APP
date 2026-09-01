@@ -32,6 +32,8 @@ class Booking {
   final String? refundAccountName;
   final String? refundSlip;
   final String? refundedAt;
+  final bool hasElectricity;
+  final bool hasWater;
 
   Booking({
     this.bookingId,
@@ -66,6 +68,8 @@ class Booking {
     this.refundAccountName,
     this.refundSlip,
     this.refundedAt,
+    this.hasElectricity = true,
+    this.hasWater = true,
   });
 
   factory Booking.fromJson(Map<String, dynamic> json) {
@@ -79,6 +83,14 @@ class Booking {
       if (val == null) return null;
       if (val is int) return val;
       return int.tryParse(val.toString());
+    }
+
+    bool parseBool(dynamic val, [bool fallback = true]) {
+      if (val == null) return fallback;
+      if (val is bool) return val;
+      if (val is num) return val == 1;
+      final str = val.toString().toLowerCase().trim();
+      return str == '1' || str == 'true';
     }
 
     return Booking(
@@ -114,6 +126,8 @@ class Booking {
       refundAccountName: json['refund_account_name'],
       refundSlip: json['refund_slip'],
       refundedAt: json['refunded_at'],
+      hasElectricity: parseBool(json['stall_has_electricity'] ?? json['has_electricity'], true),
+      hasWater: parseBool(json['stall_has_water'] ?? json['has_water'], true),
     );
   }
 

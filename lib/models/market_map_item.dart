@@ -18,6 +18,8 @@ class MarketMapItem {
   final double? monthlyPrice;
   final double? entryFee;
   final double? securityDeposit;
+  final bool hasElectricity;
+  final bool hasWater;
   final String
   status; // 'available', 'occupied', 'approved', 'repair', 'maintenance', 'refund_requested', 'refunded'
   final Map<String, dynamic>? seller;
@@ -42,6 +44,8 @@ class MarketMapItem {
     this.monthlyPrice,
     this.entryFee,
     this.securityDeposit,
+    this.hasElectricity = true,
+    this.hasWater = true,
     required this.status,
     this.seller,
   });
@@ -57,6 +61,14 @@ class MarketMapItem {
       if (val == null) return null;
       if (val is num) return val.toDouble();
       return double.tryParse(val.toString());
+    }
+
+    bool parseBool(dynamic val, [bool fallback = true]) {
+      if (val == null) return fallback;
+      if (val is bool) return val;
+      if (val is num) return val == 1;
+      final str = val.toString().toLowerCase().trim();
+      return str == '1' || str == 'true';
     }
 
     final String rType = json['rental_type'] ?? 'daily';
@@ -90,6 +102,8 @@ class MarketMapItem {
           (rType == 'monthly' ? mainPrice : null),
       entryFee: parseNullableDouble(json['entry_fee']),
       securityDeposit: parseNullableDouble(json['security_deposit']),
+      hasElectricity: parseBool(json['has_electricity'], true),
+      hasWater: parseBool(json['has_water'], true),
       status: json['status'] ?? 'available',
       seller: json['seller'] != null
           ? Map<String, dynamic>.from(json['seller'])

@@ -436,6 +436,41 @@ class _MarketMapScreenState extends State<MarketMapScreen>
                 ),
                 const SizedBox(height: 12),
                 _infoRow(Icons.payments_outlined, 'ค่าเช่า', priceText),
+                const SizedBox(height: 12),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.bolt_outlined, size: 18, color: Color(0xFF2563EB)),
+                    const SizedBox(width: 10),
+                    Text(
+                      'ระบบสาธารณูปโภค: ',
+                      style: GoogleFonts.outfit(
+                        fontSize: 14,
+                        color: const Color(0xFF64748B),
+                      ),
+                    ),
+                    Expanded(
+                      child: Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [
+                          _facilityBadge(
+                            item.hasElectricity ? Icons.bolt_rounded : Icons.power_off_outlined,
+                            item.hasElectricity ? 'ไฟฟ้า' : 'ไม่มีไฟ',
+                            isAvailable: item.hasElectricity,
+                            badgeColor: const Color(0xFFD97706),
+                          ),
+                          _facilityBadge(
+                            item.hasWater ? Icons.water_drop_rounded : Icons.opacity_outlined,
+                            item.hasWater ? 'น้ำประปา' : 'ไม่มีน้ำ',
+                            isAvailable: item.hasWater,
+                            badgeColor: const Color(0xFF2563EB),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
                 if (_shouldExposeSellerDetails(item)) ...[
                   const SizedBox(height: 12),
                   _infoRow(
@@ -875,6 +910,44 @@ class _MarketMapScreenState extends State<MarketMapScreen>
                   ),
                 ],
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _facilityBadge(
+    IconData icon,
+    String label, {
+    bool isAvailable = true,
+    Color badgeColor = const Color(0xFF475569),
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: isAvailable ? badgeColor.withValues(alpha: 0.08) : const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: isAvailable ? badgeColor.withValues(alpha: 0.25) : const Color(0xFFE2E8F0),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 12,
+            color: isAvailable ? badgeColor : const Color(0xFF94A3B8),
+          ),
+          const SizedBox(width: 3),
+          Text(
+            label,
+            style: GoogleFonts.outfit(
+              fontSize: 11,
+              color: isAvailable ? badgeColor : const Color(0xFF94A3B8),
+              fontWeight: isAvailable ? FontWeight.w600 : FontWeight.w500,
+              decoration: isAvailable ? TextDecoration.none : TextDecoration.lineThrough,
             ),
           ),
         ],

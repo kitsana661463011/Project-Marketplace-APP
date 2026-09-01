@@ -43,26 +43,66 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'MarketPlace',
       debugShowCheckedModeBanner: false,
-      themeMode: ThemeMode.dark,
-      darkTheme: ThemeData(
-        brightness: Brightness.dark,
+      themeMode: ThemeMode.light,
+      theme: ThemeData(
+        brightness: Brightness.light,
         useMaterial3: true,
-        primaryColor: const Color(0xFF00BFA5),
-        colorScheme: const ColorScheme.dark(
-          primary: Color(0xFF00BFA5),
-          secondary: Color(0xFF00E5FF),
-          surface: Color(0xFF1B2838),
-          error: Colors.redAccent,
+        primaryColor: const Color(0xFF2563EB),
+        scaffoldBackgroundColor: const Color(0xFFF8FAFC),
+        colorScheme: const ColorScheme.light(
+          primary: Color(0xFF2563EB),
+          secondary: Color(0xFF3B82F6),
+          surface: Colors.white,
+          error: Color(0xFFEF4444),
+          onPrimary: Colors.white,
+          onSurface: Color(0xFF0F172A),
         ),
-        scaffoldBackgroundColor: const Color(0xFF0D1B2A),
+        dialogTheme: DialogThemeData(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          titleTextStyle: GoogleFonts.outfit(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: const Color(0xFF0F172A),
+          ),
+          contentTextStyle: GoogleFonts.outfit(
+            fontSize: 14,
+            color: const Color(0xFF475569),
+          ),
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: Colors.white,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.8),
+          ),
+          labelStyle: GoogleFonts.outfit(color: const Color(0xFF64748B)),
+          hintStyle: GoogleFonts.outfit(color: const Color(0xFF94A3B8)),
+        ),
         textTheme: GoogleFonts.outfitTextTheme(
-          ThemeData.dark().textTheme,
-        ).apply(bodyColor: Colors.white, displayColor: Colors.white),
+          ThemeData.light().textTheme,
+        ).apply(
+          bodyColor: const Color(0xFF0F172A),
+          displayColor: const Color(0xFF0F172A),
+        ),
         navigationBarTheme: NavigationBarThemeData(
-          backgroundColor: const Color(0xFF1B2838),
-          indicatorColor: const Color(0xFF00BFA5).withValues(alpha: 0.2),
+          backgroundColor: Colors.white,
+          indicatorColor: const Color(0xFF2563EB).withValues(alpha: 0.12),
           labelTextStyle: WidgetStateProperty.all(
-            const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+            GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w500),
           ),
         ),
       ),

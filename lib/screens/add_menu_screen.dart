@@ -3,7 +3,9 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/shop.dart';
+import '../models/item_category.dart';
 import '../services/api_service.dart';
+import '../services/category_service.dart';
 
 class AddMenuScreen extends StatefulWidget {
   const AddMenuScreen({super.key});
@@ -20,6 +22,157 @@ class _AddMenuScreenState extends State<AddMenuScreen> {
   final _priceController = TextEditingController();
   bool _isAvailable = true;
   bool _isSubmitting = false;
+
+  Shop? _shop;
+  List<ItemCategory> _categories = [];
+  int? _selectedCategoryId;
+  bool _isLoadingCategories = true;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final rawArgs = ModalRoute.of(context)?.settings.arguments;
+    if (rawArgs is Map<String, dynamic>) {
+      _shop = rawArgs['shop'] as Shop?;
+    } else if (rawArgs is Map) {
+      final args = Map<String, dynamic>.from(rawArgs);
+      _shop = args['shop'] as Shop?;
+    }
+    _loadCategories();
+  }
+
+  Future<void> _loadCategories() async {
+    final cats = await CategoryService.getItemCategories(shopId: _shop?.shopId);
+    if (mounted) {
+      setState(() {
+        _categories = cats;
+        _isLoadingCategories = false;
+        if (cats.isNotEmpty && _selectedCategoryId == null) {
+          _selectedCategoryId = cats.first.categoryId;
+        }
+      });
+    }
+  }
+
+  Future<void> _showCreateCategoryDialog() async {
+    final newCatCtrl = TextEditingController();
+    final created = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEFF6FF),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.create_new_folder_outlined,
+                color: Color(0xFF2563EB),
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              'เพิ่มประเภทเมนูใหม่',
+              style: GoogleFonts.outfit(
+                fontWeight: FontWeight.bold,
+                fontSize: 17,
+                color: const Color(0xFF0F172A),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'ระบุชื่อหมวดหมู่ที่ต้องการสร้าง',
+              style: GoogleFonts.outfit(
+                fontSize: 13,
+                color: const Color(0xFF64748B),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: newCatCtrl,
+              autofocus: true,
+              style: GoogleFonts.outfit(
+                fontSize: 14,
+                color: const Color(0xFF0F172A),
+              ),
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: const Color(0xFFF8FAFC),
+                hintText: 'เช่น อาหารทานเล่น, เครื่องดื่ม, ของหวาน',
+                hintStyle: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF94A3B8)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.8),
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              'ยกเลิก',
+              style: GoogleFonts.outfit(
+                color: const Color(0xFF64748B),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, newCatCtrl.text.trim()),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF2563EB),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+            ),
+            child: Text(
+              'เพิ่ม',
+              style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (created != null && created.isNotEmpty) {
+      final res = await CategoryService.createItemCategory(
+        categoryName: created,
+        shopId: _shop?.shopId,
+      );
+      if (res['status'] == true) {
+        await _loadCategories();
+        final newCat = _categories.firstWhere(
+          (c) => c.categoryName.trim() == created.trim(),
+          orElse: () => _categories.last,
+        );
+        setState(() {
+          _selectedCategoryId = newCat.categoryId;
+        });
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -140,7 +293,7 @@ class _AddMenuScreenState extends State<AddMenuScreen> {
         'item_name': name,
         'price': price.toString(),
         'description': desc,
-        'category_id': '1',
+        'category_id': (_selectedCategoryId ?? 1).toString(),
         'status': _isAvailable ? 'เปิดขาย' : 'ปิดขาย',
       };
 
@@ -184,24 +337,24 @@ class _AddMenuScreenState extends State<AddMenuScreen> {
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                   const Icon(
                     Icons.check_circle_outline,
                     color: Color(0xFF10B981),
-                    size: 60,
+                    size: 56,
                   ),
                   const SizedBox(height: 14),
                   Text(
-                    'บันทึกเมนูสำเร็จ!',
+                    'เพิ่มเมนูสำเร็จ!',
                     style: GoogleFonts.outfit(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                       color: const Color(0xFF0F172A),
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   Text(
-                    'เมนู "$name" ถูกเพิ่มเข้าไปในร้านค้าของคุณแล้ว',
+                    'เมนู "$name" ได้รับการบันทึกเข้าร้านค้าแล้ว',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.outfit(
                       fontSize: 13,
@@ -235,12 +388,10 @@ class _AddMenuScreenState extends State<AddMenuScreen> {
             ),
           );
         } else {
-          final errorMessage =
-              response['message'] ?? 'เกิดข้อผิดพลาดในการบันทึกเมนู';
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                'เกิดข้อผิดพลาด: $errorMessage',
+                response['message'] ?? 'ไม่สามารถบันทึกเมนูได้',
                 style: GoogleFonts.outfit(),
               ),
               backgroundColor: const Color(0xFFDC2626),
@@ -355,8 +506,8 @@ class _AddMenuScreenState extends State<AddMenuScreen> {
                   ),
                   label: Text(
                     _pickedMenuImageNames.isNotEmpty
-                        ? 'เลือกรูปแล้ว ${_pickedMenuImageNames.length}/3 รูป'
-                        : 'คลิกเพื่อเลือกรูปภาพเมนูจากอุปกรณ์ (สูงสุด 3 รูป)',
+                        ? 'เลือกรูปแล้ว ${_pickedMenuImageNames.length} รูป'
+                        : 'คลิกเพื่อเลือกรูปภาพเมนูจากอุปกรณ์',
                     style: GoogleFonts.outfit(
                       fontSize: 13,
                       fontWeight: FontWeight.bold,
@@ -412,7 +563,101 @@ class _AddMenuScreenState extends State<AddMenuScreen> {
                 _buildTextField(_nameController, 'เช่น ข้าวกะเพราเนื้อ'),
                 const SizedBox(height: 20),
 
-                // 3. คำอธิบาย
+                // 3. หมวดหมู่/ประเภทเมนู
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.category_outlined,
+                            size: 16,
+                            color: Color(0xFF2563EB),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'ประเภทเมนู / สินค้า',
+                            style: GoogleFonts.outfit(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: const Color(0xFF0F172A),
+                            ),
+                          ),
+                        ],
+                      ),
+                      TextButton.icon(
+                        onPressed: _showCreateCategoryDialog,
+                        icon: const Icon(Icons.add, size: 16, color: Color(0xFF2563EB)),
+                        label: Text(
+                          'เพิ่มประเภทใหม่',
+                          style: GoogleFonts.outfit(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF2563EB),
+                          ),
+                        ),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                if (_isLoadingCategories)
+                  const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(8.0),
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                else
+                  DropdownButtonFormField<int>(
+                    initialValue: _categories.any((c) => c.categoryId == _selectedCategoryId)
+                        ? _selectedCategoryId
+                        : (_categories.isNotEmpty ? _categories.first.categoryId : null),
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: const Color(0xFFF8FAFC),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.5),
+                      ),
+                    ),
+                    items: _categories.map((cat) {
+                      return DropdownMenuItem<int>(
+                        value: cat.categoryId,
+                        child: Text(
+                          cat.categoryName,
+                          style: GoogleFonts.outfit(
+                            fontSize: 14,
+                            color: const Color(0xFF0F172A),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (val) {
+                      setState(() {
+                        _selectedCategoryId = val;
+                      });
+                    },
+                  ),
+                const SizedBox(height: 20),
+
+                // 4. คำอธิบาย
                 Align(
                   alignment: Alignment.centerLeft,
                   child: Row(
@@ -442,7 +687,7 @@ class _AddMenuScreenState extends State<AddMenuScreen> {
                 ),
                 const SizedBox(height: 20),
 
-                // 4. ราคา
+                // 5. ราคา
                 Align(
                   alignment: Alignment.centerLeft,
                   child: Row(
@@ -472,7 +717,7 @@ class _AddMenuScreenState extends State<AddMenuScreen> {
                 ),
                 const SizedBox(height: 24),
 
-                // 5. Toggle พร้อมจำหน่าย
+                // 6. Toggle พร้อมจำหน่าย
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
@@ -523,7 +768,7 @@ class _AddMenuScreenState extends State<AddMenuScreen> {
                 ),
                 const SizedBox(height: 32),
 
-                // 6. Submit
+                // 7. Submit
                 SizedBox(
                   width: double.infinity,
                   height: 48,

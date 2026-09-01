@@ -6,7 +6,23 @@ import '../models/user.dart';
 import 'api_service.dart';
 
 class AnnouncementService {
-  static const String _readKey = 'read_announcements';
+  static Future<int?> _getCurrentUserId() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userDataStr = prefs.getString('user_data');
+      if (userDataStr != null) {
+        final Map<String, dynamic> userMap = jsonDecode(userDataStr);
+        final user = UserModel.fromJson(userMap);
+        return user.userId;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  static Future<String> _getReadKey() async {
+    final userId = await _getCurrentUserId();
+    return userId != null ? 'read_announcements_user_$userId' : 'read_announcements_guest';
+  }
 
   static Future<String> _getUserRole() async {
     try {
@@ -40,13 +56,14 @@ class AnnouncementService {
   }
 
   static String getAnnouncementKey(Announcement item) {
-    return item.announcementId?.toString() ?? item.title;
+    return item.announcementId?.toString() ?? item.title.trim();
   }
 
   static Future<Set<String>> getReadAnnouncementIds() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final List<String>? list = prefs.getStringList(_readKey);
+      final key = await _getReadKey();
+      final List<String>? list = prefs.getStringList(key);
       return list?.toSet() ?? <String>{};
     } catch (_) {
       return <String>{};
@@ -56,12 +73,26 @@ class AnnouncementService {
   static Future<void> markAsRead(Announcement item) async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      final key = await _getReadKey();
       final readSet = await getReadAnnouncementIds();
-      final key = getAnnouncementKey(item);
-      if (!readSet.contains(key)) {
-        readSet.add(key);
-        await prefs.setStringList(_readKey, readSet.toList());
+      final itemKey = getAnnouncementKey(item);
+      if (!readSet.contains(itemKey)) {
+        readSet.add(itemKey);
+        await prefs.setStringList(key, readSet.toList());
       }
+    } catch (_) {}
+  }
+
+  static Future<void> markAllAsRead() async {
+    try {
+      final active = await getActiveAnnouncements();
+      final prefs = await SharedPreferences.getInstance();
+      final key = await _getReadKey();
+      final readSet = await getReadAnnouncementIds();
+      for (final item in active) {
+        readSet.add(getAnnouncementKey(item));
+      }
+      await prefs.setStringList(key, readSet.toList());
     } catch (_) {}
   }
 
@@ -82,4 +113,3 @@ class AnnouncementService {
     }
   }
 }
-

@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/shop.dart';
 import '../models/item.dart';
 import '../models/shop_category.dart';
+import '../models/item_category.dart';
 import '../services/item_service.dart';
 import '../services/shop_service.dart';
 import '../services/api_service.dart';
@@ -103,36 +104,70 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
       context: context,
       builder:
           (context) => AlertDialog(
+            backgroundColor: Colors.white,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: BorderRadius.circular(20),
             ),
-            title: Text(
-              'ยืนยันการลบเมนู',
-              style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF2F2),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.delete_outline,
+                    color: Color(0xFFEF4444),
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  'ยืนยันการลบเมนู',
+                  style: GoogleFonts.outfit(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 17,
+                    color: const Color(0xFF0F172A),
+                  ),
+                ),
+              ],
             ),
             content: Text(
               'คุณต้องการลบเมนู "${item.itemName}" ออกจากร้านใช่หรือไม่?',
-              style: GoogleFonts.outfit(),
+              style: GoogleFonts.outfit(
+                fontSize: 14,
+                color: const Color(0xFF475569),
+              ),
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context, false),
                 child: Text(
                   'ยกเลิก',
-                  style: GoogleFonts.outfit(color: const Color(0xFF64748B)),
+                  style: GoogleFonts.outfit(
+                    color: const Color(0xFF64748B),
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
               ElevatedButton(
                 onPressed: () => Navigator.pop(context, true),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.redAccent,
+                  backgroundColor: const Color(0xFFEF4444),
+                  foregroundColor: Colors.white,
+                  elevation: 0,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
                 ),
                 child: Text(
                   'ลบเมนู',
-                  style: GoogleFonts.outfit(color: Colors.white),
+                  style: GoogleFonts.outfit(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ],
@@ -256,8 +291,8 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
               Expanded(
                 child: Text(
                   nextState
-                      ? 'เปิดบริการรับออเดอร์ปกติเรียบร้อยแล้ว (บันทึก DB)'
-                      : 'ปิดบริการร้านค้าชั่วคราวเรียบร้อยแล้ว (บันทึก DB)',
+                      ? 'เปิดบริการรับออเดอร์ปกติเรียบร้อยแล้ว'
+                      : 'ปิดบริการร้านค้าชั่วคราวเรียบร้อยแล้ว',
                   style: GoogleFonts.outfit(
                     fontWeight: FontWeight.bold,
                     fontSize: 13,
@@ -2056,8 +2091,6 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
                                 child: _buildQuickActionButton(
                                   icon: Icons.edit_outlined,
                                   label: 'แก้ไขโปรไฟล์',
-                                  color: const Color(0xFF2563EB),
-                                  bgColor: const Color(0xFFEFF6FF),
                                   onTap: _showEditShopProfileDialog,
                                 ),
                               ),
@@ -2066,8 +2099,6 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
                                 child: _buildQuickActionButton(
                                   icon: Icons.map_outlined,
                                   label: 'จุดแผงตลาด',
-                                  color: const Color(0xFF059669),
-                                  bgColor: const Color(0xFFECFDF5),
                                   onTap: () {
                                     Navigator.pushNamed(
                                       context,
@@ -2085,8 +2116,6 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
                                 child: _buildQuickActionButton(
                                   icon: Icons.rate_review_outlined,
                                   label: 'รีวิวลูกค้า',
-                                  color: const Color(0xFFD97706),
-                                  bgColor: const Color(0xFFFFFBEB),
                                   onTap: () {
                                     Navigator.pushNamed(
                                       context,
@@ -2101,8 +2130,6 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
                                 child: _buildQuickActionButton(
                                   icon: Icons.add_circle_outline,
                                   label: 'เพิ่มเมนู',
-                                  color: const Color(0xFF7C3AED),
-                                  bgColor: const Color(0xFFF5F3FF),
                                   onTap: () async {
                                     final result = await Navigator.pushNamed(
                                       context,
@@ -2137,14 +2164,6 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
                               color: const Color(0xFF0F172A),
                             ),
                           ),
-                          Text(
-                            ' Real-time Sync',
-                            style: GoogleFonts.outfit(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: const Color(0xFF10B981),
-                            ),
-                          ),
                         ],
                       ),
                     ),
@@ -2170,12 +2189,14 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
                                     'category_item_ids': _categoryItemIds,
                                   },
                                 );
-                                if (result is Map<String, Set<int>>) {
-                                  setState(() {
-                                    _categoryItemIds.clear();
-                                    _categoryItemIds.addAll(result);
-                                    _rebuildCategories();
-                                  });
+                                if (result != null) {
+                                  if (result is Map<String, Set<int>>) {
+                                    setState(() {
+                                      _categoryItemIds.clear();
+                                      _categoryItemIds.addAll(result);
+                                    });
+                                  }
+                                  _loadItems();
                                 }
                               },
                               child: Container(
@@ -2379,49 +2400,64 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
   Widget _buildQuickActionButton({
     required IconData icon,
     required String label,
-    required Color color,
-    required Color bgColor,
     required VoidCallback onTap,
   }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
-        decoration: BoxDecoration(
-          color: bgColor,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withValues(alpha: 0.35), width: 1.2),
-          boxShadow: [
-            BoxShadow(
-              color: color.withValues(alpha: 0.12),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: const Color(0xFFE2E8F0),
+              width: 1,
             ),
-          ],
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(7),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.14),
-                shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.02),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
               ),
-              child: Icon(icon, color: color, size: 18),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              label,
-              style: GoogleFonts.outfit(
-                fontSize: 11.5,
-                fontWeight: FontWeight.bold,
-                color: color,
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEFF6FF),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: const Color(0xFFDBEAFE),
+                    width: 1,
+                  ),
+                ),
+                child: Icon(
+                  icon,
+                  color: const Color(0xFF2563EB),
+                  size: 18,
+                ),
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
+              const SizedBox(height: 7),
+              Text(
+                label,
+                style: GoogleFonts.outfit(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF1E293B),
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -2451,90 +2487,100 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
       padding: const EdgeInsets.all(12),
       child: Row(
         children: [
-          // Item Image Thumbnail
-          ClipRRect(
-            borderRadius: BorderRadius.circular(14),
-            child: Container(
-              width: 64,
-              height: 64,
-              color: const Color(0xFFEFF6FF),
-              child:
-                  item.itemImage != null && item.itemImage!.isNotEmpty
-                      ? Image.network(
-                        ApiService.getImagePath(item.itemImage),
-                        width: 64,
-                        height: 64,
-                        fit: BoxFit.cover,
-                        errorBuilder:
-                            (context, error, stackTrace) => const Icon(
-                              Icons.fastfood_rounded,
-                              color: Color(0xFF2563EB),
-                              size: 28,
-                            ),
-                      )
-                      : const Icon(
-                        Icons.fastfood_rounded,
-                        color: Color(0xFF2563EB),
-                        size: 28,
-                      ),
-            ),
-          ),
-          const SizedBox(width: 14),
-
-          // Item Info (Title + Category Tag + Price)
+          // Item Image Thumbnail & Info (Clickable to view detail sheet)
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.itemName,
-                  style: GoogleFonts.outfit(
-                    fontSize: 14.5,
-                    fontWeight: FontWeight.bold,
-                    color: const Color(0xFF0F172A),
+            child: InkWell(
+              onTap: () => _showItemDetailSheet(item),
+              borderRadius: BorderRadius.circular(14),
+              child: Row(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: Container(
+                      width: 64,
+                      height: 64,
+                      color: const Color(0xFFEFF6FF),
+                      child:
+                          item.itemImage != null && item.itemImage!.isNotEmpty
+                              ? Image.network(
+                                ApiService.getImagePath(item.itemImage),
+                                width: 64,
+                                height: 64,
+                                fit: BoxFit.cover,
+                                errorBuilder:
+                                    (context, error, stackTrace) => const Icon(
+                                      Icons.fastfood_rounded,
+                                      color: Color(0xFF2563EB),
+                                      size: 28,
+                                    ),
+                              )
+                              : const Icon(
+                                Icons.fastfood_rounded,
+                                color: Color(0xFF2563EB),
+                                size: 28,
+                              ),
+                    ),
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 3),
-                Row(
-                  children: [
-                    Text(
-                      '฿${item.price.toStringAsFixed(0)}',
-                      style: GoogleFonts.outfit(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: const Color(0xFF2563EB),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color:
-                            isAvailable
-                                ? const Color(0xFFECFDF5)
-                                : const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        isAvailable ? 'เปิดขาย' : 'สินค้าหมด',
-                        style: GoogleFonts.outfit(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.bold,
-                          color:
-                              isAvailable
-                                  ? const Color(0xFF047857)
-                                  : const Color(0xFF64748B),
+                  const SizedBox(width: 14),
+
+                  // Item Info (Title + Category Tag + Price)
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          item.itemName,
+                          style: GoogleFonts.outfit(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF0F172A),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                      ),
+                        const SizedBox(height: 3),
+                        Row(
+                          children: [
+                            Text(
+                              '฿${item.price.toStringAsFixed(0)}',
+                              style: GoogleFonts.outfit(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: const Color(0xFF2563EB),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color:
+                                    isAvailable
+                                        ? const Color(0xFFECFDF5)
+                                        : const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                isAvailable ? 'เปิดขาย' : 'สินค้าหมด',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.bold,
+                                  color:
+                                      isAvailable
+                                          ? const Color(0xFF047857)
+                                          : const Color(0xFF64748B),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              ],
+                  ),
+                ],
+              ),
             ),
           ),
 
@@ -2588,30 +2634,174 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
     final priceCtrl = TextEditingController(
       text: item.price.toStringAsFixed(2),
     );
+    int? selectedCatId = item.categoryId;
+    List<ItemCategory> availableCategories = [];
+    bool isLoadingCats = true;
+
     showDialog(
       context: context,
       builder: (context) {
         bool isSaving = false;
         return StatefulBuilder(
-          builder: (context, setState) {
+          builder: (context, setDialogState) {
+            if (isLoadingCats) {
+              CategoryService.getItemCategories(shopId: _shop.shopId).then((cats) {
+                if (context.mounted) {
+                  setDialogState(() {
+                    availableCategories = cats;
+                    isLoadingCats = false;
+                  });
+                }
+              });
+            }
+
             return AlertDialog(
-              title: const Text('แก้ไขเมนู'),
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.edit_outlined,
+                      color: Color(0xFF2563EB),
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'แก้ไขเมนู: ${item.itemName}',
+                      style: GoogleFonts.outfit(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 17,
+                        color: const Color(0xFF0F172A),
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   TextFormField(
                     controller: priceCtrl,
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
                     ),
-                    decoration: const InputDecoration(labelText: 'ราคา (บาท)'),
+                    style: GoogleFonts.outfit(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF0F172A),
+                    ),
+                    decoration: InputDecoration(
+                      labelText: 'ราคา (บาท)',
+                      labelStyle: GoogleFonts.outfit(color: const Color(0xFF64748B)),
+                      filled: true,
+                      fillColor: const Color(0xFFF8FAFC),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.8),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    ),
                   ),
+                  const SizedBox(height: 16),
+                  if (isLoadingCats)
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(8.0),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Color(0xFF2563EB),
+                        ),
+                      ),
+                    )
+                  else if (availableCategories.isNotEmpty) ...[
+                    Text(
+                      'ประเภทเมนู/สินค้า',
+                      style: GoogleFonts.outfit(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF334155),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    DropdownButtonFormField<int>(
+                      initialValue: availableCategories.any((c) => c.categoryId == selectedCatId)
+                          ? selectedCatId
+                          : (availableCategories.isNotEmpty ? availableCategories.first.categoryId : null),
+                      dropdownColor: Colors.white,
+                      style: GoogleFonts.outfit(
+                        fontSize: 14,
+                        color: const Color(0xFF0F172A),
+                        fontWeight: FontWeight.w500,
+                      ),
+                      decoration: InputDecoration(
+                        filled: true,
+                        fillColor: const Color(0xFFF8FAFC),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.8),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      ),
+                      items: availableCategories.map((c) {
+                        return DropdownMenuItem<int>(
+                          value: c.categoryId,
+                          child: Text(
+                            c.categoryName,
+                            style: GoogleFonts.outfit(
+                              fontSize: 14,
+                              color: const Color(0xFF0F172A),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        setDialogState(() {
+                          selectedCatId = val;
+                        });
+                      },
+                    ),
+                  ],
                 ],
               ),
               actions: [
                 TextButton(
                   onPressed: isSaving ? null : () => Navigator.pop(context),
-                  child: const Text('ยกเลิก'),
+                  child: Text(
+                    'ยกเลิก',
+                    style: GoogleFonts.outfit(
+                      color: const Color(0xFF64748B),
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
                 ),
                 ElevatedButton(
                   onPressed: isSaving
@@ -2629,32 +2819,28 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
                             );
                             return;
                           }
-                          setState(() => isSaving = true);
+                          setDialogState(() => isSaving = true);
+                          final updatePayload = <String, dynamic>{
+                            'price': parsed.toStringAsFixed(2),
+                          };
+                          if (selectedCatId != null) {
+                            updatePayload['category_id'] = selectedCatId;
+                          }
+
                           final updated = await ItemService.updateItem(
                             item.itemId ?? 0,
-                            {'price': parsed.toStringAsFixed(2)},
+                            updatePayload,
                           );
-                          setState(() => isSaving = false);
+                          setDialogState(() => isSaving = false);
                           if (updated != null) {
-                            // replace local item
-                            if (mounted) {
-                              setState(() {
-                                final idx = _items.indexWhere(
-                                  (i) => i.itemId == updated.itemId,
-                                );
-                                if (idx != -1) {
-                                  _items[idx] = updated;
-                                  _itemAvailability[updated.itemId ?? 0] =
-                                      updated.isAvailable;
-                                }
-                              });
-                            }
-                            Navigator.pop(context);
+                            // reload fresh items from DB
+                            _loadItems();
                             if (context.mounted) {
+                              Navigator.pop(context);
                               AppDialog.showSuccess(
                                 context,
                                 title: 'สำเร็จ',
-                                message: 'อัปเดตราคาเรียบร้อย',
+                                message: 'อัปเดตเมนูเรียบร้อย',
                               );
                             }
                           } else {
@@ -2669,11 +2855,21 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
                             }
                           }
                         },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2563EB),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
                   child: isSaving
                       ? const SizedBox(
                           width: 20,
                           height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
                         )
                       : const Text('บันทึก'),
                 ),
@@ -2894,20 +3090,73 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
                                 final ok = await showDialog<bool>(
                                   context: context,
                                   builder: (ctx) => AlertDialog(
-                                    title: const Text('ยืนยันการลบ'),
-                                    content: const Text(
+                                    backgroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    title: Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(8),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFFEF2F2),
+                                            borderRadius: BorderRadius.circular(10),
+                                          ),
+                                          child: const Icon(
+                                            Icons.delete_outline,
+                                            color: Color(0xFFEF4444),
+                                            size: 20,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Text(
+                                          'ยืนยันการลบ',
+                                          style: GoogleFonts.outfit(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 17,
+                                            color: const Color(0xFF0F172A),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    content: Text(
                                       'คุณต้องการลบเมนูนี้หรือไม่?',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 14,
+                                        color: const Color(0xFF475569),
+                                      ),
                                     ),
                                     actions: [
                                       TextButton(
                                         onPressed: () =>
                                             Navigator.pop(ctx, false),
-                                        child: const Text('ยกเลิก'),
+                                        child: Text(
+                                          'ยกเลิก',
+                                          style: GoogleFonts.outfit(
+                                            color: const Color(0xFF64748B),
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
                                       ),
                                       ElevatedButton(
                                         onPressed: () =>
                                             Navigator.pop(ctx, true),
-                                        child: const Text('ลบ'),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: const Color(0xFFEF4444),
+                                          foregroundColor: Colors.white,
+                                          elevation: 0,
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(10),
+                                          ),
+                                          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                                        ),
+                                        child: Text(
+                                          'ลบ',
+                                          style: GoogleFonts.outfit(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -2924,15 +3173,16 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
                                         );
                                       });
                                     }
-                                    Navigator.pop(context);
-                                    if (context.mounted)
+                                    if (context.mounted) {
+                                      Navigator.pop(context);
                                       AppDialog.showSuccess(
                                         context,
                                         title: 'ลบแล้ว',
                                         message: 'เมนูถูกลบเรียบร้อย',
                                       );
+                                    }
                                   } else {
-                                    if (context.mounted)
+                                    if (context.mounted) {
                                       ScaffoldMessenger.of(
                                         context,
                                       ).showSnackBar(
@@ -2940,6 +3190,7 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
                                           content: Text('ไม่สามารถลบได้'),
                                         ),
                                       );
+                                    }
                                   }
                                 }
                               },

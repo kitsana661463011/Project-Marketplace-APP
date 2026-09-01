@@ -813,30 +813,61 @@ class _BookStallScreenState extends State<BookStallScreen> {
 
           const SizedBox(height: 14),
 
-          // Facilities & Highlights Badges
+          // Facilities & Highlights Badges (Dynamic from Database / Stall Settings)
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              _stallFeatureBadge(
+                _stallItem?.hasElectricity ?? true ? Icons.bolt_rounded : Icons.power_off_outlined,
+                _stallItem?.hasElectricity ?? true ? 'ไฟฟ้าพร้อมใช้' : 'ไม่มีไฟฟ้า',
+                isAvailable: _stallItem?.hasElectricity ?? true,
+                badgeColor: const Color(0xFFD97706),
+              ),
+              _stallFeatureBadge(
+                _stallItem?.hasWater ?? true ? Icons.water_drop_rounded : Icons.opacity_outlined,
+                _stallItem?.hasWater ?? true ? 'น้ำประปา' : 'ไม่มีน้ำประปา',
+                isAvailable: _stallItem?.hasWater ?? true,
+                badgeColor: const Color(0xFF2563EB),
+              ),
+            ],
+          ),
         ],
       ),
     );
   }
 
-  Widget _stallFeatureBadge(IconData icon, String label) {
+  Widget _stallFeatureBadge(
+    IconData icon,
+    String label, {
+    bool isAvailable = true,
+    Color badgeColor = const Color(0xFF475569),
+  }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: const Color(0xFFF1F5F9),
+        color: isAvailable ? badgeColor.withValues(alpha: 0.08) : const Color(0xFFF1F5F9),
         borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isAvailable ? badgeColor.withValues(alpha: 0.25) : const Color(0xFFE2E8F0),
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 13, color: const Color(0xFF475569)),
+          Icon(
+            icon,
+            size: 13,
+            color: isAvailable ? badgeColor : const Color(0xFF94A3B8),
+          ),
           const SizedBox(width: 4),
           Text(
             label,
             style: GoogleFonts.outfit(
               fontSize: 11.5,
-              color: const Color(0xFF475569),
-              fontWeight: FontWeight.w500,
+              color: isAvailable ? badgeColor : const Color(0xFF94A3B8),
+              fontWeight: isAvailable ? FontWeight.w600 : FontWeight.w500,
+              decoration: isAvailable ? TextDecoration.none : TextDecoration.lineThrough,
             ),
           ),
         ],

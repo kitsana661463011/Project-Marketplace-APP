@@ -776,6 +776,66 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
                             'ระยะเวลาสัญญา',
                             '${_formatThaiDate(b.startDate)} - ${_formatThaiDate(b.endDate)}',
                           ),
+                          const Divider(height: 16, color: Color(0xFFE2E8F0)),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'สิ่งอำนวยความสะดวก',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 13.5,
+                                  color: const Color(0xFF64748B),
+                                ),
+                              ),
+                              Wrap(
+                                spacing: 6,
+                                children: [
+                                  if (b.hasElectricity)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFFEF3C7),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(color: const Color(0xFFFDE68A)),
+                                      ),
+                                      child: Text(
+                                        '⚡ ไฟฟ้า',
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 11.5,
+                                          fontWeight: FontWeight.w600,
+                                          color: const Color(0xFF92400E),
+                                        ),
+                                      ),
+                                    ),
+                                  if (b.hasWater)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFDBEAFE),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(color: const Color(0xFFBFDBFE)),
+                                      ),
+                                      child: Text(
+                                        '💧 น้ำประปา',
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 11.5,
+                                          fontWeight: FontWeight.w600,
+                                          color: const Color(0xFF1E40AF),
+                                        ),
+                                      ),
+                                    ),
+                                  if (!b.hasElectricity && !b.hasWater)
+                                    Text(
+                                      'ไม่มี',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 13.5,
+                                        color: const Color(0xFF94A3B8),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ],
+                          ),
                         ],
                       ),
                     ),

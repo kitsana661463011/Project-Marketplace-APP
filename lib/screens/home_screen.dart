@@ -384,6 +384,13 @@ class _HomeTabState extends State<_HomeTab> {
     }
   }
 
+  Future<void> _loadNotificationCount() async {
+    try {
+      final unread = await AnnouncementService.getUnreadCount();
+      if (mounted) setState(() => _unreadNotificationCount = unread);
+    } catch (_) {}
+  }
+
   List<Shop> get _filteredShops {
     return _shops;
   }
@@ -468,16 +475,16 @@ class _HomeTabState extends State<_HomeTab> {
                     children: [
                       // App icon logo
                       Container(
-                        width: 52,
-                        height: 52,
+                        width: 36,
+                        height: 36,
                         decoration: BoxDecoration(
                           color: const Color(0xFF1E88E5),
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(9),
                         ),
                         child: ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(9),
                           child: Padding(
-                            padding: const EdgeInsets.all(3.0),
+                            padding: const EdgeInsets.all(2.5),
                             child: Image.asset(
                               'assets/home_logo.png',
                               color: Colors.white,
@@ -486,11 +493,11 @@ class _HomeTabState extends State<_HomeTab> {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 8),
                       Text(
                         'MarketPlace',
                         style: GoogleFonts.outfit(
-                          fontSize: 22,
+                          fontSize: 17,
                           fontWeight: FontWeight.bold,
                           color: const Color(0xFF0F172A),
                         ),
@@ -501,13 +508,14 @@ class _HomeTabState extends State<_HomeTab> {
                   GestureDetector(
                     onTap: () async {
                       await Navigator.pushNamed(context, '/announcements');
+                      _loadNotificationCount();
                       _loadShops();
                     },
                     child: Stack(
                       children: [
                         Container(
-                          width: 46,
-                          height: 46,
+                          width: 38,
+                          height: 38,
                           decoration: const BoxDecoration(
                             color: Colors.white,
                             shape: BoxShape.circle,
@@ -515,7 +523,7 @@ class _HomeTabState extends State<_HomeTab> {
                           child: const Icon(
                             Icons.notifications,
                             color: Color(0xFF475569),
-                            size: 24,
+                            size: 20,
                           ),
                         ),
                         if (_unreadNotificationCount > 0)
@@ -3078,33 +3086,66 @@ class _FollowedTabState extends State<_FollowedTab> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(
-          'ยกเลิกการติดตาม',
-          style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF2F2),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.favorite_border,
+                color: Color(0xFFEF4444),
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              'ยกเลิกการติดตาม',
+              style: GoogleFonts.outfit(
+                fontWeight: FontWeight.bold,
+                fontSize: 17,
+                color: const Color(0xFF0F172A),
+              ),
+            ),
+          ],
         ),
         content: Text(
           'คุณต้องการยกเลิกการติดตามร้าน "${shop.shopName}" ใช่หรือไม่?',
-          style: GoogleFonts.outfit(),
+          style: GoogleFonts.outfit(
+            fontSize: 14,
+            color: const Color(0xFF475569),
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
             child: Text(
               'ยกเลิก',
-              style: GoogleFonts.outfit(color: const Color(0xFF64748B)),
+              style: GoogleFonts.outfit(
+                color: const Color(0xFF64748B),
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
+              backgroundColor: const Color(0xFFEF4444),
               foregroundColor: Colors.white,
+              elevation: 0,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(10),
               ),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
             ),
-            child: Text('ยืนยัน', style: GoogleFonts.outfit()),
+            child: Text(
+              'ยืนยัน',
+              style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+            ),
           ),
         ],
       ),
@@ -3190,16 +3231,16 @@ class _FollowedTabState extends State<_FollowedTab> {
                     Row(
                       children: [
                         Container(
-                          width: 52,
-                          height: 52,
+                          width: 36,
+                          height: 36,
                           decoration: BoxDecoration(
                             color: const Color(0xFF1E88E5),
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(9),
                           ),
                           child: ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(9),
                             child: Padding(
-                              padding: const EdgeInsets.all(3.0),
+                              padding: const EdgeInsets.all(2.5),
                               child: Image.asset(
                                 'assets/home_logo.png',
                                 color: Colors.white,
@@ -3208,11 +3249,11 @@ class _FollowedTabState extends State<_FollowedTab> {
                             ),
                           ),
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 8),
                         Text(
                           'MarketPlace',
                           style: GoogleFonts.outfit(
-                            fontSize: 22,
+                            fontSize: 17,
                             fontWeight: FontWeight.bold,
                             color: const Color(0xFF0F172A),
                           ),
@@ -3228,8 +3269,8 @@ class _FollowedTabState extends State<_FollowedTab> {
                       child: Stack(
                         children: [
                           Container(
-                            width: 46,
-                            height: 46,
+                            width: 38,
+                            height: 38,
                             decoration: const BoxDecoration(
                               color: Colors.white,
                               shape: BoxShape.circle,
@@ -3237,7 +3278,7 @@ class _FollowedTabState extends State<_FollowedTab> {
                             child: const Icon(
                               Icons.notifications,
                               color: Color(0xFF475569),
-                              size: 24,
+                              size: 20,
                             ),
                           ),
                           if (_unreadNotificationCount > 0)
