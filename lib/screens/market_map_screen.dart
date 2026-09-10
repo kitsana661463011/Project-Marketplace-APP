@@ -221,6 +221,23 @@ class _MarketMapScreenState extends State<MarketMapScreen>
       return _parseColor(item.fillColor, opacity: 0.15);
     }
 
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final isSeller =
+        authService.currentUser?.role == 'seller' ||
+        authService.currentUser?.role == 'admin';
+
+    if (!isSeller) {
+      if (item.hasShop) {
+        return item.isShopOpen
+            ? const Color(0xFF10B981) // Emerald Green (ร้านที่เปิด)
+            : const Color(0xFFEF4444); // Red (ร้านที่ปิด)
+      } else if (item.isRepair) {
+        return const Color(0xFFF59E0B); // Amber (ปิดปรับปรุง)
+      } else {
+        return const Color(0xFFCBD5E1); // Slate gray (แผงว่าง / ยังไม่มีร้าน)
+      }
+    }
+
     if (_isVacantForViewer(item)) {
       return const Color(0xFF10B981); // Emerald Green (แผงว่าง)
     } else if (item.isPending) {
@@ -251,7 +268,22 @@ class _MarketMapScreenState extends State<MarketMapScreen>
   bool _shouldShow(model.MarketMapItem item) {
     if (!item.isBlock) return true; // always show zones/roads/entrances
 
-    // Filter by Status
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final isSeller =
+        authService.currentUser?.role == 'seller' ||
+        authService.currentUser?.role == 'admin';
+
+    // Customer Filter Logic (ร้านที่เปิด / ร้านที่ปิด)
+    if (!isSeller) {
+      if (_filterStatus == 'open') {
+        return item.isShopOpen;
+      } else if (_filterStatus == 'closed') {
+        return item.isShopClosed;
+      }
+      return true; // 'all'
+    }
+
+    // Filter by Status (Seller / Admin)
     bool matchesStatus = true;
     if (_filterStatus != 'all') {
       if (_filterStatus == 'available') {
@@ -265,7 +297,7 @@ class _MarketMapScreenState extends State<MarketMapScreen>
       }
     }
 
-    // Filter by Rental Type
+    // Filter by Rental Type (Seller / Admin)
     bool matchesRental = true;
     if (_filterRentalType != 'all') {
       if (_filterRentalType == 'daily') {
@@ -284,6 +316,10 @@ class _MarketMapScreenState extends State<MarketMapScreen>
     final isSeller =
         authService.currentUser?.role == 'seller' ||
         authService.currentUser?.role == 'admin';
+
+    // ลูกค้าทั่วไปดูได้เฉพาะแผงที่มีร้านค้าเปิดอยู่เท่านั้น
+    if (!isSeller && !item.hasShop) return;
+
     setState(() => _selectedItem = item);
 
     final bool hasShop = (item.isApproved || item.isPending) &&
@@ -424,6 +460,113 @@ class _MarketMapScreenState extends State<MarketMapScreen>
                   ],
                 ),
                 const SizedBox(height: 20),
+                if (item.hasImages) ...[
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.photo_library_outlined, size: 16, color: Color(0xFF64748B)),
+                          const SizedBox(width: 6),
+                          Text(
+                            'รูปภาพแผงค้า (${item.images.length} รูป)',
+                            style: GoogleFonts.outfit(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFF475569),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        height: 140,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: item.images.length,
+                          separatorBuilder: (_, _) => const SizedBox(width: 10),
+                          itemBuilder: (context, index) {
+                            final imgUrl = _formatImageUrl(item.images[index]);
+                            return GestureDetector(
+                              onTap: () => _openImagePreview(
+                                context,
+                                imgUrl,
+                                'รูปแผงค้า ${item.stallNum} (รูปที่ ${index + 1})',
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: Stack(
+                                  children: [
+                                    Image.network(
+                                      imgUrl,
+                                      width: item.images.length == 1 ? 260 : 200,
+                                      height: 140,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, _, _) => Container(
+                                        width: 160,
+                                        height: 140,
+                                        color: const Color(0xFFF1F5F9),
+                                        child: const Center(
+                                          child: Icon(Icons.broken_image_outlined, color: Color(0xFF94A3B8)),
+                                        ),
+                                      ),
+                                    ),
+                                    Positioned(
+                                      bottom: 6,
+                                      right: 6,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                        decoration: BoxDecoration(
+                                          color: Colors.black.withValues(alpha: 0.6),
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Icon(Icons.fullscreen, color: Colors.white, size: 12),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              'ดูรูปขยาย',
+                                              style: GoogleFonts.outfit(
+                                                fontSize: 10,
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                    Positioned(
+                                      top: 6,
+                                      left: 6,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF1E293B).withValues(alpha: 0.75),
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          'รูปที่ ${index + 1}',
+                                          style: GoogleFonts.outfit(
+                                            fontSize: 10,
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                    ],
+                  ),
+                ],
                 const Divider(color: Color(0xFFF1F5F9)),
                 const SizedBox(height: 16),
                 // Info rows
@@ -489,94 +632,41 @@ class _MarketMapScreenState extends State<MarketMapScreen>
                   ],
                 ],
                 const SizedBox(height: 24),
-                if (canBook)
-                  if (isSeller)
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () async {
-                          Navigator.pop(context);
-                          final result = await Navigator.pushNamed(
-                            context,
-                            '/book_stall',
-                            arguments: {'stall': item},
-                          );
-                          if (result == true && mounted) {
-                            _loadMap();
-                          }
-                        },
-                        icon: const Icon(Icons.calendar_month_outlined, size: 18),
-                        label: Text(
-                          'จองแผงค้านี้',
-                          style: GoogleFonts.outfit(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
-                          ),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF2563EB),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          elevation: 0,
+                // ปุ่มจองแสดงเฉพาะ seller / admin เท่านั้น
+                if (isSeller && canBook)
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () async {
+                        Navigator.pop(context);
+                        final result = await Navigator.pushNamed(
+                          context,
+                          '/book_stall',
+                          arguments: {'stall': item},
+                        );
+                        if (result == true && mounted) {
+                          _loadMap();
+                        }
+                      },
+                      icon: const Icon(Icons.calendar_month_outlined, size: 18),
+                      label: Text(
+                        'จองแผงค้านี้',
+                        style: GoogleFonts.outfit(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
                         ),
                       ),
-                    )
-                  else ...[
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF0FDF4),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: const Color(0xFFBBF7D0)),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.check_circle_outline, color: Color(0xFF16A34A), size: 20),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'แผงนี้ว่างพร้อมเปิดจองสำหรับผู้ค้าในตลาด',
-                              style: GoogleFonts.outfit(
-                                fontSize: 12.5,
-                                color: const Color(0xFF15803D),
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ],
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF2563EB),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        elevation: 0,
                       ),
                     ),
-                    const SizedBox(height: 14),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          Navigator.pop(context);
-                          Navigator.pushNamed(context, '/create_shop');
-                        },
-                        icon: const Icon(Icons.storefront_rounded, size: 18),
-                        label: Text(
-                          'สมัครเป็นผู้ค้าเพื่อจองแผงนี้',
-                          style: GoogleFonts.outfit(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14.5,
-                          ),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF10B981),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          elevation: 0,
-                        ),
-                      ),
-                    ),
-                  ]
+                  )
                 else
                   SizedBox(
                     width: double.infinity,
@@ -982,6 +1072,81 @@ class _MarketMapScreenState extends State<MarketMapScreen>
     );
   }
 
+  String _formatImageUrl(String path) {
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      return path;
+    }
+    final cleaned = path
+        .replaceFirst(RegExp(r'^/?storage/'), '')
+        .replaceFirst(RegExp(r'^/?api/images/'), '');
+    return '${ApiConfig.apiImageUrl}/$cleaned';
+  }
+
+  void _openImagePreview(BuildContext context, String imageUrl, String title) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.9),
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    style: GoogleFonts.outfit(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white),
+                  onPressed: () => Navigator.pop(ctx),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            InteractiveViewer(
+              minScale: 0.8,
+              maxScale: 3.5,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.network(
+                  imageUrl,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, _, _) => Container(
+                    padding: const EdgeInsets.all(32),
+                    color: const Color(0xFF1E293B),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.broken_image_outlined, color: Colors.white54, size: 48),
+                        const SizedBox(height: 8),
+                        Text(
+                          'ไม่สามารถโหลดรูปภาพได้',
+                          style: GoogleFonts.outfit(color: Colors.white70),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _zoomIn() {
     final Matrix4 updated = Matrix4.copy(_transformationController.value)
       ..scaledByDouble(1.25, 0, 0, 1);
@@ -1005,6 +1170,11 @@ class _MarketMapScreenState extends State<MarketMapScreen>
   }
 
   void _showLegendDialog() {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final isSeller =
+        authService.currentUser?.role == 'seller' ||
+        authService.currentUser?.role == 'admin';
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -1042,30 +1212,57 @@ class _MarketMapScreenState extends State<MarketMapScreen>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _legendItem(
-                color: const Color(0xFF10B981),
-                icon: Icons.storefront_outlined,
-                title: 'แผงว่าง',
-                subtitle: 'สามารถติดต่อจองได้ทันที',
-              ),
-              _legendItem(
-                color: const Color(0xFF3B82F6),
-                icon: Icons.access_time_rounded,
-                title: 'กำลังจอง',
-                subtitle: 'อยู่ระหว่างรอการอนุมัติสัญญา',
-              ),
-              _legendItem(
-                color: const Color(0xFFEF4444),
-                icon: Icons.store_rounded,
-                title: 'มีผู้เช่าแล้ว / มีร้านค้า',
-                subtitle: 'ร้านค้าเปิดให้บริการตามปกติ',
-              ),
-              _legendItem(
-                color: const Color(0xFFF59E0B),
-                icon: Icons.build_rounded,
-                title: 'ปิดปรับปรุง',
-                subtitle: 'งดให้บริการชั่วคราว',
-              ),
+              if (!isSeller) ...[
+                _legendItem(
+                  color: const Color(0xFF10B981),
+                  icon: Icons.store_rounded,
+                  title: 'ร้านที่เปิด',
+                  subtitle: 'ร้านค้าเปิดให้บริการอยู่ในขณะนี้',
+                ),
+                _legendItem(
+                  color: const Color(0xFFEF4444),
+                  icon: Icons.store_rounded,
+                  title: 'ร้านที่ปิด',
+                  subtitle: 'ร้านค้าปิดบริการชั่วคราว',
+                ),
+                _legendItem(
+                  color: const Color(0xFFF59E0B),
+                  icon: Icons.build_rounded,
+                  title: 'ปิดปรับปรุง',
+                  subtitle: 'แผงปิดปรับปรุงชั่วคราว',
+                ),
+                _legendItem(
+                  color: const Color(0xFFCBD5E1),
+                  icon: Icons.storefront_outlined,
+                  title: 'แผงว่าง',
+                  subtitle: 'ยังไม่มีร้านค้าเปิดขาย',
+                ),
+              ] else ...[
+                _legendItem(
+                  color: const Color(0xFF10B981),
+                  icon: Icons.storefront_outlined,
+                  title: 'แผงว่าง',
+                  subtitle: 'สามารถติดต่อจองได้ทันที',
+                ),
+                _legendItem(
+                  color: const Color(0xFF3B82F6),
+                  icon: Icons.access_time_rounded,
+                  title: 'กำลังจอง',
+                  subtitle: 'อยู่ระหว่างรอการอนุมัติสัญญา',
+                ),
+                _legendItem(
+                  color: const Color(0xFFEF4444),
+                  icon: Icons.store_rounded,
+                  title: 'มีผู้เช่าแล้ว / มีร้านค้า',
+                  subtitle: 'ร้านค้าเปิดให้บริการตามปกติ',
+                ),
+                _legendItem(
+                  color: const Color(0xFFF59E0B),
+                  icon: Icons.build_rounded,
+                  title: 'ปิดปรับปรุง',
+                  subtitle: 'งดให้บริการชั่วคราว',
+                ),
+              ],
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 8),
                 child: Divider(height: 1, color: Color(0xFFE2E8F0)),
@@ -1243,6 +1440,11 @@ class _MarketMapScreenState extends State<MarketMapScreen>
     final repairCount =
         _map?.items.where((i) => i.isBlock && i.isRepair).length ?? 0;
 
+    final openShopsCount =
+        _map?.items.where((i) => i.isBlock && i.isShopOpen).length ?? 0;
+    final closedShopsCount =
+        _map?.items.where((i) => i.isBlock && i.isShopClosed).length ?? 0;
+
     final authService = Provider.of<AuthService>(context, listen: false);
     final isSeller =
         authService.currentUser?.role == 'seller' ||
@@ -1276,7 +1478,9 @@ class _MarketMapScreenState extends State<MarketMapScreen>
             ),
             if (_map != null)
               Text(
-                '$availableCount ว่าง · $pendingCount จอง · $approvedCount มีผู้เช่า · $repairCount ปรับปรุง',
+                isSeller
+                    ? '$availableCount ว่าง · $pendingCount จอง · $approvedCount มีผู้เช่า · $repairCount ปรับปรุง'
+                    : '$openShopsCount ร้านที่เปิด · $closedShopsCount ร้านที่ปิด',
                 style: GoogleFonts.outfit(
                   color: const Color(0xFF64748B),
                   fontSize: 11,
@@ -1331,6 +1535,11 @@ class _MarketMapScreenState extends State<MarketMapScreen>
     final repairCount =
         _map?.items.where((i) => i.isBlock && i.isRepair).length ?? 0;
 
+    final openShopsCount =
+        _map?.items.where((i) => i.isBlock && i.isShopOpen).length ?? 0;
+    final closedShopsCount =
+        _map?.items.where((i) => i.isBlock && i.isShopClosed).length ?? 0;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: const BoxDecoration(
@@ -1342,51 +1551,85 @@ class _MarketMapScreenState extends State<MarketMapScreen>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Row 1: Status Filters (Full width equal columns)
-          Row(
-            children: [
-              _buildFilterPill(
-                label: 'ทั้งหมด',
-                isActive: _filterStatus == 'all',
-                color: const Color(0xFF2563EB),
-                onTap: () => setState(() => _filterStatus = 'all'),
-              ),
-              const SizedBox(width: 6),
-              _buildFilterPill(
-                label: '🟢 ว่าง ($availableCount)',
-                isActive: _filterStatus == 'available',
-                color: const Color(0xFF10B981),
-                onTap: () => setState(
-                  () => _filterStatus = (_filterStatus == 'available')
-                      ? 'all'
-                      : 'available',
+          if (!isSeller)
+            // Customer: 3 equal pills (ทั้งหมด, ร้านที่เปิด, ร้านที่ปิด)
+            Row(
+              children: [
+                _buildFilterPill(
+                  label: 'ทั้งหมด',
+                  isActive: _filterStatus == 'all',
+                  color: const Color(0xFF2563EB),
+                  onTap: () => setState(() => _filterStatus = 'all'),
                 ),
-              ),
-              const SizedBox(width: 6),
-              _buildFilterPill(
-                label: '🔵 จอง ($pendingCount)',
-                isActive: _filterStatus == 'occupied',
-                color: const Color(0xFF3B82F6),
-                onTap: () => setState(
-                  () => _filterStatus = (_filterStatus == 'occupied')
-                      ? 'all'
-                      : 'occupied',
+                const SizedBox(width: 6),
+                _buildFilterPill(
+                  label: '🟢 ร้านที่เปิด ($openShopsCount)',
+                  isActive: _filterStatus == 'open',
+                  color: const Color(0xFF10B981),
+                  onTap: () => setState(
+                    () => _filterStatus = (_filterStatus == 'open')
+                        ? 'all'
+                        : 'open',
+                  ),
                 ),
-              ),
-              const SizedBox(width: 6),
-              _buildFilterPill(
-                label: '🔴 เช่า ($approvedCount)',
-                isActive: _filterStatus == 'approved',
-                color: const Color(0xFFEF4444),
-                onTap: () => setState(
-                  () => _filterStatus = (_filterStatus == 'approved')
-                      ? 'all'
-                      : 'approved',
+                const SizedBox(width: 6),
+                _buildFilterPill(
+                  label: '🔴 ร้านที่ปิด ($closedShopsCount)',
+                  isActive: _filterStatus == 'closed',
+                  color: const Color(0xFFEF4444),
+                  onTap: () => setState(
+                    () => _filterStatus = (_filterStatus == 'closed')
+                        ? 'all'
+                        : 'closed',
+                  ),
                 ),
-              ),
-            ],
-          ),
-          if (isSeller) ...[
+              ],
+            )
+          else ...[
+            // Seller / Admin: Row 1: Status Filters
+            Row(
+              children: [
+                _buildFilterPill(
+                  label: 'ทั้งหมด',
+                  isActive: _filterStatus == 'all',
+                  color: const Color(0xFF2563EB),
+                  onTap: () => setState(() => _filterStatus = 'all'),
+                ),
+                const SizedBox(width: 6),
+                _buildFilterPill(
+                  label: '🟢 ว่าง ($availableCount)',
+                  isActive: _filterStatus == 'available',
+                  color: const Color(0xFF10B981),
+                  onTap: () => setState(
+                    () => _filterStatus = (_filterStatus == 'available')
+                        ? 'all'
+                        : 'available',
+                  ),
+                ),
+                const SizedBox(width: 6),
+                _buildFilterPill(
+                  label: '🔵 จอง ($pendingCount)',
+                  isActive: _filterStatus == 'occupied',
+                  color: const Color(0xFF3B82F6),
+                  onTap: () => setState(
+                    () => _filterStatus = (_filterStatus == 'occupied')
+                        ? 'all'
+                        : 'occupied',
+                  ),
+                ),
+                const SizedBox(width: 6),
+                _buildFilterPill(
+                  label: '🔴 เช่า ($approvedCount)',
+                  isActive: _filterStatus == 'approved',
+                  color: const Color(0xFFEF4444),
+                  onTap: () => setState(
+                    () => _filterStatus = (_filterStatus == 'approved')
+                        ? 'all'
+                        : 'approved',
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 6),
             // Row 2: Rental Type Filters (For Sellers / Admins)
             Row(

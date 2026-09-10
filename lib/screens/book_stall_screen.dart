@@ -36,6 +36,163 @@ class _BookStallScreenState extends State<BookStallScreen> {
   String _accountName = 'บัญชีตลาดนัดรอบเย็น';
   String _accountNumber = '123-4-56789-0 (กสิกรไทย)';
   String? _qrCodeImage;
+  List<Map<String, dynamic>> _bankAccounts = [];
+  int _selectedBankIndex = 0;
+
+  Color _getBankColor(String? code) {
+    switch (code?.toLowerCase()) {
+      case 'kbank':
+        return const Color(0xFF137F44);
+      case 'scb':
+        return const Color(0xFF4E2A84);
+      case 'bbl':
+        return const Color(0xFF1E3F8A);
+      case 'ktb':
+        return const Color(0xFF00A6E6);
+      case 'bay':
+        return const Color(0xFFFEC43B);
+      case 'ttb':
+        return const Color(0xFF002D63);
+      case 'gsb':
+        return const Color(0xFFEB1985);
+      case 'baac':
+        return const Color(0xFF224A25);
+      case 'promptpay':
+      default:
+        return const Color(0xFF003D7C);
+    }
+  }
+
+  String _getBankShortName(String? code) {
+    switch (code?.toLowerCase()) {
+      case 'kbank':
+        return 'กสิกรไทย';
+      case 'scb':
+        return 'ไทยพาณิชย์';
+      case 'bbl':
+        return 'กรุงเทพ';
+      case 'ktb':
+        return 'กรุงไทย';
+      case 'bay':
+        return 'กรุงศรี';
+      case 'ttb':
+        return 'ทีทีบี';
+      case 'gsb':
+        return 'ออมสิน';
+      case 'baac':
+        return 'ธ.ก.ส.';
+      case 'promptpay':
+        return 'พร้อมเพย์';
+      default:
+        return 'บัญชีธนาคาร';
+    }
+  }
+
+  String get _selectedBankTitle {
+    if (_bankAccounts.isNotEmpty && _selectedBankIndex < _bankAccounts.length) {
+      final item = _bankAccounts[_selectedBankIndex];
+      return (item['bank_name'] as String?)?.isNotEmpty == true
+          ? item['bank_name']!
+          : _getBankShortName(item['bank_code']);
+    }
+    return 'พร้อมเพย์ / ธนาคาร';
+  }
+
+  String get _currentBankCode {
+    if (_bankAccounts.isNotEmpty && _selectedBankIndex < _bankAccounts.length) {
+      return _bankAccounts[_selectedBankIndex]['bank_code'] ?? 'promptpay';
+    }
+    return 'promptpay';
+  }
+
+  String _formatQrUrl(String path) {
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      return path;
+    }
+    final cleaned = path
+        .replaceFirst(RegExp(r'^/?storage/'), '')
+        .replaceFirst(RegExp(r'^/?api/images/'), '');
+    return '${ApiConfig.apiImageUrl}/$cleaned';
+  }
+
+  String _formatImageUrl(String path) => _formatQrUrl(path);
+
+  void _openImagePreview(BuildContext context, String imageUrl, String title) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.9),
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    style: GoogleFonts.outfit(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white),
+                  onPressed: () => Navigator.pop(ctx),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            InteractiveViewer(
+              minScale: 0.8,
+              maxScale: 3.5,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.network(
+                  imageUrl,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, _, _) => Container(
+                    padding: const EdgeInsets.all(32),
+                    color: const Color(0xFF1E293B),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.broken_image_outlined, color: Colors.white54, size: 48),
+                        const SizedBox(height: 8),
+                        Text(
+                          'ไม่สามารถโหลดรูปภาพได้',
+                          style: GoogleFonts.outfit(color: Colors.white70),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _onSelectBank(int index) {
+    if (index >= 0 && index < _bankAccounts.length) {
+      setState(() {
+        _selectedBankIndex = index;
+        final selected = _bankAccounts[index];
+        _accountName = selected['account_name'] ?? '';
+        _accountNumber = selected['account_number'] ?? '';
+        _qrCodeImage = selected['qr_code_path'];
+      });
+    }
+  }
 
   @override
   void initState() {
@@ -74,15 +231,48 @@ class _BookStallScreenState extends State<BookStallScreen> {
       }
       if (res['status'] == true && res['data'] != null) {
         final data = res['data'];
+        final rawAccounts = data['accounts'];
+        List<Map<String, dynamic>> accounts = [];
+
+        if (rawAccounts is List && rawAccounts.isNotEmpty) {
+          for (var item in rawAccounts) {
+            if (item is Map) {
+              final mapItem = Map<String, dynamic>.from(item);
+              final isActive = mapItem['is_active'];
+              if (isActive == true || isActive == 1 || isActive == '1' || isActive == null) {
+                accounts.add(mapItem);
+              }
+            }
+          }
+        }
+
         setState(() {
-          if (data['account_name'] != null) {
-            _accountName = data['account_name'];
-          }
-          if (data['account_number'] != null) {
-            _accountNumber = data['account_number'];
-          }
-          if (data['qr_code_path'] != null) {
-            _qrCodeImage = data['qr_code_path'];
+          if (accounts.isNotEmpty) {
+            _bankAccounts = accounts;
+            _selectedBankIndex = 0;
+            _accountName = _bankAccounts[0]['account_name'] ?? _accountName;
+            _accountNumber = _bankAccounts[0]['account_number'] ?? _accountNumber;
+            _qrCodeImage = _bankAccounts[0]['qr_code_path'];
+          } else {
+            if (data['account_name'] != null) {
+              _accountName = data['account_name'];
+            }
+            if (data['account_number'] != null) {
+              _accountNumber = data['account_number'];
+            }
+            if (data['qr_code_path'] != null) {
+              _qrCodeImage = data['qr_code_path'];
+            }
+            _bankAccounts = [
+              {
+                'bank_code': data['bank_code'] ?? 'promptpay',
+                'bank_name': data['bank_name'] ?? 'พร้อมเพย์ (PromptPay)',
+                'account_name': _accountName,
+                'account_number': _accountNumber,
+                'qr_code_path': _qrCodeImage,
+              }
+            ];
+            _selectedBankIndex = 0;
           }
         });
       }
@@ -310,6 +500,7 @@ class _BookStallScreenState extends State<BookStallScreen> {
               'payment_date': DateTime.now().toIso8601String(),
               'payment_slip': _slipFileName ?? 'slip.png',
               'status': 'pending',
+              'destination_bank': _selectedBankTitle,
             };
             await ApiService.postMultipart(
               '/v1/payments',
@@ -708,6 +899,93 @@ class _BookStallScreenState extends State<BookStallScreen> {
               ),
             ],
           ),
+          if (item.hasImages) ...[
+            const SizedBox(height: 14),
+            SizedBox(
+              height: 120,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: item.images.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 10),
+                itemBuilder: (context, index) {
+                  final imgUrl = _formatImageUrl(item.images[index]);
+                  return GestureDetector(
+                    onTap: () => _openImagePreview(
+                      context,
+                      imgUrl,
+                      'รูปแผงค้า ${item.stallNum} (รูปที่ ${index + 1})',
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Stack(
+                        children: [
+                          Image.network(
+                            imgUrl,
+                            width: item.images.length == 1 ? 260 : 180,
+                            height: 120,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, _, _) => Container(
+                              width: 150,
+                              height: 120,
+                              color: const Color(0xFFF1F5F9),
+                              child: const Center(
+                                child: Icon(Icons.broken_image_outlined, color: Color(0xFF94A3B8)),
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            bottom: 6,
+                            right: 6,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.6),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.fullscreen, color: Colors.white, size: 12),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'ดูรูปขยาย',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 10,
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            top: 6,
+                            left: 6,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1E293B).withValues(alpha: 0.75),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                'รูปที่ ${index + 1}',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 10,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
           const Divider(color: Color(0xFFF1F5F9), height: 1),
           const SizedBox(height: 14),
@@ -1618,6 +1896,83 @@ class _BookStallScreenState extends State<BookStallScreen> {
           ),
           const SizedBox(height: 16),
 
+          // Bank Selector Carousel / Chips (if multiple accounts available)
+          if (_bankAccounts.length > 1) ...[
+            Text(
+              'เลือกบัญชีธนาคารปลายทางที่ต้องการโอน:',
+              style: GoogleFonts.outfit(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF334155),
+              ),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              height: 42,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: _bankAccounts.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 8),
+                itemBuilder: (context, idx) {
+                  final bank = _bankAccounts[idx];
+                  final isSelected = _selectedBankIndex == idx;
+                  final code = bank['bank_code'] as String?;
+                  final bankColor = _getBankColor(code);
+                  final shortName = _getBankShortName(code);
+
+                  return InkWell(
+                    onTap: () => _onSelectBank(idx),
+                    borderRadius: BorderRadius.circular(12),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: isSelected ? bankColor : const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isSelected ? bankColor : const Color(0xFFE2E8F0),
+                          width: isSelected ? 1.5 : 1,
+                        ),
+                        boxShadow: isSelected
+                            ? [
+                                BoxShadow(
+                                  color: bankColor.withValues(alpha: 0.25),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 2),
+                                )
+                              ]
+                            : null,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: isSelected ? Colors.white : bankColor,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            shortName,
+                            style: GoogleFonts.outfit(
+                              fontSize: 12.5,
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                              color: isSelected ? Colors.white : const Color(0xFF334155),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 14),
+          ],
+
           // Bank Info Box with Copy button
           Container(
             padding: const EdgeInsets.all(16),
@@ -1632,8 +1987,8 @@ class _BookStallScreenState extends State<BookStallScreen> {
                   children: [
                     Container(
                       padding: const EdgeInsets.all(10),
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF16A34A),
+                      decoration: BoxDecoration(
+                        color: _getBankColor(_currentBankCode),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
@@ -1647,6 +2002,30 @@ class _BookStallScreenState extends State<BookStallScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 7,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: _getBankColor(_currentBankCode)
+                                      .withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  _selectedBankTitle,
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: _getBankColor(_currentBankCode),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
                           Text(
                             _accountName,
                             style: GoogleFonts.outfit(
@@ -1704,7 +2083,7 @@ class _BookStallScreenState extends State<BookStallScreen> {
               child: Column(
                 children: [
                   Text(
-                    'สแกน QR Code เพื่อชำระเงิน',
+                    'สแกน QR Code สำหรับ $_selectedBankTitle',
                     style: GoogleFonts.outfit(
                       fontSize: 12.5,
                       fontWeight: FontWeight.w600,
@@ -1715,7 +2094,7 @@ class _BookStallScreenState extends State<BookStallScreen> {
                   ClipRRect(
                     borderRadius: BorderRadius.circular(12),
                     child: Image.network(
-                      '${ApiConfig.apiImageUrl}/$_qrCodeImage',
+                      _formatQrUrl(_qrCodeImage!),
                       width: 180,
                       height: 180,
                       fit: BoxFit.cover,

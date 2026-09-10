@@ -73,8 +73,11 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
 
         setState(() {
           for (final file in files) {
-            _reviewImageBytes.add(file.bytes!);
-            _reviewImageNames.add(file.name);
+            // ป้องกันรูปซ้ำ: ตรวจสอบชื่อไฟล์ที่มีอยู่แล้ว
+            if (!_reviewImageNames.contains(file.name)) {
+              _reviewImageBytes.add(file.bytes!);
+              _reviewImageNames.add(file.name);
+            }
           }
         });
       }
@@ -501,36 +504,36 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
                       Stack(
                         children: [
                           Container(
-                            width: 76,
-                            height: 76,
+                            width: 110,
+                            height: 110,
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(14),
-                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                              border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
                             ),
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(14),
                               child: Image.memory(
                                 _reviewImageBytes[i],
-                                width: 76,
-                                height: 76,
+                                width: 110,
+                                height: 110,
                                 fit: BoxFit.cover,
                               ),
                             ),
                           ),
                           Positioned(
-                            top: 4,
-                            right: 4,
+                            top: 5,
+                            right: 5,
                             child: GestureDetector(
                               onTap: () => _removeReviewImage(i),
                               child: Container(
-                                padding: const EdgeInsets.all(4),
+                                padding: const EdgeInsets.all(5),
                                 decoration: const BoxDecoration(
-                                  color: Color(0xB3000000),
+                                  color: Color(0xCC000000),
                                   shape: BoxShape.circle,
                                 ),
                                 child: const Icon(
                                   Icons.close_rounded,
-                                  size: 12,
+                                  size: 14,
                                   color: Colors.white,
                                 ),
                               ),
@@ -546,8 +549,8 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
                       GestureDetector(
                         onTap: _pickReviewImages,
                         child: Container(
-                          width: 76,
-                          height: 76,
+                          width: 110,
+                          height: 110,
                           decoration: BoxDecoration(
                             color: const Color(0xFFF8FAFC),
                             borderRadius: BorderRadius.circular(14),
@@ -562,13 +565,13 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
                               const Icon(
                                 Icons.add_a_photo_outlined,
                                 color: Color(0xFF1E88E5),
-                                size: 22,
+                                size: 28,
                               ),
-                              const SizedBox(height: 4),
+                              const SizedBox(height: 6),
                               Text(
                                 '+ เพิ่มรูป',
                                 style: GoogleFonts.outfit(
-                                  fontSize: 11,
+                                  fontSize: 12,
                                   fontWeight: FontWeight.bold,
                                   color: const Color(0xFF1E88E5),
                                 ),

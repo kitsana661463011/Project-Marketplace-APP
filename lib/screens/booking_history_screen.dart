@@ -1583,16 +1583,12 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(22),
         border: Border.all(
-          color: b.isApproved
-              ? const Color(0xFFBBF7D0)
-              : const Color(0xFFE2E8F0),
-          width: b.isApproved ? 1.5 : 1,
+          color: const Color(0xFFE2E8F0),
+          width: 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: b.isApproved
-                ? const Color(0xFF16A34A).withValues(alpha: 0.06)
-                : Colors.black.withValues(alpha: 0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 14,
             offset: const Offset(0, 4),
           ),

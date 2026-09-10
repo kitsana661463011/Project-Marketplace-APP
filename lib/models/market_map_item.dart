@@ -20,9 +20,15 @@ class MarketMapItem {
   final double? securityDeposit;
   final bool hasElectricity;
   final bool hasWater;
+  final String? image1;
+  final String? image2;
+  final List<String> images;
   final String
   status; // 'available', 'occupied', 'approved', 'repair', 'maintenance', 'refund_requested', 'refunded'
   final Map<String, dynamic>? seller;
+  final bool hasShop;
+  final bool isShopOpen;
+  final String? shopStatus;
 
   MarketMapItem({
     required this.mapItemId,
@@ -46,8 +52,14 @@ class MarketMapItem {
     this.securityDeposit,
     this.hasElectricity = true,
     this.hasWater = true,
+    this.image1,
+    this.image2,
+    this.images = const [],
     required this.status,
     this.seller,
+    this.hasShop = false,
+    this.isShopOpen = false,
+    this.shopStatus,
   });
 
   factory MarketMapItem.fromJson(Map<String, dynamic> json) {
@@ -73,6 +85,19 @@ class MarketMapItem {
 
     final String rType = json['rental_type'] ?? 'daily';
     final double mainPrice = parseDouble(json['price'], 500.0);
+
+    final String? img1 = json['image1'] as String?;
+    final String? img2 = json['image2'] as String?;
+    List<String> imgList = [];
+    if (json['images'] is List) {
+      imgList = (json['images'] as List)
+          .map((e) => e?.toString() ?? '')
+          .where((e) => e.isNotEmpty)
+          .toList();
+    } else {
+      if (img1 != null && img1.isNotEmpty) imgList.add(img1);
+      if (img2 != null && img2.isNotEmpty) imgList.add(img2);
+    }
 
     return MarketMapItem(
       mapItemId: json['map_item_id']?.toString() ?? '',
@@ -104,12 +129,32 @@ class MarketMapItem {
       securityDeposit: parseNullableDouble(json['security_deposit']),
       hasElectricity: parseBool(json['has_electricity'], true),
       hasWater: parseBool(json['has_water'], true),
+      image1: img1,
+      image2: img2,
+      images: imgList,
       status: json['status'] ?? 'available',
       seller: json['seller'] != null
           ? Map<String, dynamic>.from(json['seller'])
           : null,
+      hasShop: json['has_shop'] == true ||
+          (json['seller'] != null &&
+           json['seller']['shop_name'] != null &&
+           json['seller']['shop_name'].toString().trim().isNotEmpty),
+      isShopOpen: json['is_shop_open'] == true ||
+          json['seller']?['is_open'] == true ||
+          json['shop_status'] == 'เปิดบริการอยู่' ||
+          json['seller']?['shop_status'] == 'เปิดบริการอยู่' ||
+          json['shop_status']?.toString().toLowerCase() == 'open' ||
+          json['seller']?['shop_status']?.toString().toLowerCase() == 'open',
+      shopStatus: json['shop_status']?.toString() ??
+          json['seller']?['shop_status']?.toString() ??
+          (json['has_shop'] == true || json['seller']?['shop_name'] != null ? 'เปิดบริการอยู่' : null),
     );
   }
+
+  String get stallNum => label;
+
+  bool get hasImages => images.isNotEmpty;
 
   bool get isBlock => itemType == 'block';
   bool get isZone => itemType == 'zone';
@@ -132,6 +177,9 @@ class MarketMapItem {
   bool get isRefunded => status == 'refunded';
   bool get isDaily => rentalType == 'daily';
   bool get isMonthly => rentalType == 'monthly';
+
+  // Customer Shop Status Getters
+  bool get isShopClosed => hasShop && !isShopOpen;
 }
 
 class MarketMap {
