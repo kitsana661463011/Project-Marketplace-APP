@@ -5,6 +5,8 @@ import '../services/announcement_service.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../models/announcement.dart';
+import '../models/app_notification.dart';
+import '../services/notification_api_service.dart';
 
 class AnnouncementScreen extends StatefulWidget {
   const AnnouncementScreen({super.key});
@@ -16,14 +18,23 @@ class AnnouncementScreen extends StatefulWidget {
 class _AnnouncementScreenState extends State<AnnouncementScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  List<Announcement> _announcements = [];
+  List<Announcement> _activeAnnouncements = [];
+  List<Announcement> _historyAnnouncements = [];
+  List<AppNotification> _personalNotifications = [];
+  bool _showingHistory = false;
   Set<String> _readIds = {};
   bool _isLoading = true;
+
+  List<Announcement> get _announcements =>
+      _showingHistory ? _historyAnnouncements : _activeAnnouncements;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
+    _tabController.addListener(() {
+      if (mounted) setState(() {});
+    });
     _loadAnnouncements();
   }
 
@@ -36,18 +47,25 @@ class _AnnouncementScreenState extends State<AnnouncementScreen>
   Future<void> _loadAnnouncements() async {
     setState(() => _isLoading = true);
     try {
-      final data = await AnnouncementService.getActiveAnnouncements();
+      final auth = Provider.of<AuthService>(context, listen: false);
+      final userId = auth.currentUser?.userId;
+
+      final active = await AnnouncementService.getActiveAnnouncements();
+      final history = await AnnouncementService.getHistoryAnnouncements();
       final readIds = await AnnouncementService.getReadAnnouncementIds();
+      final personalNotifs = await NotificationApiService.getNotifications(userId: userId);
+
       if (mounted) {
-        data.sort((a, b) {
-          int priority(String? type) =>
-              type == 'urgent' ? 0 : (type == 'activity' ? 1 : 2);
-          return priority(
-            a.announcementType,
-          ).compareTo(priority(b.announcementType));
-        });
+        int priority(String? type) =>
+            type == 'urgent' ? 0 : (type == 'activity' ? 1 : 2);
+        active.sort((a, b) =>
+            priority(a.announcementType).compareTo(priority(b.announcementType)));
+        history.sort((a, b) =>
+            priority(a.announcementType).compareTo(priority(b.announcementType)));
         setState(() {
-          _announcements = data;
+          _activeAnnouncements = active;
+          _historyAnnouncements = history;
+          _personalNotifications = personalNotifs;
           _readIds = readIds;
           _isLoading = false;
         });
@@ -55,7 +73,9 @@ class _AnnouncementScreenState extends State<AnnouncementScreen>
     } catch (e) {
       if (mounted) {
         setState(() {
-          _announcements = [];
+          _activeAnnouncements = [];
+          _historyAnnouncements = [];
+          _personalNotifications = [];
           _isLoading = false;
         });
       }
@@ -96,41 +116,23 @@ class _AnnouncementScreenState extends State<AnnouncementScreen>
           badgeIcon = Icons.campaign_outlined;
         }
 
-        // Custom details mapping based on whether it is a mock item or db item
-        final bool isMock1 =
-            item.announcementId == 1 || item.title.contains('น้ำประปา');
-        final bool isMock2 =
-            item.announcementId == 2 || item.title.contains('ค่าเช่า');
-        final bool isMockItem = isMock1 || isMock2;
+        final String bodyText = (item.description != null && item.description!.trim().isNotEmpty)
+            ? item.description!
+            : 'ไม่มีรายละเอียดเพิ่มเติมสำหรับประกาศนี้';
 
-        final String bodyText = isMock1
-            ? 'เรียน ผู้เช่าพื้นที่และผู้ใช้บริการตลาดทุกท่าน,\n\nขอแจ้งกำหนดการปิดปรับปรุงระบบท่อส่งน้ำหลัก เพื่อทำการซ่อมบำรุงและล้างถังเก็บน้ำประจำปีเพื่อความสะอาดและสุขอนามัยที่ดีของผู้ใช้บริการทุกท่าน โดยมีรายละเอียดดังนี้:'
-            : (isMock2
-                  ? 'เรียน ผู้เช่าพื้นที่แผงค้า A8,\n\nระบบขอส่งหนังสือแจ้งเตือนการต่ออายุสัญญาเช่าและชำระค่าเช่าประจำงวดเดือนกรกฎาคม เพื่อเป็นข้อมูลประกอบการพิจารณาตัดสินใจ และรักษาสิทธิในการค้าขายของท่าน โดยมีรายละเอียดดังนี้:'
-                  : (item.description ??
-                        'เรียน ผู้เช่าและผู้ใช้บริการตลาดทุกท่าน,\n\nมีประกาศแจ้งข่าวสารจากโครงการตลาด'));
+        final String dateText = item.dateRangeText.isNotEmpty
+            ? item.dateRangeText
+            : (item.publishDate?.split('T')[0] ?? '-');
 
-        final String dateText = isMock1
-            ? 'วันพุธที่ 19 กุมภาพันธ์ 2569'
-            : (isMock2
-                  ? 'วันอาทิตย์ที่ 30 มิถุนายน 2569'
-                  : (item.publishDate?.split('T')[0] ?? '-'));
+        final String timeText = item.publishDate != null && item.publishDate!.contains('T')
+            ? '${item.publishDate!.split('T')[1].substring(0, 5)} น.'
+            : 'ตลอดทั้งวัน';
 
-        final String timeText = isMock1
-            ? '22:00 น. ถึง 04:00 น. ของวันรุ่งขึ้น'
-            : (isMock2 ? '09:00 น. ถึง 18:00 น.' : '09:00 น. เป็นต้นไป');
-
-        final String areaText = isMock1
-            ? 'โซน (A), โซน (B), และห้องน้ำสาธารณะทุกจุด'
-            : (isMock2
-                  ? 'แผงค้าเลขที่ A8 (โซนพลาซ่า)'
-                  : 'โครงการตลาดนัดทั้งหมด');
+        final String areaText = 'พื้นที่โครงการตลาด';
 
         final String bannerUrl = (item.image != null && item.image!.isNotEmpty)
             ? ApiService.getImagePath(item.image)
-            : (isMock1
-                  ? 'https://images.unsplash.com/photo-1548826873-e8298697a1f6?w=600&auto=format&fit=crop'
-                  : 'https://images.unsplash.com/photo-1450133064473-71024230f91b?w=600&auto=format&fit=crop');
+            : '';
 
         return SlideTransition(
           position: Tween<Offset>(
@@ -212,6 +214,37 @@ class _AnnouncementScreenState extends State<AnnouncementScreen>
                         ),
                         const SizedBox(height: 16),
 
+                        if (item.isExpired) ...[
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFF1F2),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: const Color(0xFFFECDD3)),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.history_toggle_off, color: Color(0xFFE11D48), size: 18),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'ประกาศนี้สิ้นสุดระยะเวลาแล้ว และถูกย้ายมาแสดงในประวัติ',
+                                    style: GoogleFonts.outfit(
+                                      color: const Color(0xFFBE123C),
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+
                         // Title
                         Text(
                           item.title,
@@ -224,7 +257,7 @@ class _AnnouncementScreenState extends State<AnnouncementScreen>
                         ),
                         const SizedBox(height: 16),
 
-                        // Publish Date
+                        // Publish Date & Date Range
                         Row(
                           children: [
                             const Icon(
@@ -242,6 +275,28 @@ class _AnnouncementScreenState extends State<AnnouncementScreen>
                             ),
                           ],
                         ),
+                        if (item.dateRangeText.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.date_range_outlined,
+                                size: 16,
+                                color: Color(0xFF64748B),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'ระยะเวลาประกาศ: ${item.dateRangeText}',
+                                  style: GoogleFonts.outfit(
+                                    color: const Color(0xFF64748B),
+                                    fontSize: 14.5,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                         const SizedBox(height: 8),
                         Text(
                           'หมวดหมู่: $badgeText',
@@ -288,7 +343,7 @@ class _AnnouncementScreenState extends State<AnnouncementScreen>
                                 areaText,
                                 isStacked: true,
                               ),
-                              if (!isMockItem && item.userName != null) ...[
+                              if (item.userName != null && item.userName!.isNotEmpty) ...[
                                 const SizedBox(height: 12),
                                 _buildInfoRow('ผู้ประกาศ:', item.userName!),
                               ],
@@ -365,11 +420,6 @@ class _AnnouncementScreenState extends State<AnnouncementScreen>
 
   @override
   Widget build(BuildContext context) {
-    final auth = Provider.of<AuthService>(context);
-    final user = auth.currentUser;
-    final bool isVendor = user != null &&
-        (user.role == 'seller' || user.role == 'vendor' || user.role == 'admin');
-
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -402,11 +452,21 @@ class _AnnouncementScreenState extends State<AnnouncementScreen>
             tooltip: 'อ่านแล้วทั้งหมด',
             onPressed: () async {
               final messenger = ScaffoldMessenger.of(context);
+              final auth = Provider.of<AuthService>(context, listen: false);
+              final userId = auth.currentUser?.userId;
+
               await AnnouncementService.markAllAsRead();
+              if (userId != null) {
+                await NotificationApiService.markAllAsRead(userId);
+              }
+
               final readIds = await AnnouncementService.getReadAnnouncementIds();
+              final notifs = await NotificationApiService.getNotifications(userId: userId);
+
               if (mounted) {
                 setState(() {
                   _readIds = readIds;
+                  _personalNotifications = notifs;
                 });
                 messenger.showSnackBar(
                   SnackBar(
@@ -419,72 +479,94 @@ class _AnnouncementScreenState extends State<AnnouncementScreen>
             },
           ),
         ],
-        bottom: isVendor
-            ? PreferredSize(
-                preferredSize: const Size.fromHeight(48.0),
-                child: Column(
-                  children: [
-                    TabBar(
-                      controller: _tabController,
-                      indicatorSize: TabBarIndicatorSize.label,
-                      indicator: const UnderlineTabIndicator(
-                        borderSide:
-                            BorderSide(color: Color(0xFF1E88E5), width: 4.0),
-                        borderRadius: BorderRadius.all(Radius.circular(2)),
-                      ),
-                      labelColor: const Color(0xFF1E88E5),
-                      unselectedLabelColor: const Color(0xFF64748B),
-                      labelStyle: GoogleFonts.outfit(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
-                      ),
-                      unselectedLabelStyle: GoogleFonts.outfit(
-                        fontWeight: FontWeight.w500,
-                        fontSize: 15,
-                      ),
-                      tabs: const [
-                        Tab(text: 'ทั้งหมด'),
-                        Tab(text: 'ประกาศทั่วไป'),
-                        Tab(text: 'ประกาศด่วน'),
-                        Tab(text: 'กิจกรรม'),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(48.0),
+          child: Column(
+            children: [
+              TabBar(
+                controller: _tabController,
+                isScrollable: true,
+                tabAlignment: TabAlignment.start,
+                indicatorSize: TabBarIndicatorSize.label,
+                indicator: const UnderlineTabIndicator(
+                  borderSide:
+                      BorderSide(color: Color(0xFF1E88E5), width: 3.5),
+                  borderRadius: BorderRadius.all(Radius.circular(2)),
+                ),
+                labelColor: const Color(0xFF1E88E5),
+                unselectedLabelColor: const Color(0xFF64748B),
+                labelStyle: GoogleFonts.outfit(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14.5,
+                ),
+                unselectedLabelStyle: GoogleFonts.outfit(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 14.5,
+                ),
+                tabs: [
+                  const Tab(text: 'ทั้งหมด'),
+                  const Tab(text: 'ประกาศด่วน'),
+                  const Tab(text: 'ประกาศทั่วไป'),
+                  const Tab(text: 'กิจกรรม'),
+                  Tab(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text('อื่นๆ'),
+                        if (_personalNotifications.any((n) => !n.isRead)) ...[
+                          const SizedBox(width: 4),
+                          Container(
+                            width: 7,
+                            height: 7,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFE11D48),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
-                    Container(color: const Color(0xFFE2E8F0), height: 1.0),
-                  ],
-                ),
-              )
-            : PreferredSize(
-                preferredSize: const Size.fromHeight(1.0),
-                child: Container(color: const Color(0xFFE2E8F0), height: 1.0),
+                  ),
+                ],
               ),
+              Container(color: const Color(0xFFE2E8F0), height: 1.0),
+            ],
+          ),
+        ),
       ),
       body: _isLoading
           ? const Center(
               child: CircularProgressIndicator(color: Color(0xFF1E88E5)),
             )
-          : isVendor
-              ? TabBarView(
-                  controller: _tabController,
-                  children: [
-                    _buildAnnouncementList(_announcements), // ทั้งหมด
-                    _buildAnnouncementList(
-                      _announcements
-                          .where((a) => a.announcementType == 'general')
-                          .toList(),
-                    ), // ประกาศ (general)
-                    _buildAnnouncementList(
-                      _announcements
-                          .where((a) => a.announcementType == 'urgent')
-                          .toList(),
-                    ), // ประกาศด่วน (urgent)
-                    _buildAnnouncementList(
-                      _announcements
-                          .where((a) => a.announcementType == 'activity')
-                          .toList(),
-                    ), // กิจกรรม (activity)
-                  ],
-                )
-              : _buildAnnouncementList(_announcements),
+          : Column(
+              children: [
+                if (_tabController.index != 4) _buildSegmentSwitcher(),
+                Expanded(
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _buildAnnouncementList(_announcements), // ทั้งหมด
+                      _buildAnnouncementList(
+                        _announcements
+                            .where((a) => a.announcementType == 'urgent')
+                            .toList(),
+                      ), // ประกาศด่วน (urgent)
+                      _buildAnnouncementList(
+                        _announcements
+                            .where((a) => a.announcementType == 'general')
+                            .toList(),
+                      ), // ประกาศทั่วไป (general)
+                      _buildAnnouncementList(
+                        _announcements
+                            .where((a) => a.announcementType == 'activity')
+                            .toList(),
+                      ), // กิจกรรม (activity)
+                      _buildPersonalNotificationList(), // อื่นๆ (การแจ้งเตือนส่วนบุคคล)
+                    ],
+                  ),
+                ),
+              ],
+            ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: Colors.white,
@@ -569,11 +651,118 @@ class _AnnouncementScreenState extends State<AnnouncementScreen>
     );
   }
 
+  Widget _buildSegmentSwitcher() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              onTap: () {
+                if (_showingHistory) {
+                  setState(() => _showingHistory = false);
+                }
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 9),
+                decoration: BoxDecoration(
+                  color: !_showingHistory ? Colors.white : Colors.transparent,
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: !_showingHistory
+                      ? [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.06),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          )
+                        ]
+                      : null,
+                ),
+                alignment: Alignment.center,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.campaign_rounded,
+                      size: 18,
+                      color: !_showingHistory ? const Color(0xFF1E88E5) : const Color(0xFF64748B),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'ประกาศปัจจุบัน (${_activeAnnouncements.length})',
+                      style: GoogleFonts.outfit(
+                        fontWeight: !_showingHistory ? FontWeight.bold : FontWeight.w500,
+                        color: !_showingHistory ? const Color(0xFF0F172A) : const Color(0xFF64748B),
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: GestureDetector(
+              onTap: () {
+                if (!_showingHistory) {
+                  setState(() => _showingHistory = true);
+                }
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 9),
+                decoration: BoxDecoration(
+                  color: _showingHistory ? Colors.white : Colors.transparent,
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: _showingHistory
+                      ? [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.06),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          )
+                        ]
+                      : null,
+                ),
+                alignment: Alignment.center,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.history_rounded,
+                      size: 18,
+                      color: _showingHistory ? const Color(0xFFE11D48) : const Color(0xFF64748B),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'ประวัติประกาศ (${_historyAnnouncements.length})',
+                      style: GoogleFonts.outfit(
+                        fontWeight: _showingHistory ? FontWeight.bold : FontWeight.w500,
+                        color: _showingHistory ? const Color(0xFF0F172A) : const Color(0xFF64748B),
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildAnnouncementList(List<Announcement> list) {
     if (list.isEmpty) {
       return Center(
         child: Text(
-          'ไม่มีรายการประกาศในขณะนี้',
+          _showingHistory
+              ? 'ไม่มีประวัติประกาศที่สิ้นสุดแล้ว'
+              : 'ไม่มีรายการประกาศในขณะนี้',
           style: GoogleFonts.outfit(
             color: const Color(0xFF94A3B8),
             fontSize: 16,
@@ -678,7 +867,7 @@ class _AnnouncementScreenState extends State<AnnouncementScreen>
                                       'ใหม่',
                                       style: GoogleFonts.outfit(
                                         color: Colors.white,
-                                        fontSize: 10,
+                                        fontSize: 11,
                                         fontWeight: FontWeight.bold,
                                       ),
                                     ),
@@ -689,7 +878,7 @@ class _AnnouncementScreenState extends State<AnnouncementScreen>
                                   child: Text(
                                     item.title,
                                     style: GoogleFonts.outfit(
-                                      fontSize: 16,
+                                      fontSize: 17,
                                       fontWeight: isUnread
                                           ? FontWeight.bold
                                           : FontWeight.w600,
@@ -705,10 +894,11 @@ class _AnnouncementScreenState extends State<AnnouncementScreen>
                           Text(
                             item.publishDate?.contains('T') == true
                                 ? item.publishDate!.split('T')[0]
-                                : (item.publishDate ?? 'เมื่อวาน'),
+                                : (item.publishDate ?? ''),
                             style: GoogleFonts.outfit(
-                              fontSize: 12,
-                              color: const Color(0xFF94A3B8),
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w500,
+                              color: const Color(0xFF475569),
                             ),
                           ),
                         ],
@@ -717,11 +907,69 @@ class _AnnouncementScreenState extends State<AnnouncementScreen>
                       Text(
                         item.description ?? '',
                         style: GoogleFonts.outfit(
-                          fontSize: 14,
-                          color: const Color(0xFF64748B),
+                          fontSize: 14.5,
+                          color: const Color(0xFF334155),
                           height: 1.5,
                         ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
+                      // Date range row
+                      if (item.publishDate != null || item.endDate != null) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.calendar_today_rounded,
+                              size: 14,
+                              color: Color(0xFF2563EB),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              item.dateRangeText,
+                              style: GoogleFonts.outfit(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: const Color(0xFF334155),
+                              ),
+                            ),
+                            if (_showingHistory) ...[
+                              const SizedBox(width: 10),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFFF1F2),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: const Color(0xFFFECDD3),
+                                    width: 1.0,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.history_toggle_off,
+                                      size: 13,
+                                      color: Color(0xFFE11D48),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'หมดเวลาประกาศแล้ว',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 12,
+                                        color: const Color(0xFFBE123C),
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -730,6 +978,393 @@ class _AnnouncementScreenState extends State<AnnouncementScreen>
           ),
         );
       },
+    );
+  }
+
+  Widget _buildPersonalNotificationList() {
+    if (_personalNotifications.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFF1F5F9),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.notifications_none_rounded,
+                  size: 48,
+                  color: Color(0xFF94A3B8),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'ไม่มีการแจ้งเตือนในหัวข้อนี้',
+                style: GoogleFonts.outfit(
+                  color: const Color(0xFF0F172A),
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'เมื่อมีการแจ้งเตือน เช่น ผลการสมัครผู้ค้า, การอนุมัติหรือปฏิเสธการจอง, การโอนเงินคืน หรือการตอบกลับปัญหา จะแสดงขึ้นที่นี่',
+                style: GoogleFonts.outfit(
+                  color: const Color(0xFF64748B),
+                  fontSize: 13,
+                  height: 1.4,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      itemCount: _personalNotifications.length,
+      separatorBuilder: (context, index) => const SizedBox(height: 10),
+      itemBuilder: (context, index) {
+        final notif = _personalNotifications[index];
+        final isUnread = !notif.isRead;
+
+        final sanitizedMessage = notif.message.replaceAll('คำขอเปิดร้านค้า', 'คำขอสมัครเป็นผู้ค้า');
+        final hasReason = sanitizedMessage.contains(': ');
+        final titleText = hasReason ? sanitizedMessage.split(': ').first.trim() : sanitizedMessage;
+        final reasonText = hasReason ? sanitizedMessage.split(': ').sublist(1).join(': ').trim() : null;
+
+        return InkWell(
+          onTap: () {
+            if (isUnread) {
+              _markAsRead(notif);
+            }
+            _showNotificationDetail(notif, titleText, reasonText);
+          },
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: isUnread
+                    ? notif.categoryColor.withValues(alpha: 0.35)
+                    : const Color(0xFFE2E8F0),
+                width: isUnread ? 1.5 : 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isUnread ? 0.04 : 0.02),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: notif.categoryColor.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    notif.iconData,
+                    color: notif.categoryColor,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: notif.categoryColor.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              notif.typeTitle,
+                              style: GoogleFonts.outfit(
+                                fontSize: 13.0,
+                                fontWeight: FontWeight.bold,
+                                color: notif.categoryColor,
+                              ),
+                            ),
+                          ),
+                          if (notif.notifyDate != null)
+                            Text(
+                              _formatNotifyDate(notif.notifyDate!),
+                              style: GoogleFonts.outfit(
+                                fontSize: 12.5,
+                                color: const Color(0xFF1E293B),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        titleText,
+                        style: GoogleFonts.outfit(
+                          fontSize: 15.5,
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFF0F172A),
+                          height: 1.35,
+                        ),
+                      ),
+                      if (reasonText != null && reasonText.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF2F2),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFFFECACA), width: 0.8),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Padding(
+                                padding: EdgeInsets.only(top: 2),
+                                child: Icon(Icons.info_outline_rounded, size: 16, color: Color(0xFFDC2626)),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'เหตุผล: $reasonText',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 14.0,
+                                    fontWeight: FontWeight.w500,
+                                    color: const Color(0xFF991B1B),
+                                    height: 1.35,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                if (isUnread) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFE11D48),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  String _formatNotifyDate(DateTime dt) {
+    final now = DateTime.now();
+    final diff = now.difference(dt);
+    if (diff.inMinutes < 1) return 'เมื่อสักครู่';
+    if (diff.inMinutes < 60) return '${diff.inMinutes} นาทีที่แล้ว';
+    if (diff.inHours < 24) return '${diff.inHours} ชั่วโมงที่แล้ว';
+    final buddhistYear = dt.year + 543;
+    final day = dt.day.toString().padLeft(2, '0');
+    final month = dt.month.toString().padLeft(2, '0');
+    return '$day/$month/$buddhistYear';
+  }
+
+  Future<void> _markAsRead(AppNotification notif) async {
+    if (!notif.isRead) {
+      await NotificationApiService.markAsRead(notif.notificationId);
+      if (mounted) {
+        setState(() {
+          final idx = _personalNotifications.indexWhere((n) => n.notificationId == notif.notificationId);
+          if (idx != -1) {
+            _personalNotifications[idx] = _personalNotifications[idx].copyWith(isRead: true);
+          }
+        });
+      }
+    }
+  }
+
+  void _showNotificationDetail(AppNotification notif, [String? customTitle, String? customReason]) async {
+    await _markAsRead(notif);
+
+    if (!mounted) return;
+    final sanitizedMessage = notif.message.replaceAll('คำขอเปิดร้านค้า', 'คำขอสมัครเป็นผู้ค้า');
+    final hasReason = sanitizedMessage.contains(': ');
+    final titleText = customTitle ?? (hasReason ? sanitizedMessage.split(': ').first.trim() : sanitizedMessage);
+    final reasonText = customReason ?? (hasReason ? sanitizedMessage.split(': ').sublist(1).join(': ').trim() : null);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        actionsPadding: const EdgeInsets.all(16),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: notif.categoryColor.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(notif.iconData, color: notif.categoryColor, size: 22),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    notif.typeTitle,
+                    style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: const Color(0xFF0F172A)),
+                  ),
+                  if (notif.notifyDate != null)
+                    Text(
+                      _formatNotifyDate(notif.notifyDate!),
+                      style: GoogleFonts.outfit(fontSize: 12.5, color: const Color(0xFF1E293B), fontWeight: FontWeight.w600),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              titleText,
+              style: GoogleFonts.outfit(
+                fontSize: 16.0,
+                fontWeight: FontWeight.bold,
+                color: const Color(0xFF0F172A),
+                height: 1.4,
+              ),
+            ),
+            if (reasonText != null && reasonText.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF2F2),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFFECACA)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.only(top: 2),
+                      child: Icon(Icons.info_outline_rounded, size: 18, color: Color(0xFFDC2626)),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'เหตุผล:',
+                            style: GoogleFonts.outfit(
+                              fontSize: 14.0,
+                              fontWeight: FontWeight.bold,
+                              color: const Color(0xFF991B1B),
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            reasonText,
+                            style: GoogleFonts.outfit(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w500,
+                              color: const Color(0xFFB91C1C),
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xFF64748B),
+              textStyle: GoogleFonts.outfit(fontWeight: FontWeight.w600),
+            ),
+            child: const Text('ปิด'),
+          ),
+          if (notif.type == 'booking' || notif.type == 'refund')
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                Navigator.pushNamed(context, '/booking_history');
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1E88E5),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: Text('ดูการจอง', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+            )
+          else if (notif.type == 'seller')
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                Navigator.pushNamed(context, '/vendor_register');
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1E88E5),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: Text('ดูข้อมูลสมัครผู้ค้า', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+            )
+          else if (notif.type == 'problem')
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                Navigator.pushNamed(context, '/problem_history');
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFEA580C),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: Text('ดูรายการปัญหา', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+            ),
+        ],
+      ),
     );
   }
 }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -12,6 +13,8 @@ import '../models/user.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../widgets/app_dialog.dart';
+import '../services/notification_api_service.dart';
+import '../services/notification_service.dart';
 import 'market_map_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -25,6 +28,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
+  Timer? _notificationPollTimer;
 
   late final List<Widget> _pages;
 
@@ -38,6 +42,77 @@ class _HomeScreenState extends State<HomeScreen> {
       const _FollowedTab(),
       const _ProfileTab(),
     ];
+
+    NotificationService.onNotificationReceived = (title, message) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: const Color(0xFF0F172A),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          content: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF3B82F6).withValues(alpha: 0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.notifications_active, color: Color(0xFF60A5FA), size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      message,
+                      style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 12),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    };
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _pollNotifications();
+      _notificationPollTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+        _pollNotifications();
+      });
+    });
+  }
+
+  void _pollNotifications() {
+    if (!mounted) return;
+    try {
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final userId = authService.currentUser?.userId;
+      if (userId != null) {
+        NotificationService.checkAndTriggerNewNotifications(userId);
+      }
+    } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    _notificationPollTimer?.cancel();
+    NotificationService.onNotificationReceived = null;
+    super.dispose();
   }
 
   void setIndex(int index) {
@@ -225,15 +300,21 @@ class _HomeTabState extends State<_HomeTab> {
   String _selectedCategory = 'ทั้งหมด';
   List<String> _categories = ['ทั้งหมด'];
   bool _isLoading = true;
+  Timer? _notifCountTimer;
 
   @override
   void initState() {
     super.initState();
     _loadShops();
+    _loadNotificationCount();
+    _notifCountTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (mounted) _loadNotificationCount();
+    });
   }
 
   @override
   void dispose() {
+    _notifCountTimer?.cancel();
     _hideSearchOverlay();
     _searchController.dispose();
     super.dispose();
@@ -386,8 +467,19 @@ class _HomeTabState extends State<_HomeTab> {
 
   Future<void> _loadNotificationCount() async {
     try {
-      final unread = await AnnouncementService.getUnreadCount();
-      if (mounted) setState(() => _unreadNotificationCount = unread);
+      final auth = Provider.of<AuthService>(context, listen: false);
+      final userId = auth.currentUser?.userId;
+
+      final unreadAnnounce = await AnnouncementService.getUnreadCount();
+      final unreadNotifs = userId != null
+          ? await NotificationApiService.getUnreadCount(userId: userId)
+          : 0;
+
+      if (mounted) setState(() => _unreadNotificationCount = unreadAnnounce + unreadNotifs);
+
+      if (userId != null) {
+        NotificationService.checkAndTriggerNewNotifications(userId);
+      }
     } catch (_) {}
   }
 
@@ -1798,8 +1890,15 @@ class _ProfileTabState extends State<_ProfileTab> {
 
   Future<void> _loadNotificationCount() async {
     try {
-      final unread = await AnnouncementService.getUnreadCount();
-      if (mounted) setState(() => _unreadNotificationCount = unread);
+      final auth = Provider.of<AuthService>(context, listen: false);
+      final userId = auth.currentUser?.userId;
+
+      final unreadAnnounce = await AnnouncementService.getUnreadCount();
+      final unreadNotifs = userId != null
+          ? await NotificationApiService.getUnreadCount(userId: userId)
+          : 0;
+
+      if (mounted) setState(() => _unreadNotificationCount = unreadAnnounce + unreadNotifs);
     } catch (_) {}
   }
 
@@ -3030,8 +3129,15 @@ class _FollowedTabState extends State<_FollowedTab> {
 
   Future<void> _loadNotificationCount() async {
     try {
-      final unread = await AnnouncementService.getUnreadCount();
-      if (mounted) setState(() => _unreadNotificationCount = unread);
+      final auth = Provider.of<AuthService>(context, listen: false);
+      final userId = auth.currentUser?.userId;
+
+      final unreadAnnounce = await AnnouncementService.getUnreadCount();
+      final unreadNotifs = userId != null
+          ? await NotificationApiService.getUnreadCount(userId: userId)
+          : 0;
+
+      if (mounted) setState(() => _unreadNotificationCount = unreadAnnounce + unreadNotifs);
     } catch (_) {}
   }
 

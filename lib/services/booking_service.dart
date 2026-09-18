@@ -90,4 +90,52 @@ class BookingService {
       'refund_account_name': accountName,
     });
   }
+
+  static Future<Map<String, dynamic>> renewBooking({
+    required int bookingId,
+    required String renewalEndDate,
+    required double amount,
+    String? slipPath,
+    List<int>? slipBytes,
+    String? slipFileName,
+  }) async {
+    final fields = {
+      'renewal_end_date': renewalEndDate,
+      'amount': amount.toString(),
+    };
+
+    if (slipPath != null && slipPath.isNotEmpty) {
+      return await ApiService.postMultipart(
+        '${ApiConfig.bookings}/$bookingId/renew',
+        fields,
+        fileKey: 'slip_file',
+        filePath: slipPath,
+      );
+    } else if (slipBytes != null && slipBytes.isNotEmpty) {
+      return await ApiService.postMultipart(
+        '${ApiConfig.bookings}/$bookingId/renew',
+        fields,
+        fileKey: 'slip_file',
+        fileBytes: slipBytes,
+        fileName: slipFileName ?? 'renewal_slip.png',
+      );
+    } else {
+      return await ApiService.post(
+        '${ApiConfig.bookings}/$bookingId/renew',
+        fields,
+      );
+    }
+  }
+
+  static Future<List<Booking>> getExpiringSoonBookings(int userId) async {
+    try {
+      final response = await ApiService.get('${ApiConfig.bookings}/expiring-soon?user_id=$userId');
+      if (response['status'] == true && response['data'] is List) {
+        return (response['data'] as List)
+            .map((json) => Booking.fromJson(json))
+            .toList();
+      }
+    } catch (_) {}
+    return [];
+  }
 }

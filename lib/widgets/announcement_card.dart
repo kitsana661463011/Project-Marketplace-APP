@@ -75,8 +75,36 @@ class AnnouncementCard extends StatelessWidget {
                             ),
                           ),
                         ),
+                        if (announcement.isExpired)
+                          Container(
+                            margin: const EdgeInsets.only(left: 6),
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade200,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              'สิ้นสุดแล้ว',
+                              style: TextStyle(
+                                color: Colors.grey.shade700,
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
                         const SizedBox(width: 8),
-                        if (announcement.publishDate != null)
+                        if (announcement.dateRangeText.isNotEmpty)
+                          Expanded(
+                            child: Text(
+                              announcement.dateRangeText,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                                fontSize: 10,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          )
+                        else if (announcement.publishDate != null)
                           Text(
                             announcement.publishDate!.split('T')[0],
                             style: theme.textTheme.bodySmall?.copyWith(

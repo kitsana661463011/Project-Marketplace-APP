@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/api_config.dart';
@@ -111,15 +112,44 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  Future<Map<String, dynamic>> updateProfile(Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>> updateProfile(
+    Map<String, dynamic> data, {
+    String? fileKey,
+    String? filePath,
+    Uint8List? fileBytes,
+    String? fileName,
+  }) async {
     if (_currentUser?.userId == null) {
       return {'status': false, 'message': 'ไม่ได้เข้าสู่ระบบ'};
     }
 
-    final response = await ApiService.put(
-      '${ApiConfig.users}/${_currentUser!.userId}',
-      data,
-    );
+    final userId = _currentUser!.userId;
+    Map<String, dynamic> response;
+
+    if (fileBytes != null || (filePath != null && filePath.isNotEmpty)) {
+      final fields = <String, String>{
+        '_method': 'PUT',
+      };
+      data.forEach((key, value) {
+        if (value != null) {
+          fields[key] = value.toString();
+        }
+      });
+
+      response = await ApiService.postMultipart(
+        '${ApiConfig.users}/$userId',
+        fields,
+        fileKey: fileKey ?? 'document_image_file',
+        filePath: filePath,
+        fileBytes: fileBytes,
+        fileName: fileName ?? 'document.png',
+      );
+    } else {
+      response = await ApiService.put(
+        '${ApiConfig.users}/$userId',
+        data,
+      );
+    }
 
     if (response['status'] == true && response['data'] != null) {
       _currentUser = UserModel.fromJson(response['data']);

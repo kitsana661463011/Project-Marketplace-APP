@@ -61,11 +61,20 @@ class _ShopReviewsScreenState extends State<ShopReviewsScreen> {
   ]; // 5, 4, 3, 2, 1 stars
 
   late List<ReviewItem> _reviews;
+  int? _highlightReviewId;
+  String? _highlightCommentText;
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _reviews = [];
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   bool _isInitialized = false;
@@ -81,6 +90,8 @@ class _ShopReviewsScreenState extends State<ShopReviewsScreen> {
       } else if (args is Map) {
         _shop = args['shop'] as Shop? ?? Shop(shopName: 'ร้านค้า');
         _originTabIndex = args['tabIndex'] as int? ?? 0;
+        _highlightReviewId = args['highlightReviewId'] as int?;
+        _highlightCommentText = args['highlightCommentText']?.toString();
       }
       _loadReviews(_shop.shopId);
       _isInitialized = true;
@@ -183,14 +194,19 @@ class _ShopReviewsScreenState extends State<ShopReviewsScreen> {
               counts[starIdx]++;
             }
           }
-          _averageRating = _totalReviews > 0
-              ? totalRating / _totalReviews
-              : 0.0;
-          for (int i = 0; i < 5; i++) {
-            _ratingPercentages[i] = _totalReviews > 0
-                ? counts[i] / _totalReviews
-                : 0.0;
+
+          if (_totalReviews > 0) {
+            _averageRating = totalRating / _totalReviews;
+            for (int i = 0; i < 5; i++) {
+              _ratingPercentages[i] = counts[i] / _totalReviews;
+            }
+          } else {
+            _averageRating = 0.0;
+            for (int i = 0; i < 5; i++) {
+              _ratingPercentages[i] = 0.0;
+            }
           }
+          _isLoading = false;
         } else {
           _reviews = [];
           _totalReviews = 0;
@@ -317,6 +333,24 @@ class _ShopReviewsScreenState extends State<ShopReviewsScreen> {
       });
     }
 
+    // Prioritize placing the target highlighted review at the very top
+    if (_highlightReviewId != null ||
+        (_highlightCommentText != null && _highlightCommentText!.isNotEmpty)) {
+      sortedReviews.sort((a, b) {
+        final aMatch = (_highlightReviewId != null && a.reviewId == _highlightReviewId) ||
+            (_highlightCommentText != null &&
+                _highlightCommentText!.isNotEmpty &&
+                a.reviewText.trim() == _highlightCommentText!.trim());
+        final bMatch = (_highlightReviewId != null && b.reviewId == _highlightReviewId) ||
+            (_highlightCommentText != null &&
+                _highlightCommentText!.isNotEmpty &&
+                b.reviewText.trim() == _highlightCommentText!.trim());
+        if (aMatch && !bMatch) return -1;
+        if (!aMatch && bMatch) return 1;
+        return 0;
+      });
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
@@ -340,6 +374,7 @@ class _ShopReviewsScreenState extends State<ShopReviewsScreen> {
               child: CircularProgressIndicator(color: Color(0xFF1E88E5)),
             )
           : SingleChildScrollView(
+              controller: _scrollController,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -635,17 +670,31 @@ class _ShopReviewsScreenState extends State<ShopReviewsScreen> {
                     itemCount: sortedReviews.length,
                     itemBuilder: (context, index) {
                       final review = sortedReviews[index];
+                      final bool isTargetReview = (_highlightReviewId != null &&
+                              review.reviewId == _highlightReviewId) ||
+                          (_highlightCommentText != null &&
+                              _highlightCommentText!.isNotEmpty &&
+                              review.reviewText.trim() ==
+                                  _highlightCommentText!.trim());
+
                       return Container(
                         margin: const EdgeInsets.only(bottom: 16),
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: isTargetReview ? const Color(0xFFF0F7FF) : Colors.white,
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: const Color(0xFFF1F5F9)),
+                          border: Border.all(
+                            color: isTargetReview
+                                ? const Color(0xFF2563EB)
+                                : const Color(0xFFF1F5F9),
+                            width: isTargetReview ? 2.0 : 1.0,
+                          ),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.03),
-                              blurRadius: 10,
+                              color: isTargetReview
+                                  ? const Color(0xFF2563EB).withValues(alpha: 0.14)
+                                  : Colors.black.withValues(alpha: 0.03),
+                              blurRadius: isTargetReview ? 14 : 10,
                               offset: const Offset(0, 3),
                             ),
                           ],
@@ -653,6 +702,38 @@ class _ShopReviewsScreenState extends State<ShopReviewsScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            if (isTargetReview) ...[
+                              Container(
+                                margin: const EdgeInsets.only(bottom: 12),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF2563EB),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.flag_rounded,
+                                      color: Colors.white,
+                                      size: 14,
+                                    ),
+                                    const SizedBox(width: 5),
+                                    Text(
+                                      'ความคิดเห็นที่ถูกรายงาน',
+                                      style: GoogleFonts.outfit(
+                                        color: Colors.white,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                             // User Info & Stars Header Row (Clear 3-Column Layout)
                             Row(
                               crossAxisAlignment: CrossAxisAlignment.center,

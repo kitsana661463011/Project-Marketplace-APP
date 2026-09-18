@@ -39,28 +39,40 @@ class _ProblemHistoryScreenState extends State<ProblemHistoryScreen> {
     }
 
     // Combine user reports and all reports, avoiding duplicates
-    final Map<int, Map<String, dynamic>> reportMap = {};
+    final Map<String, Map<String, dynamic>> reportMap = {};
 
     for (var r in userReports) {
-      final id = r['problem_id'] ?? r['id'];
-      if (id != null) {
-        final key = id is int ? id : int.tryParse(id.toString()) ?? 0;
-        reportMap[key] = r;
+      final id = (r['problem_id'] ?? r['id'] ?? '').toString();
+      if (id.isNotEmpty) {
+        reportMap[id] = r;
       }
     }
 
     for (var r in allReports) {
-      final id = r['problem_id'] ?? r['id'];
-      if (id != null) {
-        final key = id is int ? id : int.tryParse(id.toString()) ?? 0;
-        if (!reportMap.containsKey(key)) {
-          reportMap[key] = r;
-        }
+      final id = (r['problem_id'] ?? r['id'] ?? '').toString();
+      if (id.isNotEmpty && !reportMap.containsKey(id)) {
+        reportMap[id] = r;
       }
     }
 
-    final combined = reportMap.values.toList();
-    combined.sort((a, b) {
+    final currentUserIdStr = currentUser?.userId?.toString();
+    bool isReviewReport(Map<String, dynamic> r) {
+      return r['is_review_report'] == true ||
+          r['report_type'] == 'feedback' ||
+          (r['description'] != null &&
+              r['description'].toString().contains('รายงานความคิดเห็น'));
+    }
+
+    // Review reports are private: only visible to the user who reported them
+    final visibleReports = reportMap.values.where((r) {
+      if (isReviewReport(r)) {
+        return currentUserIdStr != null &&
+            r['user_id']?.toString() == currentUserIdStr;
+      }
+      return true;
+    }).toList();
+
+    visibleReports.sort((a, b) {
       final dateA =
           DateTime.tryParse(a['report_date']?.toString() ?? '') ??
           DateTime(2000);
@@ -72,7 +84,7 @@ class _ProblemHistoryScreenState extends State<ProblemHistoryScreen> {
 
     if (mounted) {
       setState(() {
-        _allReports = combined;
+        _allReports = visibleReports;
         _isLoading = false;
         _filterReports();
       });
@@ -228,6 +240,8 @@ class _ProblemHistoryScreenState extends State<ProblemHistoryScreen> {
         desc.contains('cleanliness') ||
         desc.contains('ขยะ')) {
       return Icons.cleaning_services_outlined;
+    } else if (desc.contains('รายงานความคิดเห็น')) {
+      return Icons.chat_bubble_outline_rounded;
     }
     return Icons.report_problem_outlined;
   }
@@ -405,7 +419,7 @@ class _ProblemHistoryScreenState extends State<ProblemHistoryScreen> {
                             const Icon(
                               Icons.assignment_outlined,
                               size: 64,
-                              color: Color(0xFF94A3B8),
+                              color: Color(0xFF3B82F6),
                             ),
                             const SizedBox(height: 16),
                             Text(
@@ -421,8 +435,9 @@ class _ProblemHistoryScreenState extends State<ProblemHistoryScreen> {
                               'ยังไม่มีรายการประวัติการรายงานปัญหา หรือปัญหาที่คุณเคยแจ้งไว้ค่ะ',
                               textAlign: TextAlign.center,
                               style: GoogleFonts.outfit(
-                                fontSize: 13,
-                                color: const Color(0xFF64748B),
+                                fontSize: 13.5,
+                                color: const Color(0xFF334155),
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
                             const SizedBox(height: 20),
@@ -478,7 +493,7 @@ class _ProblemHistoryScreenState extends State<ProblemHistoryScreen> {
                                 child: Text(
                                   'แสดงรายการทั้งหมดแล้ว',
                                   style: GoogleFonts.outfit(
-                                    color: const Color(0xFF475569),
+                                    color: const Color(0xFF1E293B),
                                     fontSize: 13.5,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -640,7 +655,7 @@ class _ProblemHistoryScreenState extends State<ProblemHistoryScreen> {
                                           style: GoogleFonts.outfit(
                                             fontSize: 13,
                                             fontWeight: FontWeight.w600,
-                                            color: const Color(0xFF334155),
+                                            color: const Color(0xFF1E293B),
                                           ),
                                         ),
                                         const SizedBox(height: 12),
@@ -651,8 +666,8 @@ class _ProblemHistoryScreenState extends State<ProblemHistoryScreen> {
                                             Container(
                                               padding:
                                                   const EdgeInsets.symmetric(
-                                                    horizontal: 12,
-                                                    vertical: 6,
+                                                    horizontal: 10,
+                                                    vertical: 4,
                                                   ),
                                               decoration: BoxDecoration(
                                                 color: _getStatusBgColor(
@@ -678,37 +693,38 @@ class _ProblemHistoryScreenState extends State<ProblemHistoryScreen> {
                                                 ),
                                               ),
                                             ),
-                                            if (stallNumber != null)
-                                              Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      horizontal: 12,
-                                                      vertical: 6,
+                                            if (stallNumber != null) ...[
+                                              const SizedBox(width: 8),
+                                              Expanded(
+                                                child: Align(
+                                                  alignment: Alignment.centerRight,
+                                                  child: Container(
+                                                    padding: const EdgeInsets.symmetric(
+                                                      horizontal: 10,
+                                                      vertical: 4,
                                                     ),
-                                                decoration: BoxDecoration(
-                                                  color: const Color(
-                                                    0xFFF1F5F9,
-                                                  ),
-                                                  borderRadius:
-                                                      BorderRadius.circular(16),
-                                                  border: Border.all(
-                                                    color: const Color(
-                                                      0xFFCBD5E1,
+                                                    decoration: BoxDecoration(
+                                                      color: const Color(0xFFF1F5F9),
+                                                      borderRadius: BorderRadius.circular(16),
+                                                      border: Border.all(
+                                                        color: const Color(0xFFCBD5E1),
+                                                        width: 1.2,
+                                                      ),
                                                     ),
-                                                    width: 1.2,
-                                                  ),
-                                                ),
-                                                child: Text(
-                                                  'แผง: $stallNumber',
-                                                  style: GoogleFonts.outfit(
-                                                    fontSize: 11.5,
-                                                    fontWeight: FontWeight.bold,
-                                                    color: const Color(
-                                                      0xFF0F172A,
+                                                    child: Text(
+                                                      'แผง: $stallNumber',
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                      style: GoogleFonts.outfit(
+                                                        fontSize: 11.5,
+                                                        fontWeight: FontWeight.bold,
+                                                        color: const Color(0xFF0F172A),
+                                                      ),
                                                     ),
                                                   ),
                                                 ),
                                               ),
+                                            ],
                                           ],
                                         ),
                                       ],

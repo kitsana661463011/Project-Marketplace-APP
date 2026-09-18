@@ -11,6 +11,7 @@ class UserModel {
   final String? documentStatus;
   final String? submissionDate;
   final String? documentImage;
+  final String? rejectReason;
   final List<String> interests;
 
   UserModel({
@@ -26,6 +27,7 @@ class UserModel {
     this.documentStatus,
     this.submissionDate,
     this.documentImage,
+    this.rejectReason,
     this.interests = const [],
   });
 
@@ -73,6 +75,7 @@ class UserModel {
       documentStatus: json['document_status'],
       submissionDate: json['submission_date'],
       documentImage: json['document_image'],
+      rejectReason: json['reject_reason'],
       interests: parsedInterests,
     );
   }
@@ -91,6 +94,7 @@ class UserModel {
       'document_status': documentStatus,
       'submission_date': submissionDate,
       'document_image': documentImage,
+      'reject_reason': rejectReason,
       'interests': interests,
     };
   }
@@ -108,6 +112,7 @@ class UserModel {
     String? documentStatus,
     String? submissionDate,
     String? documentImage,
+    String? rejectReason,
     List<String>? interests,
   }) {
     return UserModel(
@@ -123,6 +128,7 @@ class UserModel {
       documentStatus: documentStatus ?? this.documentStatus,
       submissionDate: submissionDate ?? this.submissionDate,
       documentImage: documentImage ?? this.documentImage,
+      rejectReason: rejectReason ?? this.rejectReason,
       interests: interests ?? this.interests,
     );
   }

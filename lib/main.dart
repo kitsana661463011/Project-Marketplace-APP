@@ -25,8 +25,11 @@ import 'screens/manage_menu_category_screen.dart';
 import 'screens/market_map_screen.dart';
 import 'screens/book_stall_screen.dart';
 import 'screens/booking_history_screen.dart';
+import 'services/notification_service.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await NotificationService.initialize();
   runApp(
     MultiProvider(
       providers: [ChangeNotifierProvider(create: (_) => AuthService())],

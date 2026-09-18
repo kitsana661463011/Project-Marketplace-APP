@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../widgets/app_dialog.dart';
 import '../services/auth_service.dart';
+import '../services/api_service.dart';
 
 class VendorRegistrationScreen extends StatefulWidget {
   const VendorRegistrationScreen({super.key});
@@ -22,6 +23,7 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
   final _addressController = TextEditingController();
   String? _uploadedFileName;
   Uint8List? _uploadedFileBytes;
+  String? _uploadedFilePath;
   final ImagePicker _picker = ImagePicker();
 
   @override
@@ -31,6 +33,9 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
       final auth = Provider.of<AuthService>(context, listen: false);
       final user = auth.currentUser;
       if (user != null) {
+        if (user.username.isNotEmpty && _fullNameController.text.isEmpty) {
+          _fullNameController.text = user.username;
+        }
         if (user.phone != null && user.phone!.isNotEmpty) {
           _phoneController.text = user.phone!;
         }
@@ -39,6 +44,11 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
         }
         if (user.address != null && user.address!.isNotEmpty) {
           _addressController.text = user.address!;
+        }
+        if (user.documentImage != null && user.documentImage!.isNotEmpty) {
+          setState(() {
+            _uploadedFileName = user.documentImage!;
+          });
         }
       }
     });
@@ -56,8 +66,8 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
   Future<void> _pickFileWithFilePicker() async {
     try {
       final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf'],
+        type: FileType.image,
+        allowMultiple: false,
         withData: true,
       );
       if (result != null && result.files.isNotEmpty) {
@@ -65,6 +75,7 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
         setState(() {
           _uploadedFileName = file.name;
           _uploadedFileBytes = file.bytes;
+          _uploadedFilePath = file.path;
         });
       }
     } catch (e) {
@@ -82,14 +93,47 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
     }
   }
 
-  Future<void> _pickWithCamera() async {
+  Future<void> _pickFromGallery() async {
     try {
-      final XFile? image = await _picker.pickImage(source: ImageSource.camera);
+      final XFile? image = await _picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+      );
       if (image != null) {
         final bytes = await image.readAsBytes();
         setState(() {
           _uploadedFileName = image.name;
           _uploadedFileBytes = bytes;
+          _uploadedFilePath = image.path;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'ไม่สามารถเลือกรูปภาพได้: $e',
+              style: GoogleFonts.outfit(),
+            ),
+            backgroundColor: const Color(0xFFDC2626),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _pickWithCamera() async {
+    try {
+      final XFile? image = await _picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 85,
+      );
+      if (image != null) {
+        final bytes = await image.readAsBytes();
+        setState(() {
+          _uploadedFileName = image.name;
+          _uploadedFileBytes = bytes;
+          _uploadedFilePath = image.path;
         });
       }
     } catch (e) {
@@ -131,11 +175,33 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
               ),
               ListTile(
                 leading: const Icon(
+                  Icons.photo_library_outlined,
+                  color: Color(0xFF1E88E5),
+                ),
+                title: Text(
+                  'เลือกจากคลังรูปภาพ (Gallery)',
+                  style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+                ),
+                subtitle: Text(
+                  'เลือกรูปถ่ายบัตรประชาชนจากแกลเลอรีรูปภาพ',
+                  style: GoogleFonts.outfit(
+                    fontSize: 12,
+                    color: const Color(0xFF64748B),
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickFromGallery();
+                },
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(
                   Icons.folder_open,
                   color: Color(0xFF1E88E5),
                 ),
                 title: Text(
-                  'เลือกไฟล์รูปภาพ / เอกสารจากอุปกรณ์',
+                  'เลือกไฟล์รูปภาพ / เอกสารจากอุปกรณ์ (Files)',
                   style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
                 ),
                 subtitle: Text(
@@ -153,7 +219,14 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
               const Divider(height: 1),
               ListTile(
                 leading: const Icon(Icons.camera_alt, color: Color(0xFF1E88E5)),
-                title: Text('ถ่ายรูปด้วยกล้อง', style: GoogleFonts.outfit()),
+                title: Text('ถ่ายรูปด้วยกล้อง (Camera)', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                subtitle: Text(
+                  'เปิดกล้องเพื่อถ่ายรูปบัตรประชาชนทันที',
+                  style: GoogleFonts.outfit(
+                    fontSize: 12,
+                    color: const Color(0xFF64748B),
+                  ),
+                ),
                 onTap: () {
                   Navigator.pop(context);
                   _pickWithCamera();
@@ -226,8 +299,9 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
       final payload = <String, dynamic>{
-        'role': 'seller',
-        'document_status': 'approved',
+        'role': 'buyer',
+        'document_status': 'pending',
+        'submission_date': DateTime.now().toIso8601String(),
         'username': fullName,
         'citizen_id': citizenId,
         'address': address,
@@ -235,10 +309,13 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
       if (phone.isNotEmpty) {
         payload['phone'] = phone;
       }
-      if (_uploadedFileName != null) {
-        payload['document_image'] = _uploadedFileName;
-      }
-      final response = await authService.updateProfile(payload);
+      final response = await authService.updateProfile(
+        payload,
+        fileKey: 'document_image_file',
+        filePath: _uploadedFilePath,
+        fileBytes: _uploadedFileBytes,
+        fileName: _uploadedFileName,
+      );
 
       if (mounted) {
         Navigator.pop(context); // Close loading dialog
@@ -249,10 +326,15 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
           AppDialog.showSuccess(
             context,
             title: 'ส่งข้อมูลสำเร็จ',
-            message: 'ส่งใบสมัครและเปิดใช้งานบัญชีผู้ค้าเรียบร้อยแล้ว!',
+            message: 'ส่งใบสมัครเป็นผู้ค้าเรียบร้อยแล้ว กรุณารอการตรวจสอบและอนุมัติจากผู้ดูแลระบบ',
             onConfirm: () {
-              Navigator.pop(context); // Pop success dialog
-              Navigator.pop(context); // Go back to profile screen
+              if (mounted) {
+                if (Navigator.canPop(context)) {
+                  Navigator.pop(context);
+                } else {
+                  Navigator.pushReplacementNamed(context, '/home');
+                }
+              }
             },
           );
         }
@@ -279,6 +361,9 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final auth = Provider.of<AuthService>(context);
+    final user = auth.currentUser;
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -324,6 +409,55 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
                   color: const Color(0xFF64748B),
                 ),
               ),
+              if (user?.documentStatus == 'rejected') ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF2F2),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFFECACA)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.cancel_outlined, color: Color(0xFFDC2626), size: 20),
+                          const SizedBox(width: 8),
+                          Text(
+                            'คำขอสมัครเป็นผู้ค้าก่อนหน้านี้ไม่ผ่านการอนุมัติ',
+                            style: GoogleFonts.outfit(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: const Color(0xFF991B1B),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (user?.rejectReason != null && user!.rejectReason!.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          'เหตุผล: ${user.rejectReason}',
+                          style: GoogleFonts.outfit(
+                            fontSize: 13,
+                            color: const Color(0xFFB91C1C),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 6),
+                      Text(
+                        'กรุณาตรวจสอบความถูกต้องของข้อมูลและรูปถ่ายบัตรประชาชน แล้วกดยื่นเรื่องใหม่อีกครั้ง',
+                        style: GoogleFonts.outfit(
+                          fontSize: 12,
+                          color: const Color(0xFF7F1D1D),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: 24),
 
               Text(
@@ -471,6 +605,21 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
                             _uploadedFileBytes!,
                             height: 100,
                             fit: BoxFit.contain,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                      ] else if (_uploadedFileBytes == null &&
+                          _uploadedFileName != null &&
+                          _uploadedFileName!.isNotEmpty &&
+                          !_uploadedFileName!.endsWith('.pdf')) ...[
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Image.network(
+                            ApiService.getImagePath(_uploadedFileName),
+                            height: 100,
+                            fit: BoxFit.contain,
+                            errorBuilder: (context, error, stackTrace) =>
+                                const SizedBox.shrink(),
                           ),
                         ),
                         const SizedBox(height: 10),

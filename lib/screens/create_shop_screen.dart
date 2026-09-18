@@ -277,9 +277,10 @@ class _CreateShopScreenState extends State<CreateShopScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final args =
-        ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
-    final String stallNum = args['stall_number'] ?? 'A3';
+    final rawArgs = ModalRoute.of(context)?.settings.arguments;
+    final Map<String, dynamic> args =
+        rawArgs is Map ? Map<String, dynamic>.from(rawArgs) : <String, dynamic>{};
+    final String stallNum = args['stall_number']?.toString() ?? 'A3';
     final int? stallId = args['stall_id'];
 
     return Scaffold(

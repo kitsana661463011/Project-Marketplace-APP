@@ -126,17 +126,17 @@ class ApiService {
       request.fields.addAll(fields);
 
       if (fileKey != null) {
-        if (filePath != null && filePath.isNotEmpty) {
-          request.files.add(
-            await http.MultipartFile.fromPath(fileKey, filePath),
-          );
-        } else if (fileBytes != null && fileBytes.isNotEmpty) {
+        if (fileBytes != null && fileBytes.isNotEmpty) {
           request.files.add(
             http.MultipartFile.fromBytes(
               fileKey,
               fileBytes,
               filename: fileName ?? 'upload.png',
             ),
+          );
+        } else if (filePath != null && filePath.isNotEmpty && !kIsWeb) {
+          request.files.add(
+            await http.MultipartFile.fromPath(fileKey, filePath),
           );
         }
       }

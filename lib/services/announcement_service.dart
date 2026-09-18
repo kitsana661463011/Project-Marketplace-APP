@@ -38,11 +38,36 @@ class AnnouncementService {
   }
 
   static Future<List<Announcement>> getAnnouncements() async {
-    final response = await ApiService.get(ApiConfig.announcements);
+    final userId = await _getCurrentUserId();
+    final url = userId != null
+        ? '${ApiConfig.announcements}?user_id=$userId'
+        : ApiConfig.announcements;
+
+    final response = await ApiService.get(url);
     if (response['status'] == true && response['data'] is List) {
       final list = (response['data'] as List)
           .map((json) => Announcement.fromJson(json))
           .toList();
+
+      // Sync backend is_read with local read set
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final key = await _getReadKey();
+        final localReadSet = await getReadAnnouncementIds();
+        bool changed = false;
+        for (final item in list) {
+          if (item.isReadField == true) {
+            final itemKey = getAnnouncementKey(item);
+            if (!localReadSet.contains(itemKey)) {
+              localReadSet.add(itemKey);
+              changed = true;
+            }
+          }
+        }
+        if (changed) {
+          await prefs.setStringList(key, localReadSet.toList());
+        }
+      } catch (_) {}
 
       final role = await _getUserRole();
       return Announcement.filterByRole(list, role);
@@ -52,7 +77,12 @@ class AnnouncementService {
 
   static Future<List<Announcement>> getActiveAnnouncements() async {
     final announcements = await getAnnouncements();
-    return announcements.where((a) => a.status == 'active').toList();
+    return announcements.where((a) => a.isCurrentlyActive).toList();
+  }
+
+  static Future<List<Announcement>> getHistoryAnnouncements() async {
+    final announcements = await getAnnouncements();
+    return announcements.where((a) => a.isExpired).toList();
   }
 
   static String getAnnouncementKey(Announcement item) {
@@ -80,6 +110,15 @@ class AnnouncementService {
         readSet.add(itemKey);
         await prefs.setStringList(key, readSet.toList());
       }
+
+      // Backend sync
+      final userId = await _getCurrentUserId();
+      if (userId != null && item.announcementId != null) {
+        await ApiService.post(
+          '${ApiConfig.announcements}/${item.announcementId}/read',
+          {'user_id': userId},
+        );
+      }
     } catch (_) {}
   }
 
@@ -93,6 +132,15 @@ class AnnouncementService {
         readSet.add(getAnnouncementKey(item));
       }
       await prefs.setStringList(key, readSet.toList());
+
+      // Backend sync
+      final userId = await _getCurrentUserId();
+      if (userId != null) {
+        await ApiService.post(
+          '${ApiConfig.announcements}/read-all',
+          {'user_id': userId},
+        );
+      }
     } catch (_) {}
   }
 

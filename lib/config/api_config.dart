@@ -30,4 +30,5 @@ class ApiConfig {
   static const String forgotPassword = '/v1/forgot-password';
   static const String verifyResetCode = '/v1/verify-reset-code';
   static const String resetPassword = '/v1/reset-password';
+  static const String notifications = '/v1/notifications';
 }

@@ -1,10 +1,13 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../models/booking.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../services/booking_service.dart';
+import '../services/notification_service.dart';
 
 class BookingHistoryScreen extends StatefulWidget {
   const BookingHistoryScreen({super.key});
@@ -70,6 +73,18 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
           _bookings = bookings;
           _isLoading = false;
         });
+
+        // Trigger phone notification for stalls expiring in <= 5 days
+        for (final b in bookings) {
+          if (b.isExpiringSoon && b.stallNumber != null) {
+            final days = b.daysUntilExpiration ?? 0;
+            NotificationService.showStallExpiringNotification(
+              stallNumber: b.stallNumber!,
+              daysLeft: days,
+              bookingId: b.bookingId,
+            );
+          }
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -161,6 +176,7 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
   }
 
   Color _getStatusBgColor(Booking b) {
+    if (b.isRenewalPending) return const Color(0xFFEEF2FF); // Light Indigo
     if (b.isApproved) {
       if (!_isBookingActive(b)) return const Color(0xFFF1F5F9); // Light Gray for expired
       return const Color(0xFFE6F4EA); // Light Green
@@ -173,8 +189,9 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
   }
 
   Color _getStatusTextColor(Booking b) {
+    if (b.isRenewalPending) return const Color(0xFF4338CA); // Indigo
     if (b.isApproved) {
-      if (!_isBookingActive(b)) return const Color(0xFF475569); // Slate Gray for expired
+      if (!_isBookingActive(b)) return const Color(0xFF334155); // Slate for expired
       return const Color(0xFF137333); // Dark Green
     }
     if (b.isPending) return const Color(0xFF0284C7); // Dark Blue
@@ -185,6 +202,7 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
   }
 
   String _getStatusLabel(Booking b) {
+    if (b.isRenewalPending) return 'รอต่อสัญญา';
     if (b.isApproved) {
       if (!_isBookingActive(b)) return 'หมดสัญญา';
       return 'อนุมัติ / ใช้งานอยู่';
@@ -549,6 +567,466 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  void _showRenewalModal(Booking b) {
+    if (b.bookingId == null) return;
+
+    final bool isMonthly = b.isMonthly;
+    final double unitPrice = isMonthly
+        ? (b.monthlyPrice ?? 3500.0)
+        : (b.dailyPrice ?? 150.0);
+
+    int selectedDuration = isMonthly ? 1 : 30;
+    Uint8List? pickedSlipBytes;
+    String? pickedSlipName;
+    String? pickedSlipPath;
+    bool isSubmitting = false;
+
+    DateTime currentEnd;
+    try {
+      currentEnd = (b.endDate != null && b.endDate!.isNotEmpty)
+          ? DateTime.parse(b.endDate!)
+          : DateTime.now();
+    } catch (_) {
+      currentEnd = DateTime.now();
+    }
+
+    DateTime calculateNewEndDate(int duration) {
+      if (isMonthly) {
+        return DateTime(currentEnd.year, currentEnd.month + duration, currentEnd.day);
+      } else {
+        return currentEnd.add(Duration(days: duration));
+      }
+    }
+
+    double calculateTotal(int duration) {
+      return duration * unitPrice;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (modalContext) => StatefulBuilder(
+        builder: (context, setModalState) {
+          final newEndDate = calculateNewEndDate(selectedDuration);
+          final totalAmount = calculateTotal(selectedDuration);
+          final newEndDateStr = newEndDate.toIso8601String().split('T')[0];
+
+          return Container(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+              top: 20,
+              left: 20,
+              right: 20,
+            ),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFCBD5E1),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFECFDF5),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: const Icon(
+                          Icons.autorenew_rounded,
+                          color: Color(0xFF059669),
+                          size: 26,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'ต่อสัญญาเช่าแผงค้า',
+                              style: GoogleFonts.outfit(
+                                fontSize: 19,
+                                fontWeight: FontWeight.bold,
+                                color: const Color(0xFF0F172A),
+                              ),
+                            ),
+                            Text(
+                              'แผง ${b.stallNumber ?? "-"} • วันหมดสัญญาเดิม: ${_formatThaiDate(b.endDate)}',
+                              style: GoogleFonts.outfit(
+                                fontSize: 13,
+                                color: const Color(0xFF475569),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(modalContext),
+                        icon: const Icon(Icons.close, color: Color(0xFF64748B)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+
+                  Text(
+                    isMonthly ? 'เลือกระยะเวลาต่อสัญญา (เดือน)' : 'เลือกระยะเวลาต่อสัญญา (วัน)',
+                    style: GoogleFonts.outfit(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF1E293B),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: (isMonthly ? [1, 3, 6] : [7, 15, 30]).map((d) {
+                      final isSelected = selectedDuration == d;
+                      final label = isMonthly ? '$d เดือน' : '$d วัน';
+                      return Expanded(
+                        child: GestureDetector(
+                          onTap: () {
+                            setModalState(() => selectedDuration = d);
+                          },
+                          child: Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 4),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            decoration: BoxDecoration(
+                              color: isSelected ? const Color(0xFF059669) : const Color(0xFFF8FAFC),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: isSelected ? const Color(0xFF059669) : const Color(0xFFE2E8F0),
+                                width: 1.5,
+                              ),
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              label,
+                              style: GoogleFonts.outfit(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: isSelected ? Colors.white : const Color(0xFF334155),
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 16),
+
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF0FDF4),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFBBF7D0)),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'วันหมดสัญญาใหม่:',
+                              style: GoogleFonts.outfit(
+                                fontSize: 13.5,
+                                color: const Color(0xFF166534),
+                              ),
+                            ),
+                            Text(
+                              _formatThaiDate(newEndDateStr),
+                              style: GoogleFonts.outfit(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: const Color(0xFF166534),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'ยอดชำระการต่อสัญญา:',
+                              style: GoogleFonts.outfit(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: const Color(0xFF0F172A),
+                              ),
+                            ),
+                            Text(
+                              '฿${totalAmount.toStringAsFixed(0)}',
+                              style: GoogleFonts.outfit(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                                color: const Color(0xFF059669),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFDBEAFE),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.account_balance, color: Color(0xFF2563EB), size: 22),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'บัญชีรับชำระของตลาด',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 13,
+                                  color: const Color(0xFF475569),
+                                ),
+                              ),
+                              Text(
+                                'ธนาคารกสิกรไทย: 012-3-45678-9',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: const Color(0xFF0F172A),
+                                ),
+                              ),
+                              Text(
+                                'ชื่อบัญชี: บจก. ตลาดนัดมาร์เก็ตเพลส',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 12.5,
+                                  color: const Color(0xFF334155),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  Text(
+                    'แนบหลักฐานการโอนเงิน (สลิปโอนเงิน)',
+                    style: GoogleFonts.outfit(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF1E293B),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  GestureDetector(
+                    onTap: () async {
+                      try {
+                        final picker = ImagePicker();
+                        final XFile? image = await picker.pickImage(
+                          source: ImageSource.gallery,
+                          imageQuality: 85,
+                        );
+                        if (image != null) {
+                          final bytes = await image.readAsBytes();
+                          setModalState(() {
+                            pickedSlipBytes = bytes;
+                            pickedSlipName = image.name;
+                            pickedSlipPath = image.path;
+                          });
+                        }
+                      } catch (e) {
+                        debugPrint('Error picking image: $e');
+                      }
+                    },
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: pickedSlipBytes != null
+                              ? const Color(0xFF059669)
+                              : const Color(0xFFCBD5E1),
+                          width: pickedSlipBytes != null ? 1.5 : 1,
+                        ),
+                      ),
+                      child: pickedSlipBytes != null
+                          ? Row(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Image.memory(
+                                    pickedSlipBytes!,
+                                    width: 50,
+                                    height: 50,
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        pickedSlipName ?? 'หลักฐานการโอนเงิน.jpg',
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 13.5,
+                                          fontWeight: FontWeight.bold,
+                                          color: const Color(0xFF0F172A),
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      Text(
+                                        'แตะเพื่อเปลี่ยนรูปสลิป',
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 12,
+                                          color: const Color(0xFF059669),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const Icon(Icons.check_circle, color: Color(0xFF059669)),
+                              ],
+                            )
+                          : Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.cloud_upload_outlined, color: Color(0xFF2563EB)),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'แตะเพื่อแนบรูปภาพสลิปโอนเงิน',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.bold,
+                                    color: const Color(0xFF2563EB),
+                                  ),
+                                ),
+                              ],
+                            ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: isSubmitting
+                          ? null
+                          : () async {
+                              if (pickedSlipBytes == null && (pickedSlipPath == null || pickedSlipPath!.isEmpty)) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('กรุณาแนบสลิปการโอนเงินเพื่อต่อสัญญา', style: GoogleFonts.outfit()),
+                                    backgroundColor: const Color(0xFFDC2626),
+                                  ),
+                                );
+                                return;
+                              }
+
+                              setModalState(() => isSubmitting = true);
+
+                              final res = await BookingService.renewBooking(
+                                bookingId: b.bookingId!,
+                                renewalEndDate: newEndDateStr,
+                                amount: totalAmount,
+                                slipPath: pickedSlipPath,
+                                slipBytes: pickedSlipBytes,
+                                slipFileName: pickedSlipName,
+                              );
+
+                              if (context.mounted) {
+                                Navigator.pop(modalContext);
+                                if (res['status'] == true) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Row(
+                                        children: [
+                                          const Icon(Icons.check_circle, color: Colors.white),
+                                          const SizedBox(width: 8),
+                                          Text('ส่งคำขอต่อสัญญาเรียบร้อยแล้ว รอแอดมินอนุมัติ', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                                        ],
+                                      ),
+                                      backgroundColor: const Color(0xFF059669),
+                                      behavior: SnackBarBehavior.floating,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                    ),
+                                  );
+                                  _loadBookings();
+                                } else {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('เกิดข้อผิดพลาด: ${res['message'] ?? 'ไม่สามารถต่อสัญญาได้'}', style: GoogleFonts.outfit()),
+                                      backgroundColor: const Color(0xFFDC2626),
+                                      behavior: SnackBarBehavior.floating,
+                                    ),
+                                  );
+                                }
+                              }
+                            },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF059669),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: isSubmitting
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                            )
+                          : Text(
+                              'ยืนยันขอต่อสัญญาแผงค้า',
+                              style: GoogleFonts.outfit(
+                                fontSize: 15.5,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -1186,9 +1664,41 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
                     ],
                     const SizedBox(height: 24),
 
-                    // Actions Row: Request Refund & Close
+                    // Actions Row: Request Refund, Renew & Close
                     Row(
                       children: [
+                        if (b.isApproved && b.daysUntilExpiration != null && b.daysUntilExpiration! <= 5 && !b.isRenewalPending) ...[
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                Navigator.pop(context);
+                                _showRenewalModal(b);
+                              },
+                              icon: const Icon(
+                                Icons.autorenew_rounded,
+                                size: 18,
+                              ),
+                              label: Text(
+                                'ต่อสัญญา',
+                                style: GoogleFonts.outfit(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF059669),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                elevation: 0,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                        ],
                         if (_isBookingActive(b) && !b.isRefundRequested && !b.isRefunded) ...[
                           Expanded(
                             child: OutlinedButton.icon(
@@ -1717,6 +2227,81 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
           ),
           const SizedBox(height: 12),
 
+          // Expiration Warning Banner (within 5 days)
+          if (b.isApproved && b.daysUntilExpiration != null && b.daysUntilExpiration! <= 5 && b.daysUntilExpiration! >= 0) ...[
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFFBEB),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFFFDE68A), width: 1.2),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: Color(0xFFD97706), size: 24),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          b.daysUntilExpiration == 0
+                              ? '⚠️ สัญญาเช่าแผงนี้จะหมดอายุวันนี้!'
+                              : '⚠️ สัญญาเช่าแผงนี้จะหมดอายุในอีก ${b.daysUntilExpiration} วัน',
+                          style: GoogleFonts.outfit(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFFB45309),
+                          ),
+                        ),
+                        Text(
+                          'กรุณากดต่อสัญญาล่วงหน้าเพื่อรักษาสิทธิ์ในการขาย',
+                          style: GoogleFonts.outfit(
+                            fontSize: 12.5,
+                            color: const Color(0xFF92400E),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          // Renewal Pending Notice Banner
+          if (b.isRenewalPending) ...[
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEEF2FF),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFFC7D2FE), width: 1.2),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.hourglass_top_rounded, color: Color(0xFF4338CA), size: 22),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'ส่งคำขอต่อสัญญาแล้ว (รอผู้ดูแลตลาดอนุมัติ)',
+                      style: GoogleFonts.outfit(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF3730A3),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
           // Row 4: Grid (Area & Total Payment)
           Row(
             children: [
@@ -1737,7 +2322,7 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
                         ),
                         child: const Icon(
                           Icons.square_foot_outlined,
-                          color: Color(0xFF64748B),
+                          color: Color(0xFF475569),
                           size: 18,
                         ),
                       ),
@@ -1749,14 +2334,14 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
                             Text(
                               'พื้นที่รวม',
                               style: GoogleFonts.outfit(
-                                fontSize: 10.5,
-                                color: const Color(0xFF64748B),
+                                fontSize: 12.5,
+                                color: const Color(0xFF475569),
                               ),
                             ),
                             Text(
                               stallSize,
                               style: GoogleFonts.outfit(
-                                fontSize: 13,
+                                fontSize: 14,
                                 fontWeight: FontWeight.bold,
                                 color: const Color(0xFF0F172A),
                               ),
@@ -1800,14 +2385,14 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
                             Text(
                               'ยอดชำระรวม',
                               style: GoogleFonts.outfit(
-                                fontSize: 10.5,
-                                color: const Color(0xFF64748B),
+                                fontSize: 12.5,
+                                color: const Color(0xFF475569),
                               ),
                             ),
                             Text(
                               '฿${totalAmount.toStringAsFixed(0)}',
                               style: GoogleFonts.outfit(
-                                fontSize: 13.5,
+                                fontSize: 14.5,
                                 fontWeight: FontWeight.w900,
                                 color: const Color(0xFF2563EB),
                               ),
@@ -1825,7 +2410,7 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
           ),
           const SizedBox(height: 14),
 
-          // Row 5: Actions (เปิดบิล & ขอคืนเงิน)
+          // Row 5: Actions (เปิดบิล & ขอคืนเงิน & ต่อสัญญา)
           Row(
             children: [
               Expanded(
@@ -1850,8 +2435,34 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
                   ),
                 ),
               ),
+              if (b.isApproved && b.daysUntilExpiration != null && b.daysUntilExpiration! <= 5 && !b.isRenewalPending) ...[
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  onPressed: () => _showRenewalModal(b),
+                  icon: const Icon(Icons.autorenew_rounded, size: 17),
+                  label: Text(
+                    'ต่อสัญญา',
+                    style: GoogleFonts.outfit(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13.5,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF059669),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    elevation: 0,
+                  ),
+                ),
+              ],
               if (!b.isRefundRequested && !b.isRefunded) ...[
-                const SizedBox(width: 10),
+                const SizedBox(width: 8),
                 OutlinedButton.icon(
                   onPressed: () => _showRefundModal(b),
                   icon: const Icon(Icons.currency_exchange, size: 16),

@@ -11,6 +11,8 @@ class Booking {
   final String? bookingDate;
   final String? startDate;
   final String? endDate;
+  final String? renewalEndDate;
+  final double? renewalAmount;
   final String status;
   // Joined fields from API
   final String? userName;
@@ -48,6 +50,8 @@ class Booking {
     this.bookingDate,
     this.startDate,
     this.endDate,
+    this.renewalEndDate,
+    this.renewalAmount,
     this.status = 'pending',
     this.userName,
     this.userEmail,
@@ -106,6 +110,8 @@ class Booking {
       bookingDate: json['booking_date'],
       startDate: json['start_date'],
       endDate: json['end_date'],
+      renewalEndDate: json['renewal_end_date'],
+      renewalAmount: parseDouble(json['renewal_amount']),
       status: json['status'] ?? 'pending',
       userName: json['user_name'],
       userEmail: json['user_email'],
@@ -144,6 +150,8 @@ class Booking {
       'booking_date': bookingDate,
       'start_date': startDate,
       'end_date': endDate,
+      'renewal_end_date': renewalEndDate,
+      'renewal_amount': renewalAmount,
       'status': status,
     };
   }
@@ -155,4 +163,25 @@ class Booking {
   bool get isRefunded => status == 'refunded';
   bool get isRejected => status == 'rejected' || status == 'cancelled';
   bool get isMonthly => rentalType == 'monthly';
+
+  int? get daysUntilExpiration {
+    if (endDate == null || endDate!.isEmpty) return null;
+    final end = DateTime.tryParse(endDate!);
+    if (end == null) return null;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final target = DateTime(end.year, end.month, end.day);
+    return target.difference(today).inDays;
+  }
+
+  bool get isExpiringSoon {
+    if (!isApproved) return false;
+    final days = daysUntilExpiration;
+    return days != null && days >= 0 && days <= 5;
+  }
+
+  bool get isExpired {
+    final days = daysUntilExpiration;
+    return days != null && days < 0;
+  }
 }
