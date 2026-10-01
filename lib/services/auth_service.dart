@@ -20,6 +20,8 @@ class AuthService extends ChangeNotifier {
     if (userData != null) {
       _currentUser = UserModel.fromJson(jsonDecode(userData));
       notifyListeners();
+      // Always sync fresh user profile from API in background to ensure up-to-date fields
+      fetchUserProfile();
     }
   }
 
@@ -191,6 +193,25 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<UserModel?> fetchUserProfile() async {
+    if (_currentUser?.userId == null && _currentUser?.email != null) {
+      try {
+        final response = await ApiService.get(ApiConfig.users);
+        if (response['status'] == true && response['data'] != null) {
+          final users = response['data'] as List;
+          final cleanEmail = _currentUser!.email.trim().toLowerCase();
+          final matchingUser = users.firstWhere(
+            (u) => (u['email'] ?? '').toString().trim().toLowerCase() == cleanEmail,
+            orElse: () => null,
+          );
+          if (matchingUser != null) {
+            _currentUser = UserModel.fromJson(matchingUser);
+            await _saveUserData();
+            notifyListeners();
+            return _currentUser;
+          }
+        }
+      } catch (_) {}
+    }
     if (_currentUser?.userId == null) return _currentUser;
     try {
       final response = await ApiService.get('${ApiConfig.users}/${_currentUser!.userId}');

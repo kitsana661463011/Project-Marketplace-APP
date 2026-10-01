@@ -1156,15 +1156,16 @@ class _HomeTabState extends State<_HomeTab> {
                       ),
                     ],
                   ),
-                  // Notification bell
-                  GestureDetector(
-                    onTap: () async {
-                      await Navigator.pushNamed(context, '/notifications');
-                      _loadNotificationCount();
-                    },
-                    child: Stack(
-                      children: [
-                        Container(
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Announcement button
+                      GestureDetector(
+                        onTap: () async {
+                          await Navigator.pushNamed(context, '/announcements');
+                          _loadAnnouncements();
+                        },
+                        child: Container(
                           width: 38,
                           height: 38,
                           decoration: const BoxDecoration(
@@ -1172,11 +1173,34 @@ class _HomeTabState extends State<_HomeTab> {
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(
-                            Icons.notifications,
+                            Icons.campaign_outlined,
                             color: Color(0xFF475569),
-                            size: 20,
+                            size: 21,
                           ),
                         ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Notification bell
+                      GestureDetector(
+                        onTap: () async {
+                          await Navigator.pushNamed(context, '/notifications');
+                          _loadNotificationCount();
+                        },
+                        child: Stack(
+                          children: [
+                            Container(
+                              width: 38,
+                              height: 38,
+                              decoration: const BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.notifications,
+                                color: Color(0xFF475569),
+                                size: 20,
+                              ),
+                            ),
                         if (_unreadNotificationCount > 0)
                           Positioned(
                             right: 2,
@@ -1213,6 +1237,8 @@ class _HomeTabState extends State<_HomeTab> {
                   ),
                 ],
               ),
+            ],
+          ),
               const SizedBox(height: 20),
 
               // Search Bar with Floating Autocomplete Dropdown Overlay and All Shops Button
@@ -3090,17 +3116,25 @@ class _ProfileTabState extends State<_ProfileTab> {
   final ImagePicker _picker = ImagePicker();
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
+  final _addressController = TextEditingController();
+  bool _showAllInterests = false;
   int _unreadNotificationCount = 0;
 
   List<String> _dbInterests = [];
   bool _isLoadingInterests = true;
   final List<String> _selectedInterests = [];
+  bool _isSyncingProfile = false;
 
   @override
   void initState() {
     super.initState();
     _fetchInterestsFromDb();
     _loadNotificationCount();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        Provider.of<AuthService>(context, listen: false).fetchUserProfile();
+      }
+    });
   }
 
   Future<void> _loadNotificationCount() async {
@@ -3176,21 +3210,64 @@ class _ProfileTabState extends State<_ProfileTab> {
   void dispose() {
     _nameController.dispose();
     _phoneController.dispose();
+    _addressController.dispose();
     super.dispose();
   }
 
   void _initForm(UserModel? user) {
     _nameController.text = user?.username ?? 'สมชาย ใจดี';
     _phoneController.text = user?.phone ?? '081-999-99999';
+    _addressController.text = user?.address ?? '';
     _selectedProfileImage = user?.profileImage;
     _pickedImageBytes = null;
     _pickedImageName = null;
+    _showAllInterests = false;
 
     if (user?.interests != null) {
       final interestList = user!.interests;
       _selectedInterests.clear();
       _selectedInterests.addAll(interestList.where((e) => e.isNotEmpty));
     }
+  }
+
+  void _viewFullScreenImage(String imageUrl) {
+    if (imageUrl.isEmpty) return;
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(12),
+        child: Stack(
+          alignment: Alignment.topRight,
+          children: [
+            InteractiveViewer(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Image.network(
+                  imageUrl,
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Text('ไม่สามารถโหลดรูปภาพได้', style: GoogleFonts.outfit()),
+                  ),
+                ),
+              ),
+            ),
+            IconButton(
+              icon: const CircleAvatar(
+                backgroundColor: Colors.black54,
+                child: Icon(Icons.close, color: Colors.white, size: 20),
+              ),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _pickProfileImage(ImageSource source) async {
@@ -3360,20 +3437,63 @@ class _ProfileTabState extends State<_ProfileTab> {
     );
   }
 
+  String _formatJoinDate(String? dateStr) {
+    if (dateStr == null || dateStr.trim().isEmpty) {
+      return 'เข้าร่วมเมื่อ ไม่ระบุ';
+    }
+    try {
+      final cleanStr = dateStr.trim().replaceAll(' ', 'T');
+      final dt = DateTime.parse(cleanStr);
+      const thaiMonths = [
+        'มกราคม',
+        'กุมภาพันธ์',
+        'มีนาคม',
+        'เมษายน',
+        'พฤษภาคม',
+        'มิถุนายน',
+        'กรกฎาคม',
+        'สิงหาคม',
+        'กันยายน',
+        'ตุลาคม',
+        'พฤศจิกายน',
+        'ธันวาคม',
+      ];
+      final monthName = thaiMonths[dt.month - 1];
+      return 'เข้าร่วมเมื่อ $monthName ${dt.year}';
+    } catch (_) {
+      return 'เข้าร่วมเมื่อ $dateStr';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final authService = Provider.of<AuthService>(context);
     final user = authService.currentUser;
+
+    // Automatically sync fresh user profile if join date is not yet loaded in cache
+    if (user != null &&
+        (user.createdAt == null || user.createdAt!.isEmpty) &&
+        !_isSyncingProfile) {
+      _isSyncingProfile = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await authService.fetchUserProfile();
+        if (mounted) {
+          setState(() {
+            _isSyncingProfile = false;
+          });
+        }
+      });
+    }
 
     // Use backend user details or fallback to mockup info
     final String displayName = user != null && user.username.isNotEmpty
         ? user.username
         : 'สมชาย ใจดี';
     final String displayRole = user != null && user.role == 'seller'
-        ? 'เป็นสมาชิก และผู้ค้า'
-        : 'เป็นสมาชิก';
+        ? 'ผู้ค้า'
+        : (user != null && user.role == 'admin' ? 'ผู้ดูแลระบบ' : 'สมาชิก');
     final String displayEmail = user?.email ?? 'Test@gmail.com';
-    final String joinDate = 'เข้าร่วมเมื่อ มกราคม 2023';
+    final String joinDate = _formatJoinDate(user?.createdAt ?? user?.submissionDate);
 
     final String activeProfileImg =
         _selectedProfileImage ?? user?.profileImage ?? '';
@@ -3406,6 +3526,7 @@ class _ProfileTabState extends State<_ProfileTab> {
                           _isEditing = false;
                           _nameController.clear();
                           _phoneController.clear();
+                          _addressController.clear();
                         });
                       },
                       child: Container(
@@ -3424,7 +3545,7 @@ class _ProfileTabState extends State<_ProfileTab> {
                     ),
                     GestureDetector(
                       onTap: () async {
-                        await Navigator.pushNamed(context, '/announcements');
+                        await Navigator.pushNamed(context, '/notifications');
                         _loadNotificationCount();
                       },
                       child: Stack(
@@ -3655,6 +3776,236 @@ class _ProfileTabState extends State<_ProfileTab> {
                     ),
                   ),
                 ),
+
+                // Seller-specific details
+                if (user != null && user.role == 'seller') ...[
+                  const SizedBox(height: 24),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.verified_user_outlined,
+                              size: 18,
+                              color: Color(0xFF1E88E5),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'ข้อมูลประจำตัวผู้ค้า',
+                              style: GoogleFonts.outfit(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: const Color(0xFF0F172A),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Citizen ID
+                        Text(
+                          'เลขประจำตัวประชาชน (ยืนยันแล้ว)',
+                          style: GoogleFonts.outfit(
+                            fontSize: 13.5,
+                            color: const Color(0xFF475569),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFCBD5E1)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.badge_outlined, size: 20, color: Color(0xFF64748B)),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  user.citizenId != null && user.citizenId!.isNotEmpty
+                                      ? user.citizenId!
+                                      : 'ไม่ระบุเลขบัตรประชาชน',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 14,
+                                    color: const Color(0xFF1E293B),
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 1.1,
+                                  ),
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFE8F5E9),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.check_circle, size: 13, color: Color(0xFF2E7D32)),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'อนุมัติแล้ว',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: const Color(0xFF2E7D32),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Document Image Preview
+                        Text(
+                          'รูปถ่ายสำเนาบัตรประชาชน',
+                          style: GoogleFonts.outfit(
+                            fontSize: 13.5,
+                            color: const Color(0xFF475569),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        if (user.documentImage != null && user.documentImage!.isNotEmpty) ...[
+                          GestureDetector(
+                            onTap: () {
+                              _viewFullScreenImage(ApiService.getImagePath(user.documentImage));
+                            },
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: const Color(0xFFCBD5E1)),
+                              ),
+                              child: Row(
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Image.network(
+                                      ApiService.getImagePath(user.documentImage),
+                                      width: 68,
+                                      height: 50,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (context, error, stackTrace) => Container(
+                                        width: 68,
+                                        height: 50,
+                                        color: const Color(0xFFE2E8F0),
+                                        child: const Icon(Icons.broken_image_outlined, size: 24, color: Colors.grey),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'สำเนาถูกต้องที่ตรวจสอบแล้ว',
+                                          style: GoogleFonts.outfit(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold,
+                                            color: const Color(0xFF0F172A),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          'แตะเพื่อดูรูปภาพขนาดเต็ม',
+                                          style: GoogleFonts.outfit(
+                                            fontSize: 12,
+                                            color: const Color(0xFF1E88E5),
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const Icon(Icons.zoom_in, color: Color(0xFF64748B), size: 20),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ] else ...[
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                            ),
+                            child: Text(
+                              'ยังไม่มีการแนบรูปสำเนาบัตรประชาชน',
+                              style: GoogleFonts.outfit(fontSize: 13, color: const Color(0xFF94A3B8)),
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 16),
+
+                        // Editable Address
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'ที่อยู่ปัจจุบัน (แก้ไขได้)',
+                              style: GoogleFonts.outfit(
+                                fontSize: 13.5,
+                                color: const Color(0xFF475569),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            Text(
+                              'ใช้สำหรับติดต่อ/ส่งเอกสาร',
+                              style: GoogleFonts.outfit(
+                                fontSize: 11,
+                                color: const Color(0xFF94A3B8),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFCBD5E1)),
+                          ),
+                          child: TextField(
+                            controller: _addressController,
+                            maxLines: 3,
+                            style: GoogleFonts.outfit(color: Colors.black, fontSize: 13.5),
+                            decoration: InputDecoration(
+                              hintText: 'เลขที่บ้าน, ถนน, แขวง/ตำบล, เขต/อำเภอ, จังหวัด, รหัสไปรษณีย์',
+                              hintStyle: GoogleFonts.outfit(
+                                color: const Color(0xFF94A3B8),
+                                fontSize: 13,
+                              ),
+                              border: InputBorder.none,
+                              contentPadding: const EdgeInsets.all(12),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
                 const SizedBox(height: 24),
 
                 Row(
@@ -3735,118 +4086,155 @@ class _ProfileTabState extends State<_ProfileTab> {
                           ),
                         ),
                       )
-                    : Wrap(
-                        spacing: 8,
-                        runSpacing: 10,
-                        children: _dbInterests.map((interest) {
-                          final isSelected = _selectedInterests.contains(
-                            interest,
-                          );
-                          final int orderIndex = isSelected
-                              ? _selectedInterests.indexOf(interest) + 1
-                              : 0;
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Builder(
+                            builder: (context) {
+                              final Set<String> visibleSet = _showAllInterests
+                                  ? _dbInterests.toSet()
+                                  : (_dbInterests.take(8).toSet()..addAll(_selectedInterests));
+                              final listToRender = _showAllInterests
+                                  ? _dbInterests
+                                  : _dbInterests.where((item) => visibleSet.contains(item)).toList();
 
-                          return GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                if (isSelected) {
-                                  _selectedInterests.remove(interest);
-                                } else {
-                                  if (_selectedInterests.length >= 5) {
-                                    ScaffoldMessenger.of(
-                                      context,
-                                    ).hideCurrentSnackBar();
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          'เลือกความสนใจได้สูงสุด 5 อันดับ',
-                                          style: GoogleFonts.outfit(
-                                            fontWeight: FontWeight.bold,
+                              return Wrap(
+                                spacing: 6,
+                                runSpacing: 8,
+                                children: listToRender.map((interest) {
+                                  final isSelected = _selectedInterests.contains(interest);
+                                  final int orderIndex = isSelected
+                                      ? _selectedInterests.indexOf(interest) + 1
+                                      : 0;
+
+                                  return GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        if (isSelected) {
+                                          _selectedInterests.remove(interest);
+                                        } else {
+                                          if (_selectedInterests.length >= 5) {
+                                            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(
+                                                content: Text(
+                                                  'เลือกความสนใจได้สูงสุด 5 อันดับ',
+                                                  style: GoogleFonts.outfit(
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                                backgroundColor: const Color(0xFFDC2626),
+                                                behavior: SnackBarBehavior.floating,
+                                                duration: const Duration(seconds: 2),
+                                              ),
+                                            );
+                                            return;
+                                          }
+                                          _selectedInterests.add(interest);
+                                        }
+                                      });
+                                    },
+                                    child: AnimatedContainer(
+                                      duration: const Duration(milliseconds: 180),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: isSelected
+                                            ? const Color(0xFFEFF6FF)
+                                            : Colors.white,
+                                        borderRadius: BorderRadius.circular(16),
+                                        border: Border.all(
+                                          color: isSelected
+                                              ? const Color(0xFF2563EB)
+                                              : const Color(0xFFCBD5E1),
+                                          width: isSelected ? 1.5 : 1,
+                                        ),
+                                        boxShadow: isSelected
+                                            ? [
+                                                BoxShadow(
+                                                  color: const Color(0xFF2563EB).withValues(alpha: 0.12),
+                                                  blurRadius: 4,
+                                                  offset: const Offset(0, 2),
+                                                ),
+                                              ]
+                                            : null,
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          if (isSelected) ...[
+                                            Container(
+                                              width: 16,
+                                              height: 16,
+                                              margin: const EdgeInsets.only(right: 5),
+                                              decoration: const BoxDecoration(
+                                                color: Color(0xFF2563EB),
+                                                shape: BoxShape.circle,
+                                              ),
+                                              alignment: Alignment.center,
+                                              child: Text(
+                                                '$orderIndex',
+                                                style: GoogleFonts.outfit(
+                                                  color: Colors.white,
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.bold,
+                                                  height: 1.0,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                          Text(
+                                            interest,
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 12.5,
+                                              fontWeight: isSelected
+                                                  ? FontWeight.bold
+                                                  : FontWeight.w500,
+                                              color: isSelected
+                                                  ? const Color(0xFF1E40AF)
+                                                  : const Color(0xFF475569),
+                                            ),
                                           ),
-                                        ),
-                                        backgroundColor: const Color(
-                                          0xFFDC2626,
-                                        ),
-                                        behavior: SnackBarBehavior.floating,
-                                        duration: const Duration(seconds: 2),
+                                        ],
                                       ),
-                                    );
-                                    return;
-                                  }
-                                  _selectedInterests.add(interest);
-                                }
-                              });
+                                    ),
+                                  );
+                                }).toList(),
+                              );
                             },
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 180),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 8,
-                              ),
-                              decoration: BoxDecoration(
-                                color: isSelected
-                                    ? const Color(0xFFEFF6FF)
-                                    : Colors.white,
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: isSelected
-                                      ? const Color(0xFF2563EB)
-                                      : const Color(0xFFCBD5E1),
-                                  width: isSelected ? 1.5 : 1,
+                          ),
+                          if (_dbInterests.length > 8) ...[
+                            const SizedBox(height: 8),
+                            Center(
+                              child: TextButton.icon(
+                                onPressed: () {
+                                  setState(() {
+                                    _showAllInterests = !_showAllInterests;
+                                  });
+                                },
+                                icon: Icon(
+                                  _showAllInterests
+                                      ? Icons.keyboard_arrow_up
+                                      : Icons.keyboard_arrow_down,
+                                  size: 18,
+                                  color: const Color(0xFF1E88E5),
                                 ),
-                                boxShadow: isSelected
-                                    ? [
-                                        BoxShadow(
-                                          color: const Color(
-                                            0xFF2563EB,
-                                          ).withValues(alpha: 0.15),
-                                          blurRadius: 6,
-                                          offset: const Offset(0, 2),
-                                        ),
-                                      ]
-                                    : null,
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  if (isSelected) ...[
-                                    Container(
-                                      width: 18,
-                                      height: 18,
-                                      margin: const EdgeInsets.only(right: 6),
-                                      decoration: const BoxDecoration(
-                                        color: Color(0xFF2563EB),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      alignment: Alignment.center,
-                                      child: Text(
-                                        '$orderIndex',
-                                        style: GoogleFonts.outfit(
-                                          color: Colors.white,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
-                                          height: 1.0,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                  Text(
-                                    interest,
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 13.5,
-                                      fontWeight: isSelected
-                                          ? FontWeight.bold
-                                          : FontWeight.w500,
-                                      color: isSelected
-                                          ? const Color(0xFF1E40AF)
-                                          : const Color(0xFF475569),
-                                    ),
+                                label: Text(
+                                  _showAllInterests
+                                      ? 'ย่อหมวดหมู่ลง'
+                                      : 'ดูหมวดหมู่ทั้งหมด (${_dbInterests.length})',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.bold,
+                                    color: const Color(0xFF1E88E5),
                                   ),
-                                ],
+                                ),
                               ),
                             ),
-                          );
-                        }).toList(),
+                          ],
+                        ],
                       ),
                 const SizedBox(height: 36),
 
@@ -3877,6 +4265,9 @@ class _ProfileTabState extends State<_ProfileTab> {
                             'phone': _phoneController.text.trim(),
                             'interests': _selectedInterests.join(','),
                           };
+                          if (user?.role == 'seller') {
+                            fields['address'] = _addressController.text.trim();
+                          }
 
                           Map<String, dynamic> response;
 
@@ -3967,7 +4358,7 @@ class _ProfileTabState extends State<_ProfileTab> {
                 alignment: Alignment.topRight,
                 child: GestureDetector(
                   onTap: () async {
-                    await Navigator.pushNamed(context, '/announcements');
+                    await Navigator.pushNamed(context, '/notifications');
                     _loadNotificationCount();
                   },
                   child: Stack(
@@ -4178,6 +4569,22 @@ class _ProfileTabState extends State<_ProfileTab> {
                   },
                 ),
               ],
+              const SizedBox(height: 16),
+              _buildMenuItem(
+                icon: Icons.campaign_outlined,
+                title: 'ประกาศจากตลาด',
+                onTap: () {
+                  Navigator.pushNamed(context, '/announcements');
+                },
+              ),
+              const SizedBox(height: 16),
+              _buildMenuItem(
+                icon: Icons.notifications_outlined,
+                title: 'การแจ้งเตือน',
+                onTap: () {
+                  Navigator.pushNamed(context, '/notifications');
+                },
+              ),
               const SizedBox(height: 48),
 
               GestureDetector(

@@ -49,10 +49,16 @@ class _AnnouncementScreenState extends State<AnnouncementScreen>
       if (mounted) {
         int priority(String? type) =>
             type == 'urgent' ? 0 : (type == 'activity' ? 1 : 2);
-        active.sort((a, b) =>
-            priority(a.announcementType).compareTo(priority(b.announcementType)));
-        history.sort((a, b) =>
-            priority(a.announcementType).compareTo(priority(b.announcementType)));
+        int compareAnnouncements(Announcement a, Announcement b) {
+          final pA = priority(a.announcementType);
+          final pB = priority(b.announcementType);
+          if (pA != pB) return pA.compareTo(pB);
+          final dateA = a.publishDate ?? '';
+          final dateB = b.publishDate ?? '';
+          return dateB.compareTo(dateA);
+        }
+        active.sort(compareAnnouncements);
+        history.sort(compareAnnouncements);
         setState(() {
           _activeAnnouncements = active;
           _historyAnnouncements = history;

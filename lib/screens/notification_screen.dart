@@ -95,139 +95,297 @@ class _NotificationScreenState extends State<NotificationScreen> {
     if (dt == null) return '';
     final now = DateTime.now();
     final diff = now.difference(dt);
-    if (diff.inMinutes < 1) return 'เมื่อสักครู่';
+    if (diff.isNegative || diff.inMinutes < 1) return 'เมื่อสักครู่';
     if (diff.inMinutes < 60) return '${diff.inMinutes} นาทีที่แล้ว';
     if (diff.inHours < 24) return '${diff.inHours} ชั่วโมงที่แล้ว';
+    if (diff.inDays == 1) return 'เมื่อวานนี้';
+    if (diff.inDays < 7) return '${diff.inDays} วันที่แล้ว';
+    const thaiMonths = [
+      'ม.ค.',
+      'ก.พ.',
+      'มี.ค.',
+      'เม.ย.',
+      'พ.ค.',
+      'มิ.ย.',
+      'ก.ค.',
+      'ส.ค.',
+      'ก.ย.',
+      'ต.ค.',
+      'พ.ย.',
+      'ธ.ค.',
+    ];
     final buddhistYear = dt.year + 543;
-    final day = dt.day.toString().padLeft(2, '0');
-    final month = dt.month.toString().padLeft(2, '0');
-    return '$day/$month/$buddhistYear';
+    return '${dt.day} ${thaiMonths[dt.month - 1]} $buddhistYear';
   }
 
   void _showDetailDialog(AppNotification notif) {
     final cleanMsg = _cleanMessage(notif.message);
+    final hasAction = notif.type == 'booking' ||
+        notif.type == 'refund' ||
+        notif.type == 'problem' ||
+        notif.type == 'announcement';
+
+    IconData actionIcon = Icons.arrow_forward_rounded;
+    String actionText = 'ดูรายละเอียด';
+    if (notif.type == 'booking' || notif.type == 'refund') {
+      actionIcon = Icons.receipt_long_rounded;
+      actionText = 'ดูการจอง';
+    } else if (notif.type == 'problem') {
+      actionIcon = Icons.help_outline_rounded;
+      actionText = 'ดูรายการปัญหา';
+    } else if (notif.type == 'announcement') {
+      actionIcon = Icons.campaign_rounded;
+      actionText = 'ดูประกาศตลาด';
+    }
+
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-        actionsPadding: const EdgeInsets.fromLTRB(24, 12, 24, 20),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: notif.categoryColor.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(notif.iconData, color: notif.categoryColor, size: 24),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    notif.displayTitle,
-                    style: GoogleFonts.outfit(
-                      fontSize: 17,
-                      fontWeight: FontWeight.bold,
-                      color: const Color(0xFF0F172A),
-                    ),
-                  ),
-                  if (notif.notifyDate != null)
-                    Text(
-                      _formatDate(notif.notifyDate),
-                      style: GoogleFonts.outfit(
-                        fontSize: 12,
-                        color: const Color(0xFF64748B),
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        content: Container(
-          padding: const EdgeInsets.all(16),
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 440),
           decoration: BoxDecoration(
-            color: const Color(0xFFF8FAFC),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF0F172A).withValues(alpha: 0.14),
+                blurRadius: 28,
+                offset: const Offset(0, 12),
+              ),
+            ],
           ),
-          child: Text(
-            cleanMsg,
-            style: GoogleFonts.outfit(
-              fontSize: 15,
-              height: 1.5,
-              color: const Color(0xFF1E293B),
-            ),
-          ),
-        ),
-        actions: [
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF64748B),
-                    side: const BorderSide(color: Color(0xFFCBD5E1)),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Top Color Accent Bar
+                Container(
+                  height: 4,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        notif.categoryColor,
+                        notif.categoryColor.withValues(alpha: 0.5),
+                      ],
                     ),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                  child: Text(
-                    'ปิด',
-                    style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 14.5),
                   ),
                 ),
-              ),
-              if (notif.type == 'booking' || notif.type == 'refund' || notif.type == 'seller' || notif.type == 'problem' || notif.type == 'announcement') ...[
-                const SizedBox(width: 10),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.pop(ctx);
-                      if (notif.type == 'booking' || notif.type == 'refund') {
-                        Navigator.pushNamed(context, '/booking_history');
-                      } else if (notif.type == 'seller') {
-                        Navigator.pushNamed(context, '/vendor_register');
-                      } else if (notif.type == 'problem') {
-                        Navigator.pushNamed(context, '/problem_history');
-                      } else if (notif.type == 'announcement') {
-                        Navigator.pushNamed(context, '/announcements');
-                      }
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: notif.categoryColor,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(22, 20, 22, 22),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header Row: Category Icon + Badge + Timestamp + Close 'X'
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Container(
+                            width: 48,
+                            height: 48,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  notif.categoryColor.withValues(alpha: 0.16),
+                                  notif.categoryColor.withValues(alpha: 0.05),
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: notif.categoryColor.withValues(alpha: 0.25),
+                                width: 1.2,
+                              ),
+                            ),
+                            child: Icon(
+                              notif.iconData,
+                              color: notif.categoryColor,
+                              size: 24,
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: notif.categoryColor.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    notif.typeTitle,
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.bold,
+                                      color: notif.categoryColor,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                if (notif.notifyDate != null)
+                                  Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.access_time_rounded,
+                                        size: 13,
+                                        color: Color(0xFF94A3B8),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        _formatDate(notif.notifyDate),
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 12,
+                                          color: const Color(0xFF64748B),
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                              ],
+                            ),
+                          ),
+                          Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: () => Navigator.pop(ctx),
+                              borderRadius: BorderRadius.circular(20),
+                              child: Container(
+                                width: 34,
+                                height: 34,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFFF1F5F9),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.close_rounded,
+                                  size: 18,
+                                  color: Color(0xFF64748B),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                    child: Text(
-                      notif.type == 'booking' || notif.type == 'refund'
-                          ? 'ดูการจอง'
-                          : notif.type == 'seller'
-                              ? 'ดูข้อมูลผู้ค้า'
-                              : notif.type == 'problem'
-                                  ? 'ดูรายการปัญหา'
-                                  : 'ดูประกาศตลาด',
-                      style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14.5),
-                    ),
+
+                      const SizedBox(height: 18),
+
+                      // Title
+                      Text(
+                        notif.displayTitle,
+                        style: GoogleFonts.outfit(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFF0F172A),
+                          height: 1.3,
+                        ),
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      // Message Body Container
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: const Color(0xFFE2E8F0).withValues(alpha: 0.8),
+                            width: 1,
+                          ),
+                        ),
+                        child: Text(
+                          cleanMsg,
+                          style: GoogleFonts.outfit(
+                            fontSize: 14.5,
+                            height: 1.6,
+                            color: const Color(0xFF334155),
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 22),
+
+                      // Bottom Buttons
+                      Row(
+                        children: [
+                          Expanded(
+                            flex: hasAction ? 1 : 2,
+                            child: TextButton(
+                              onPressed: () => Navigator.pop(ctx),
+                              style: TextButton.styleFrom(
+                                backgroundColor: const Color(0xFFF1F5F9),
+                                foregroundColor: const Color(0xFF475569),
+                                padding: const EdgeInsets.symmetric(vertical: 13),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              child: Text(
+                                'ปิด',
+                                style: GoogleFonts.outfit(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14.5,
+                                ),
+                              ),
+                            ),
+                          ),
+                          if (hasAction) ...[
+                            const SizedBox(width: 10),
+                            Expanded(
+                              flex: 2,
+                              child: ElevatedButton.icon(
+                                onPressed: () {
+                                  Navigator.pop(ctx);
+                                  if (notif.type == 'booking' || notif.type == 'refund') {
+                                    Navigator.pushNamed(context, '/booking_history');
+                                  } else if (notif.type == 'problem') {
+                                    Navigator.pushNamed(context, '/problem_history');
+                                  } else if (notif.type == 'announcement') {
+                                    Navigator.pushNamed(context, '/announcements');
+                                  }
+                                },
+                                icon: Icon(actionIcon, size: 18),
+                                label: Text(
+                                  actionText,
+                                  style: GoogleFonts.outfit(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14.5,
+                                  ),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: notif.categoryColor,
+                                  foregroundColor: Colors.white,
+                                  elevation: 0,
+                                  padding: const EdgeInsets.symmetric(vertical: 13),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  shadowColor: notif.categoryColor.withValues(alpha: 0.35),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
                   ),
                 ),
               ],
-            ],
+            ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -264,7 +422,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
           ),
         ),
         actions: [
-          if (unreadCount > 0)
+          if (unreadCount >= 2)
             TextButton.icon(
               onPressed: _markAllAsRead,
               icon: const Icon(Icons.done_all_rounded, size: 18, color: Color(0xFF2563EB)),
@@ -396,7 +554,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
             ),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF0F172A).withValues(alpha: isUnread ? 0.04 : 0.02),
+                color: const Color(0xFF0F172A).withValues(alpha: isUnread ? 0.05 : 0.02),
                 blurRadius: 8,
                 offset: const Offset(0, 2),
               ),
@@ -405,13 +563,24 @@ class _NotificationScreenState extends State<NotificationScreen> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Category Icon
+              // Category Icon with subtle gradient
               Container(
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: notif.categoryColor.withValues(alpha: 0.12),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      notif.categoryColor.withValues(alpha: 0.16),
+                      notif.categoryColor.withValues(alpha: 0.06),
+                    ],
+                  ),
                   borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: notif.categoryColor.withValues(alpha: 0.18),
+                    width: 1,
+                  ),
                 ),
                 child: Icon(
                   notif.iconData,
@@ -429,14 +598,19 @@ class _NotificationScreenState extends State<NotificationScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          notif.displayTitle,
-                          style: GoogleFonts.outfit(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14.5,
-                            color: const Color(0xFF0F172A),
+                        Expanded(
+                          child: Text(
+                            notif.displayTitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.outfit(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14.5,
+                              color: const Color(0xFF0F172A),
+                            ),
                           ),
                         ),
+                        const SizedBox(width: 8),
                         if (notif.notifyDate != null)
                           Text(
                             _formatDate(notif.notifyDate),

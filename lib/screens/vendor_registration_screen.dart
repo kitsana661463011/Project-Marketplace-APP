@@ -436,6 +436,43 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
     );
   }
 
+  Widget _buildFieldLabel(
+    String label, {
+    bool isRequired = false,
+    String? note,
+  }) {
+    return Text.rich(
+      TextSpan(
+        text: label,
+        style: GoogleFonts.outfit(
+          fontSize: 14,
+          color: const Color(0xFF334155),
+          fontWeight: FontWeight.w600,
+        ),
+        children: [
+          if (isRequired)
+            const TextSpan(
+              text: ' *',
+              style: TextStyle(
+                color: Color(0xFFDC2626),
+                fontWeight: FontWeight.bold,
+                fontSize: 15,
+              ),
+            ),
+          if (note != null)
+            TextSpan(
+              text: ' $note',
+              style: GoogleFonts.outfit(
+                fontSize: 12,
+                color: const Color(0xFF94A3B8),
+                fontWeight: FontWeight.normal,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _cancelApplication() async {
     AppDialog.showConfirm(
       context,
@@ -722,13 +759,9 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
               ],
               const SizedBox(height: 24),
 
-              Text(
+              _buildFieldLabel(
                 'ชื่อจริง-นามสกุลจริง (ตามสำเนาบัตรประชาชน)',
-                style: GoogleFonts.outfit(
-                  fontSize: 14,
-                  color: const Color(0xFF334155),
-                  fontWeight: FontWeight.w600,
-                ),
+                isRequired: true,
               ),
               const SizedBox(height: 8),
               Container(
@@ -756,13 +789,9 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
               ),
               const SizedBox(height: 20),
 
-              Text(
-                'เบอร์โทรศัพท์ (ไม่บังคับ มีไว้ติดต่อในกรณีมีปัญหา)',
-                style: GoogleFonts.outfit(
-                  fontSize: 14,
-                  color: const Color(0xFF334155),
-                  fontWeight: FontWeight.w600,
-                ),
+              _buildFieldLabel(
+                'เบอร์โทรศัพท์',
+                note: '(ไม่บังคับ มีไว้ติดต่อในกรณีมีปัญหา)',
               ),
               const SizedBox(height: 8),
               Container(
@@ -791,13 +820,9 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
               ),
               const SizedBox(height: 20),
 
-              Text(
+              _buildFieldLabel(
                 'เลขประจำตัวประชาชน (ตามสำเนาบัตรประชาชน)',
-                style: GoogleFonts.outfit(
-                  fontSize: 14,
-                  color: const Color(0xFF334155),
-                  fontWeight: FontWeight.w600,
-                ),
+                isRequired: true,
               ),
               const SizedBox(height: 8),
               Container(
@@ -829,13 +854,9 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
               ),
               const SizedBox(height: 20),
 
-              Text(
+              _buildFieldLabel(
                 'รูปถ่ายสำเนาบัตรประชาชน (พร้อมเซ็นสำเนาถูกต้อง)',
-                style: GoogleFonts.outfit(
-                  fontSize: 14,
-                  color: const Color(0xFF334155),
-                  fontWeight: FontWeight.w600,
-                ),
+                isRequired: true,
               ),
               const SizedBox(height: 10),
               GestureDetector(
@@ -1012,14 +1033,7 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
               ),
               const SizedBox(height: 20),
 
-              Text(
-                'ที่อยู่ปัจจุบัน',
-                style: GoogleFonts.outfit(
-                  fontSize: 14,
-                  color: const Color(0xFF334155),
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+              _buildFieldLabel('ที่อยู่ปัจจุบัน', isRequired: true),
               const SizedBox(height: 8),
               Container(
                 decoration: BoxDecoration(
