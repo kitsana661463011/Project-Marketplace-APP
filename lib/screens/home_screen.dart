@@ -1,13 +1,16 @@
 import 'dart:async';
+import 'dart:ui' show PointerDeviceKind;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../services/shop_service.dart';
 import '../services/review_service.dart';
 import '../services/announcement_service.dart';
+import '../models/announcement.dart';
 import '../models/shop.dart';
 import '../models/user.dart';
 import '../services/api_service.dart';
@@ -26,9 +29,10 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   int _currentIndex = 0;
   Timer? _notificationPollTimer;
+  GlobalKey<MarketMapScreenState> get _mapKey => MarketMapScreen.mapKey;
 
   late final List<Widget> _pages;
 
@@ -38,7 +42,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _currentIndex = widget.initialIndex;
     _pages = [
       const _HomeTab(),
-      const MarketMapScreen(isEmbedded: true),
+      MarketMapScreen(key: MarketMapScreen.mapKey, isEmbedded: true),
       const _FollowedTab(),
       const _ProfileTab(),
     ];
@@ -89,12 +93,20 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     };
 
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _pollNotifications();
-      _notificationPollTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      _notificationPollTimer = Timer.periodic(const Duration(seconds: 45), (_) {
         _pollNotifications();
       });
     });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _pollNotifications();
+    }
   }
 
   void _pollNotifications() {
@@ -110,6 +122,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _notificationPollTimer?.cancel();
     NotificationService.onNotificationReceived = null;
     super.dispose();
@@ -121,11 +134,36 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  /// Switch to Map tab and smoothly zoom/pan to target shop's stall
+  void openMapAndFocusShop(Shop shop) {
+    MarketMapScreen.globalPendingTargetShop = shop;
+    setState(() {
+      _currentIndex = 1;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _mapKey.currentState?.focusShopOnMap(shop);
+    });
+  }
+
+  /// Switch to Map tab and smoothly zoom/pan to target stall number
+  void openMapAndFocusStall(String stallNumber) {
+    MarketMapScreen.globalPendingTargetStall = stallNumber;
+    setState(() {
+      _currentIndex = 1;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _mapKey.currentState?.focusStallOnMap(stallNumber);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
-      body: _pages[_currentIndex],
+      body: IndexedStack(
+        index: _currentIndex,
+        children: _pages,
+      ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: Colors.white,
@@ -178,12 +216,12 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               NavigationDestination(
                 icon: const Icon(
-                  Icons.favorite_outline,
+                  Icons.bookmark_border_rounded,
                   size: 24,
                   color: Color(0xFF64748B),
                 ),
                 selectedIcon: const Icon(
-                  Icons.favorite,
+                  Icons.bookmark_rounded,
                   size: 24,
                   color: Color(0xFF1E88E5),
                 ),
@@ -293,6 +331,11 @@ class _HomeTabState extends State<_HomeTab> {
   List<Shop> _shops = [];
   List<Shop> _followedShops = [];
   int _unreadNotificationCount = 0;
+  List<Announcement> _activeAnnouncements = [];
+  int _currentAnnouncementSlide = 0;
+  PageController? _announcementPageController;
+  Timer? _announcementAutoSlideTimer;
+  Timer? _announcementUserPauseTimer;
   final TextEditingController _searchController = TextEditingController();
   OverlayEntry? _searchOverlayEntry;
   final LayerLink _searchLayerLink = LayerLink();
@@ -305,7 +348,9 @@ class _HomeTabState extends State<_HomeTab> {
   @override
   void initState() {
     super.initState();
+    _announcementPageController = PageController(viewportFraction: 1.0);
     _loadShops();
+    _loadAnnouncements();
     _loadNotificationCount();
     _notifCountTimer = Timer.periodic(const Duration(seconds: 4), (_) {
       if (mounted) _loadNotificationCount();
@@ -315,6 +360,9 @@ class _HomeTabState extends State<_HomeTab> {
   @override
   void dispose() {
     _notifCountTimer?.cancel();
+    _announcementAutoSlideTimer?.cancel();
+    _announcementUserPauseTimer?.cancel();
+    _announcementPageController?.dispose();
     _hideSearchOverlay();
     _searchController.dispose();
     super.dispose();
@@ -448,7 +496,10 @@ class _HomeTabState extends State<_HomeTab> {
 
       int unreadCount = 0;
       try {
-        unreadCount = await AnnouncementService.getUnreadCount();
+        final userId = currentUser?.userId;
+        if (userId != null) {
+          unreadCount = await NotificationApiService.getUnreadCount(userId: userId);
+        }
       } catch (_) {}
 
       if (mounted) {
@@ -470,17 +521,56 @@ class _HomeTabState extends State<_HomeTab> {
       final auth = Provider.of<AuthService>(context, listen: false);
       final userId = auth.currentUser?.userId;
 
-      final unreadAnnounce = await AnnouncementService.getUnreadCount();
       final unreadNotifs = userId != null
           ? await NotificationApiService.getUnreadCount(userId: userId)
           : 0;
 
-      if (mounted) setState(() => _unreadNotificationCount = unreadAnnounce + unreadNotifs);
+      if (mounted) setState(() => _unreadNotificationCount = unreadNotifs);
 
       if (userId != null) {
         NotificationService.checkAndTriggerNewNotifications(userId);
       }
     } catch (_) {}
+  }
+
+  Future<void> _loadAnnouncements() async {
+    try {
+      final list = await AnnouncementService.getActiveAnnouncements();
+      if (mounted) {
+        setState(() {
+          _activeAnnouncements = list;
+          if (_currentAnnouncementSlide >= list.length) {
+            _currentAnnouncementSlide = 0;
+          }
+        });
+        _setupAnnouncementAutoSlide();
+      }
+    } catch (_) {}
+  }
+
+  void _setupAnnouncementAutoSlide() {
+    _announcementAutoSlideTimer?.cancel();
+    if (_activeAnnouncements.length > 1) {
+      _announcementAutoSlideTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+        if (!mounted || _announcementPageController == null || !_announcementPageController!.hasClients) return;
+        final next = (_currentAnnouncementSlide + 1) % _activeAnnouncements.length;
+        _announcementPageController!.animateToPage(
+          next,
+          duration: const Duration(milliseconds: 450),
+          curve: Curves.easeInOutCubic,
+        );
+      });
+    }
+  }
+
+  void _pauseAndScheduleAnnouncementAutoSlide() {
+    _announcementAutoSlideTimer?.cancel();
+    _announcementUserPauseTimer?.cancel();
+    _announcementUserPauseTimer = Timer(const Duration(seconds: 20), () {
+      if (mounted) {
+        _setupAnnouncementAutoSlide();
+      }
+    });
   }
 
   List<Shop> get _filteredShops {
@@ -547,11 +637,481 @@ class _HomeTabState extends State<_HomeTab> {
     }
   }
 
+  void _showAllShopsModal() {
+    _hideSearchOverlay();
+    FocusScope.of(context).unfocus();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (modalCtx) {
+        String modalSearch = '';
+        String selectedCategory = 'ทั้งหมด';
+
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            final allCategories = <String>{'ทั้งหมด'};
+            for (final s in _shops) {
+              if (s.categoryName.isNotEmpty && s.categoryName != 'ทั่วไป') {
+                allCategories.add(s.categoryName);
+              }
+            }
+
+            final filteredList = _shops.where((s) {
+              final q = modalSearch.trim().toLowerCase();
+              final matchQuery = q.isEmpty ||
+                  s.shopName.toLowerCase().contains(q) ||
+                  s.categoryName.toLowerCase().contains(q) ||
+                  (s.stallNumber != null &&
+                      s.stallNumber!.toLowerCase().contains(q));
+              final matchCategory = selectedCategory == 'ทั้งหมด' ||
+                  s.categoryName == selectedCategory;
+              return matchQuery && matchCategory;
+            }).toList();
+
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.84,
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: Column(
+                children: [
+                  Container(
+                    margin: const EdgeInsets.only(top: 10, bottom: 6),
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFCBD5E1),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 6, 12, 10),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEFF6FF),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(
+                            Icons.storefront_rounded,
+                            color: Color(0xFF2563EB),
+                            size: 22,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'ร้านค้าทั้งหมดในตลาด',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: const Color(0xFF0F172A),
+                                ),
+                              ),
+                              Text(
+                                'แสดง ${_shops.length} ร้านค้า · แตะเพื่อดูตำแหน่งบนผังตลาด',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 12.5,
+                                  color: const Color(0xFF64748B),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, color: Color(0xFF64748B)),
+                          onPressed: () => Navigator.pop(modalCtx),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                    child: Container(
+                      height: 42,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(21),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      child: TextField(
+                        onChanged: (val) {
+                          setModalState(() {
+                            modalSearch = val;
+                          });
+                        },
+                        style: GoogleFonts.outfit(
+                          fontSize: 13.5,
+                          color: const Color(0xFF0F172A),
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'ค้นหาชื่อร้าน หรือหมายเลขแผง...',
+                          hintStyle: GoogleFonts.outfit(
+                            color: const Color(0xFF94A3B8),
+                            fontSize: 13,
+                          ),
+                          prefixIcon: const Icon(
+                            Icons.search,
+                            size: 18,
+                            color: Color(0xFF64748B),
+                          ),
+                          isDense: true,
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 11,
+                            horizontal: 12,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (allCategories.length > 1)
+                    SizedBox(
+                      height: 38,
+                      child: ListView.separated(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        scrollDirection: Axis.horizontal,
+                        itemCount: allCategories.length,
+                        separatorBuilder: (_, _) => const SizedBox(width: 6),
+                        itemBuilder: (ctx, i) {
+                          final cat = allCategories.elementAt(i);
+                          final isSel = selectedCategory == cat;
+                          return ChoiceChip(
+                            label: Text(cat),
+                            selected: isSel,
+                            onSelected: (_) {
+                              setModalState(() {
+                                selectedCategory = cat;
+                              });
+                            },
+                            labelStyle: GoogleFonts.outfit(
+                              fontSize: 12,
+                              fontWeight:
+                                  isSel ? FontWeight.bold : FontWeight.w500,
+                              color:
+                                  isSel ? Colors.white : const Color(0xFF475569),
+                            ),
+                            selectedColor: const Color(0xFF2563EB),
+                            backgroundColor: const Color(0xFFF1F5F9),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            showCheckmark: false,
+                            visualDensity: VisualDensity.compact,
+                          );
+                        },
+                      ),
+                    ),
+                  const SizedBox(height: 6),
+                  Expanded(
+                    child: filteredList.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.storefront_outlined,
+                                  size: 48,
+                                  color: Color(0xFFCBD5E1),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'ไม่พบร้านค้าที่ค้นหา',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 14,
+                                    color: const Color(0xFF64748B),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : ListView.separated(
+                            padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                            itemCount: filteredList.length,
+                            separatorBuilder: (_, _) =>
+                                const SizedBox(height: 8),
+                            itemBuilder: (ctx, index) {
+                              final shop = filteredList[index];
+                              final hasRating = shop.avgRating != null &&
+                                  shop.avgRating! > 0;
+                              final ratingText = hasRating
+                                  ? shop.avgRating!.toStringAsFixed(1)
+                                  : 'ใหม่';
+                              final stallText = shop.stallNumber != null &&
+                                      shop.stallNumber!.isNotEmpty
+                                  ? 'แผง ${shop.stallNumber}'
+                                  : 'โซนตลาด';
+                              final isOpen = shop.status == 'เปิดบริการอยู่';
+
+                              return InkWell(
+                                onTap: () {
+                                  Navigator.pop(modalCtx);
+                                  final homeState = context
+                                      .findAncestorStateOfType<_HomeScreenState>();
+                                  if (homeState != null && mounted) {
+                                    homeState.openMapAndFocusShop(shop);
+                                  } else {
+                                    _navigateToShopDetail(shop);
+                                  }
+                                },
+                                borderRadius: BorderRadius.circular(16),
+                                child: Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                      color: const Color(0xFFE2E8F0),
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black
+                                            .withValues(alpha: 0.02),
+                                        blurRadius: 6,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(12),
+                                        child: Container(
+                                          width: 52,
+                                          height: 52,
+                                          color: const Color(0xFFF1F5F9),
+                                          child: shop.shopImage != null &&
+                                                  shop.shopImage!.isNotEmpty
+                                              ? Image.network(
+                                                  shop.shopImage!
+                                                          .startsWith('http')
+                                                      ? shop.shopImage!
+                                                      : ApiService.getImagePath(
+                                                          shop.shopImage,
+                                                        ),
+                                                  fit: BoxFit.cover,
+                                                  errorBuilder: (_, _, _) =>
+                                                      const Icon(
+                                                    Icons.storefront,
+                                                    color: Color(0xFF64748B),
+                                                    size: 26,
+                                                  ),
+                                                )
+                                              : const Icon(
+                                                  Icons.storefront,
+                                                  color: Color(0xFF64748B),
+                                                  size: 26,
+                                                ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                Expanded(
+                                                  child: Text(
+                                                    shop.shopName,
+                                                    style: GoogleFonts.outfit(
+                                                      fontSize: 14.5,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: const Color(
+                                                        0xFF0F172A),
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                                Container(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                    horizontal: 6,
+                                                    vertical: 2,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    color: isOpen
+                                                        ? const Color(0xFFDCFCE7)
+                                                        : const Color(
+                                                            0xFFFEE2E2,
+                                                          ),
+                                                    borderRadius:
+                                                        BorderRadius.circular(6),
+                                                  ),
+                                                  child: Text(
+                                                    isOpen ? '🟢 เปิด' : '🔴 ปิด',
+                                                    style: GoogleFonts.outfit(
+                                                      fontSize: 10.5,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: isOpen
+                                                          ? const Color(
+                                                              0xFF16A34A,
+                                                            )
+                                                          : const Color(
+                                                              0xFFDC2626,
+                                                            ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Row(
+                                              children: [
+                                                Container(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                    horizontal: 6,
+                                                    vertical: 2,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    color:
+                                                        const Color(0xFFEFF6FF),
+                                                    borderRadius:
+                                                        BorderRadius.circular(6),
+                                                  ),
+                                                  child: Text(
+                                                    stallText,
+                                                    style: GoogleFonts.outfit(
+                                                      fontSize: 11,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: const Color(
+                                                        0xFF2563EB,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 6),
+                                                Expanded(
+                                                  child: Text(
+                                                    shop.categoryName,
+                                                    style: GoogleFonts.outfit(
+                                                      fontSize: 12,
+                                                      color: const Color(
+                                                        0xFF64748B,
+                                                      ),
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.end,
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 6,
+                                              vertical: 2,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFFFFBEB),
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                              border: Border.all(
+                                                color: const Color(0xFFFDE68A),
+                                              ),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(
+                                                  Icons.star_rounded,
+                                                  size: 13,
+                                                  color: Color(0xFFF59E0B),
+                                                ),
+                                                const SizedBox(width: 2),
+                                                Text(
+                                                  ratingText,
+                                                  style: GoogleFonts.outfit(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.bold,
+                                                    color:
+                                                        const Color(0xFFB45309),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox(height: 6),
+                                          InkWell(
+                                            onTap: () {
+                                              Navigator.pop(modalCtx);
+                                              final homeState = context
+                                                  .findAncestorStateOfType<_HomeScreenState>();
+                                              if (homeState != null && mounted) {
+                                                homeState.openMapAndFocusShop(shop);
+                                              }
+                                            },
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Text(
+                                                  'ดูบนผัง',
+                                                  style: GoogleFonts.outfit(
+                                                    fontSize: 11.5,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: const Color(
+                                                      0xFF2563EB,
+                                                    ),
+                                                  ),
+                                                ),
+                                                const Icon(
+                                                  Icons.chevron_right_rounded,
+                                                  size: 15,
+                                                  color: Color(0xFF2563EB),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return SafeArea(
       child: RefreshIndicator(
-        onRefresh: _loadShops,
+        onRefresh: () async {
+          await Future.wait([
+            _loadShops(),
+            _loadAnnouncements(),
+            _loadNotificationCount(),
+          ]);
+        },
         color: const Color(0xFF1E88E5),
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -599,9 +1159,8 @@ class _HomeTabState extends State<_HomeTab> {
                   // Notification bell
                   GestureDetector(
                     onTap: () async {
-                      await Navigator.pushNamed(context, '/announcements');
+                      await Navigator.pushNamed(context, '/notifications');
                       _loadNotificationCount();
-                      _loadShops();
                     },
                     child: Stack(
                       children: [
@@ -656,69 +1215,113 @@ class _HomeTabState extends State<_HomeTab> {
               ),
               const SizedBox(height: 20),
 
-              // Search Bar with Floating Autocomplete Dropdown Overlay
+              // Search Bar with Floating Autocomplete Dropdown Overlay and All Shops Button
               CompositedTransformTarget(
                 link: _searchLayerLink,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(24),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.04),
-                        blurRadius: 10,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
-                  ),
-                  child: TextField(
-                    controller: _searchController,
-                    onChanged: (val) {
-                      setState(() => _searchQuery = val);
-                      _updateSearchOverlay();
-                    },
-                    style: GoogleFonts.outfit(color: Colors.black),
-                    decoration: InputDecoration(
-                      hintText: 'ค้นหาร้าน หรือ ร้านค้า...',
-                      hintStyle: GoogleFonts.outfit(
-                        color: const Color(0xFF94A3B8),
-                        fontSize: 15,
-                      ),
-                      prefixIcon: const Icon(
-                        Icons.search,
-                        color: Color(0xFF94A3B8),
-                        size: 22,
-                      ),
-                      suffixIcon: _searchQuery.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(
-                                Icons.clear,
-                                color: Color(0xFF94A3B8),
-                                size: 20,
-                              ),
-                              onPressed: () {
-                                setState(() {
-                                  _searchQuery = '';
-                                  _searchController.clear();
-                                });
-                                _hideSearchOverlay();
-                              },
-                            )
-                          : null,
-                      border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(
-                        vertical: 14,
-                        horizontal: 16,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Container(
+                        height: 46,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(23),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.04),
+                              blurRadius: 10,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
+                        child: TextField(
+                          controller: _searchController,
+                          onChanged: (val) {
+                            setState(() => _searchQuery = val);
+                            _updateSearchOverlay();
+                          },
+                          style: GoogleFonts.outfit(color: Colors.black, fontSize: 14),
+                          decoration: InputDecoration(
+                            isDense: true,
+                            hintText: 'ค้นหาร้านค้า เช่น ข้าว, ชานม, แผง A...',
+                            hintStyle: GoogleFonts.outfit(
+                              color: const Color(0xFF94A3B8),
+                              fontSize: 13.5,
+                            ),
+                            prefixIcon: const Icon(
+                              Icons.search,
+                              color: Color(0xFF94A3B8),
+                              size: 20,
+                            ),
+                            suffixIcon: _searchQuery.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(
+                                      Icons.clear,
+                                      color: Color(0xFF94A3B8),
+                                      size: 18,
+                                    ),
+                                    onPressed: () {
+                                      setState(() {
+                                        _searchQuery = '';
+                                        _searchController.clear();
+                                      });
+                                      _hideSearchOverlay();
+                                    },
+                                  )
+                                : null,
+                            border: InputBorder.none,
+                            contentPadding: const EdgeInsets.symmetric(
+                              vertical: 12,
+                              horizontal: 14,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                    const SizedBox(width: 8),
+                    InkWell(
+                      onTap: _showAllShopsModal,
+                      borderRadius: BorderRadius.circular(23),
+                      child: Container(
+                        height: 46,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEFF6FF),
+                          borderRadius: BorderRadius.circular(23),
+                          border: Border.all(color: const Color(0xFFBFDBFE)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.storefront_rounded,
+                              size: 16,
+                              color: Color(0xFF2563EB),
+                            ),
+                            const SizedBox(width: 5),
+                            Text(
+                              'ร้านค้า (${_shops.length})',
+                              style: GoogleFonts.outfit(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.bold,
+                                color: const Color(0xFF2563EB),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 14),
 
               // Category Filter Chips
               _buildCategoryFilterChips(),
-              const SizedBox(height: 24),
+              const SizedBox(height: 18),
+
+              // Announcement Slide Bar (Option A)
+              _buildAnnouncementSlideBar(),
 
               // Followed Shops Section
               Row(
@@ -1079,7 +1682,7 @@ class _HomeTabState extends State<_HomeTab> {
                             ),
                           ),
                           const SizedBox(width: 6),
-                          // Follower Count Badge (Red when followed by user, Blue when not)
+                          // Follower Count Badge (Blue when followed by user, Subtle Slate when not)
                           Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 9,
@@ -1087,15 +1690,15 @@ class _HomeTabState extends State<_HomeTab> {
                             ),
                             decoration: BoxDecoration(
                               color: isFollowed
-                                  ? const Color(0xFFE11D48)
-                                  : const Color(0xFF1E88E5),
+                                  ? const Color(0xFF1E88E5)
+                                  : const Color(0xFF64748B),
                               borderRadius: BorderRadius.circular(20),
                               boxShadow: [
                                 BoxShadow(
                                   color: (isFollowed
-                                          ? const Color(0xFFE11D48)
-                                          : const Color(0xFF1E88E5))
-                                      .withValues(alpha: 0.4),
+                                          ? const Color(0xFF1E88E5)
+                                          : const Color(0xFF64748B))
+                                      .withValues(alpha: 0.3),
                                   blurRadius: 6,
                                   offset: const Offset(0, 2),
                                 ),
@@ -1105,7 +1708,7 @@ class _HomeTabState extends State<_HomeTab> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 const Icon(
-                                  Icons.favorite,
+                                  Icons.bookmark_rounded,
                                   color: Colors.white,
                                   size: 12,
                                 ),
@@ -1850,6 +2453,618 @@ class _HomeTabState extends State<_HomeTab> {
     return Icons.storefront_rounded;
   }
 
+  Widget _buildAnnouncementSlideBar() {
+    if (_activeAnnouncements.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    if (_announcementPageController == null || _announcementPageController!.viewportFraction != 1.0) {
+      _announcementPageController?.dispose();
+      _announcementPageController = PageController(viewportFraction: 1.0, initialPage: _currentAnnouncementSlide);
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 22),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header Row with Title and Navigation
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFDBEAFE), width: 1),
+                    ),
+                    child: const Icon(
+                      Icons.campaign_outlined,
+                      color: Color(0xFF2563EB),
+                      size: 18,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'ข่าวสารและประกาศตลาด',
+                    style: GoogleFonts.outfit(
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF0F172A),
+                    ),
+                  ),
+                ],
+              ),
+              Row(
+                children: [
+                  // Previous / Next Buttons in Header (Unobstructed)
+                  if (_activeAnnouncements.length > 1) ...[
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(16),
+                        onTap: () {
+                          _pauseAndScheduleAnnouncementAutoSlide();
+                          final prev = (_currentAnnouncementSlide - 1 + _activeAnnouncements.length) %
+                              _activeAnnouncements.length;
+                          _announcementPageController?.animateToPage(
+                            prev,
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeInOutCubic,
+                          );
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: const Color(0xFFF1F5F9),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                          ),
+                          child: const Icon(
+                            Icons.chevron_left_rounded,
+                            size: 18,
+                            color: Color(0xFF334155),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(16),
+                        onTap: () {
+                          _pauseAndScheduleAnnouncementAutoSlide();
+                          final next = (_currentAnnouncementSlide + 1) % _activeAnnouncements.length;
+                          _announcementPageController?.animateToPage(
+                            next,
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeInOutCubic,
+                          );
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: const Color(0xFFF1F5F9),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                          ),
+                          child: const Icon(
+                            Icons.chevron_right_rounded,
+                            size: 18,
+                            color: Color(0xFF334155),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                  ],
+                  GestureDetector(
+                    onTap: () async {
+                      await Navigator.pushNamed(context, '/announcements');
+                      _loadAnnouncements();
+                    },
+                    child: Text(
+                      'ดูทั้งหมด',
+                      style: GoogleFonts.outfit(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF2563EB),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Horizontal Slide Carousel (Clean Unobstructed Card)
+          Align(
+            alignment: Alignment.center,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 820),
+              child: SizedBox(
+                height: 128,
+                child: ScrollConfiguration(
+                  behavior: ScrollConfiguration.of(context).copyWith(
+                    dragDevices: {
+                      PointerDeviceKind.touch,
+                      PointerDeviceKind.mouse,
+                      PointerDeviceKind.trackpad,
+                      PointerDeviceKind.stylus,
+                    },
+                  ),
+                  child: NotificationListener<UserScrollNotification>(
+                    onNotification: (notification) {
+                      if (notification.direction != ScrollDirection.idle) {
+                        _pauseAndScheduleAnnouncementAutoSlide();
+                      }
+                      return false;
+                    },
+                    child: PageView.builder(
+                      controller: _announcementPageController,
+                      padEnds: false,
+                      onPageChanged: (index) {
+                        setState(() => _currentAnnouncementSlide = index);
+                      },
+                      itemCount: _activeAnnouncements.length,
+                      itemBuilder: (context, index) {
+                        final item = _activeAnnouncements[index];
+                        return _buildAnnouncementSlideCard(item);
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // Dots Indicator
+          if (_activeAnnouncements.length > 1) ...[
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(_activeAnnouncements.length, (idx) {
+                final isActive = idx == _currentAnnouncementSlide;
+                return GestureDetector(
+                  onTap: () {
+                    _pauseAndScheduleAnnouncementAutoSlide();
+                    _announcementPageController?.animateToPage(
+                      idx,
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeInOut,
+                    );
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 250),
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    width: isActive ? 22 : 6,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: isActive ? const Color(0xFF2563EB) : const Color(0xFFBFDBFE),
+                      borderRadius: BorderRadius.circular(5),
+                    ),
+                  ),
+                );
+              }),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAnnouncementSlideCard(Announcement item) {
+    Color badgeBgColor;
+    Color badgeTextColor;
+    Color badgeBorderColor;
+    String badgeText;
+    IconData badgeIcon;
+
+    if (item.announcementType == 'urgent') {
+      badgeBgColor = const Color(0xFFFEF2F2);
+      badgeTextColor = const Color(0xFFDC2626);
+      badgeBorderColor = const Color(0xFFFECACA);
+      badgeText = 'ประกาศด่วน';
+      badgeIcon = Icons.error_outline_rounded;
+    } else if (item.announcementType == 'activity') {
+      badgeBgColor = const Color(0xFFFFFBEB);
+      badgeTextColor = const Color(0xFFD97706);
+      badgeBorderColor = const Color(0xFFFDE68A);
+      badgeText = 'กิจกรรมตลาด';
+      badgeIcon = Icons.celebration_outlined;
+    } else {
+      badgeBgColor = const Color(0xFFEFF6FF);
+      badgeTextColor = const Color(0xFF2563EB);
+      badgeBorderColor = const Color(0xFFBFDBFE);
+      badgeText = 'ประกาศทั่วไป';
+      badgeIcon = Icons.campaign_outlined;
+    }
+
+    final hasImage = item.image != null && item.image!.trim().isNotEmpty;
+    final bannerUrl = hasImage ? ApiService.getImagePath(item.image!) : '';
+    final dateText = item.thaiDateRangeText.isNotEmpty
+        ? item.thaiDateRangeText
+        : item.dateRangeText;
+    final cleanTitleText = item.cleanTitle.isNotEmpty ? item.cleanTitle : item.title;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isCompact = constraints.maxWidth < 450;
+        final imageWidth = isCompact ? 95.0 : 120.0;
+
+        return GestureDetector(
+          onTap: () => _showAnnouncementDetailDialog(item),
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: item.announcementType == 'urgent'
+                    ? const Color(0xFFFECACA)
+                    : const Color(0xFFE2E8F0),
+                width: item.announcementType == 'urgent' ? 1.4 : 1.0,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF0F172A).withValues(alpha: 0.04),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Left Content Column
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          // Top: Type Badge & Date
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: badgeBgColor,
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: badgeBorderColor, width: 0.8),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(badgeIcon, size: 11, color: badgeTextColor),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      badgeText,
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: badgeTextColor,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (dateText.isNotEmpty) ...[
+                                const SizedBox(width: 6),
+                                const Text('•', style: TextStyle(color: Color(0xFF93C5FD), fontSize: 11)),
+                                const SizedBox(width: 6),
+                                const Icon(Icons.schedule_rounded, size: 11, color: Color(0xFF3B82F6)),
+                                const SizedBox(width: 3),
+                                Expanded(
+                                  child: Text(
+                                    dateText,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 11,
+                                      color: const Color(0xFF475569),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+
+                          // Center: Clean Title (Full display without clipping)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 2),
+                            child: Text(
+                              cleanTitleText,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.outfit(
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.bold,
+                                color: const Color(0xFF0F172A),
+                                height: 1.32,
+                              ),
+                            ),
+                          ),
+
+                          // Bottom: Call to Action Link
+                          Row(
+                            children: [
+                              Text(
+                                'อ่านรายละเอียด',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: const Color(0xFF2563EB),
+                                ),
+                              ),
+                              const SizedBox(width: 3),
+                              const Icon(
+                                Icons.arrow_forward_rounded,
+                                size: 13,
+                                color: Color(0xFF2563EB),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // Right Image Banner Thumbnail
+                  Container(
+                    width: imageWidth,
+                    margin: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.04),
+                          blurRadius: 5,
+                        ),
+                      ],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: hasImage
+                          ? Image.network(
+                              bannerUrl,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, _, _) => Container(
+                                color: badgeBgColor,
+                                child: Center(
+                                  child: Icon(badgeIcon, color: badgeTextColor, size: 28),
+                                ),
+                              ),
+                            )
+                          : Container(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [
+                                    badgeTextColor.withValues(alpha: 0.15),
+                                    badgeBgColor,
+                                  ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                              ),
+                              child: Center(
+                                child: Icon(badgeIcon, color: badgeTextColor, size: 28),
+                              ),
+                            ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showAnnouncementDetailDialog(Announcement item) async {
+    await AnnouncementService.markAsRead(item);
+
+    if (!mounted) return;
+
+    Color badgeBgColor;
+    Color badgeTextColor;
+    String badgeText;
+    IconData badgeIcon;
+
+    if (item.announcementType == 'urgent') {
+      badgeBgColor = const Color(0xFFFEF2F2);
+      badgeTextColor = const Color(0xFFDC2626);
+      badgeText = 'ประกาศด่วน';
+      badgeIcon = Icons.warning_amber_rounded;
+    } else if (item.announcementType == 'activity') {
+      badgeBgColor = const Color(0xFFFFFBEB);
+      badgeTextColor = const Color(0xFFD97706);
+      badgeText = 'กิจกรรมตลาด';
+      badgeIcon = Icons.celebration_outlined;
+    } else {
+      badgeBgColor = const Color(0xFFEFF6FF);
+      badgeTextColor = const Color(0xFF2563EB);
+      badgeText = 'ประกาศทั่วไป';
+      badgeIcon = Icons.campaign_outlined;
+    }
+
+    final String bodyText = (item.description != null && item.description!.trim().isNotEmpty)
+        ? item.description!
+        : 'ไม่มีรายละเอียดเพิ่มเติมสำหรับประกาศนี้';
+
+    final String dateText = item.dateRangeText.isNotEmpty
+        ? item.dateRangeText
+        : (item.publishDate?.split('T')[0] ?? '-');
+
+    final String bannerUrl = (item.image != null && item.image!.isNotEmpty)
+        ? ApiService.getImagePath(item.image!)
+        : '';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        contentPadding: EdgeInsets.zero,
+        titlePadding: EdgeInsets.zero,
+        clipBehavior: Clip.antiAlias,
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Top Banner or Gradient Header
+                if (bannerUrl.isNotEmpty)
+                  AspectRatio(
+                    aspectRatio: 1.8,
+                    child: Image.network(
+                      bannerUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, _, _) => Container(
+                        color: const Color(0xFFEFF6FF),
+                        child: Icon(badgeIcon, size: 48, color: badgeTextColor),
+                      ),
+                    ),
+                  )
+                else
+                  Container(
+                    height: 100,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [badgeTextColor.withValues(alpha: 0.15), badgeBgColor],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                    ),
+                    child: Center(
+                      child: Icon(badgeIcon, size: 40, color: badgeTextColor),
+                    ),
+                  ),
+
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Badge
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: badgeBgColor,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: badgeTextColor.withValues(alpha: 0.3)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(badgeIcon, color: badgeTextColor, size: 14),
+                            const SizedBox(width: 5),
+                            Text(
+                              badgeText,
+                              style: GoogleFonts.outfit(
+                                color: badgeTextColor,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+
+                      // Title
+                      Text(
+                        item.title,
+                        style: GoogleFonts.outfit(
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFF0F172A),
+                          height: 1.3,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+
+                      // Date Row
+                      Row(
+                        children: [
+                          const Icon(Icons.schedule_rounded, size: 14, color: Color(0xFF64748B)),
+                          const SizedBox(width: 6),
+                          Text(
+                            dateText,
+                            style: GoogleFonts.outfit(
+                              fontSize: 12.5,
+                              color: const Color(0xFF64748B),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Description Box
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: Text(
+                          bodyText,
+                          style: GoogleFonts.outfit(
+                            fontSize: 14.5,
+                            height: 1.5,
+                            color: const Color(0xFF334155),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+        actions: [
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () => Navigator.pop(ctx),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2563EB),
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+              child: Text(
+                'ปิดหน้าต่าง',
+                style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 14.5),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildCoverPlaceholder() {
     return Container(
       color: const Color(0xFFE2E8F0),
@@ -1893,12 +3108,11 @@ class _ProfileTabState extends State<_ProfileTab> {
       final auth = Provider.of<AuthService>(context, listen: false);
       final userId = auth.currentUser?.userId;
 
-      final unreadAnnounce = await AnnouncementService.getUnreadCount();
       final unreadNotifs = userId != null
           ? await NotificationApiService.getUnreadCount(userId: userId)
           : 0;
 
-      if (mounted) setState(() => _unreadNotificationCount = unreadAnnounce + unreadNotifs);
+      if (mounted) setState(() => _unreadNotificationCount = unreadNotifs);
     } catch (_) {}
   }
 
@@ -2940,11 +4154,27 @@ class _ProfileTabState extends State<_ProfileTab> {
                   },
                 ),
               ] else ...[
-                _buildMenuItem(
-                  icon: Icons.storefront_outlined,
-                  title: 'สมัครเป็นผู้ค้า',
-                  onTap: () {
-                    Navigator.pushNamed(context, '/vendor_register');
+                Builder(
+                  builder: (context) {
+                    final bool hasPending = user != null &&
+                        user.documentStatus == 'pending' &&
+                        (user.submissionDate != null ||
+                            user.documentImage != null ||
+                            (user.citizenId != null && user.citizenId!.isNotEmpty));
+                    final bool isRejected = user != null && user.documentStatus == 'rejected';
+                    String title = 'สมัครเป็นผู้ค้า';
+                    if (hasPending) {
+                      title = 'สถานะการสมัครผู้ค้า (รอตรวจสอบ)';
+                    } else if (isRejected) {
+                      title = 'การสมัครผู้ค้าไม่ผ่านอนุมัติ (ยื่นใหม่)';
+                    }
+                    return _buildMenuItem(
+                      icon: Icons.storefront_outlined,
+                      title: title,
+                      onTap: () {
+                        Navigator.pushNamed(context, '/vendor_register');
+                      },
+                    );
                   },
                 ),
               ],
@@ -3118,6 +4348,7 @@ class _FollowedTabState extends State<_FollowedTab> {
   Map<int, double> _shopRatings = {};
   bool _isLoading = true;
   String _searchQuery = '';
+  String _selectedSort = 'latest'; // 'latest', 'rating', 'name'
   int _unreadNotificationCount = 0;
 
   @override
@@ -3132,12 +4363,11 @@ class _FollowedTabState extends State<_FollowedTab> {
       final auth = Provider.of<AuthService>(context, listen: false);
       final userId = auth.currentUser?.userId;
 
-      final unreadAnnounce = await AnnouncementService.getUnreadCount();
       final unreadNotifs = userId != null
           ? await NotificationApiService.getUnreadCount(userId: userId)
           : 0;
 
-      if (mounted) setState(() => _unreadNotificationCount = unreadAnnounce + unreadNotifs);
+      if (mounted) setState(() => _unreadNotificationCount = unreadNotifs);
     } catch (_) {}
   }
 
@@ -3199,12 +4429,12 @@ class _FollowedTabState extends State<_FollowedTab> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: const Color(0xFFFEF2F2),
+                color: const Color(0xFFEFF6FF),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const Icon(
-                Icons.favorite_border,
-                color: Color(0xFFEF4444),
+                Icons.bookmark_remove_rounded,
+                color: Color(0xFF1E88E5),
                 size: 20,
               ),
             ),
@@ -3288,13 +4518,63 @@ class _FollowedTabState extends State<_FollowedTab> {
   }
 
   List<Shop> get _filteredShops {
-    if (_searchQuery.trim().isEmpty) return _shops;
-    final q = _searchQuery.trim().toLowerCase();
-    return _shops.where((s) {
-      final nameMatches = s.shopName.toLowerCase().contains(q);
-      final catMatches = s.categoryName.toLowerCase().contains(q);
-      return nameMatches || catMatches;
-    }).toList();
+    List<Shop> list = List<Shop>.from(_shops);
+    if (_searchQuery.trim().isNotEmpty) {
+      final q = _searchQuery.trim().toLowerCase();
+      list = list.where((s) {
+        final nameMatches = s.shopName.toLowerCase().contains(q);
+        final catMatches = s.categoryName.toLowerCase().contains(q);
+        return nameMatches || catMatches;
+      }).toList();
+    }
+
+    if (_selectedSort == 'rating') {
+      list.sort((a, b) {
+        final rA = _shopRatings[a.shopId] ?? a.avgRating ?? 0.0;
+        final rB = _shopRatings[b.shopId] ?? b.avgRating ?? 0.0;
+        return rB.compareTo(rA);
+      });
+    } else if (_selectedSort == 'name') {
+      list.sort((a, b) =>
+          a.shopName.toLowerCase().compareTo(b.shopName.toLowerCase()));
+    }
+    // 'latest' retains the order from API which is follow_date desc
+
+    return list;
+  }
+
+  Widget _buildSortChip({required String label, required String sortKey}) {
+    final isSelected = _selectedSort == sortKey;
+    return InkWell(
+      onTap: () {
+        if (_selectedSort != sortKey) {
+          setState(() => _selectedSort = sortKey);
+        }
+      },
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? const Color(0xFF2563EB)
+              : const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected
+                ? const Color(0xFF2563EB)
+                : const Color(0xFFE2E8F0),
+          ),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.outfit(
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            color: isSelected ? Colors.white : const Color(0xFF475569),
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildRatingStars(double rating) {
@@ -3304,11 +4584,11 @@ class _FollowedTabState extends State<_FollowedTab> {
 
     for (int i = 1; i <= 5; i++) {
       if (i <= fullStars) {
-        stars.add(const Icon(Icons.star, color: Colors.amber, size: 14));
+        stars.add(const Icon(Icons.star_rounded, color: Colors.amber, size: 13));
       } else if (i == fullStars + 1 && hasHalfStar) {
-        stars.add(const Icon(Icons.star_half, color: Colors.amber, size: 14));
+        stars.add(const Icon(Icons.star_half_rounded, color: Colors.amber, size: 13));
       } else {
-        stars.add(const Icon(Icons.star_border, color: Colors.amber, size: 14));
+        stars.add(const Icon(Icons.star_border_rounded, color: Colors.amber, size: 13));
       }
     }
     return Row(mainAxisSize: MainAxisSize.min, children: stars);
@@ -3369,7 +4649,7 @@ class _FollowedTabState extends State<_FollowedTab> {
                     // Notification bell
                     GestureDetector(
                       onTap: () async {
-                        await Navigator.pushNamed(context, '/announcements');
+                        await Navigator.pushNamed(context, '/notifications');
                         _loadNotificationCount();
                       },
                       child: Stack(
@@ -3494,6 +4774,45 @@ class _FollowedTabState extends State<_FollowedTab> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 12),
+
+                // Sort selector row
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.sort_rounded,
+                        size: 16,
+                        color: Color(0xFF64748B),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'เรียงตาม:',
+                        style: GoogleFonts.outfit(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF64748B),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      _buildSortChip(
+                        label: '🕒 ล่าสุดที่ติดตาม',
+                        sortKey: 'latest',
+                      ),
+                      const SizedBox(width: 6),
+                      _buildSortChip(
+                        label: '⭐ คะแนนรีวิว',
+                        sortKey: 'rating',
+                      ),
+                      const SizedBox(width: 6),
+                      _buildSortChip(
+                        label: '🔤 ตามชื่อ (ก-ฮ)',
+                        sortKey: 'name',
+                      ),
+                    ],
+                  ),
+                ),
                 const SizedBox(height: 16),
 
                 // Content Area
@@ -3517,12 +4836,12 @@ class _FollowedTabState extends State<_FollowedTab> {
                                 width: 80,
                                 height: 80,
                                 decoration: const BoxDecoration(
-                                  color: Color(0xFFFEE2E2),
+                                  color: Color(0xFFEFF6FF),
                                   shape: BoxShape.circle,
                                 ),
                                 child: const Icon(
-                                  Icons.favorite_border,
-                                  color: Color(0xFFEF4444),
+                                  Icons.bookmark_border_rounded,
+                                  color: Color(0xFF1E88E5),
                                   size: 40,
                                 ),
                               ),
@@ -3657,8 +4976,8 @@ class _FollowedTabState extends State<_FollowedTab> {
                                               shape: BoxShape.circle,
                                             ),
                                             child: const Icon(
-                                              Icons.favorite,
-                                              color: Colors.red,
+                                              Icons.bookmark_rounded,
+                                              color: Color(0xFF1E88E5),
                                               size: 14,
                                             ),
                                           ),
@@ -3683,8 +5002,36 @@ class _FollowedTabState extends State<_FollowedTab> {
                                             overflow: TextOverflow.ellipsis,
                                           ),
                                           const SizedBox(height: 4),
-                                          Row(
+                                          Wrap(
+                                            spacing: 6,
+                                            runSpacing: 4,
+                                            crossAxisAlignment:
+                                                WrapCrossAlignment.center,
                                             children: [
+                                              if (shop.stallNumber != null &&
+                                                  shop.stallNumber!.isNotEmpty)
+                                                Container(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                    horizontal: 6,
+                                                    vertical: 2,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(
+                                                      0xFFEFF6FF),
+                                                    borderRadius:
+                                                        BorderRadius.circular(6),
+                                                  ),
+                                                  child: Text(
+                                                    'แผง ${shop.stallNumber}',
+                                                    style: GoogleFonts.outfit(
+                                                      fontSize: 10.5,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: const Color(
+                                                        0xFF2563EB),
+                                                    ),
+                                                  ),
+                                                ),
                                               Container(
                                                 padding:
                                                     const EdgeInsets.symmetric(
@@ -3707,20 +5054,26 @@ class _FollowedTabState extends State<_FollowedTab> {
                                                       0xFF475569,
                                                     ),
                                                   ),
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
                                                 ),
                                               ),
-                                              const SizedBox(width: 8),
-                                              _buildRatingStars(rating),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                rating.toStringAsFixed(1),
-                                                style: GoogleFonts.outfit(
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: const Color(
-                                                    0xFF64748B,
+                                              Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  _buildRatingStars(rating),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    rating.toStringAsFixed(1),
+                                                    style: GoogleFonts.outfit(
+                                                      fontSize: 11.5,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: const Color(
+                                                        0xFF64748B,
+                                                      ),
+                                                    ),
                                                   ),
-                                                ),
+                                                ],
                                               ),
                                             ],
                                           ),
@@ -3743,11 +5096,14 @@ class _FollowedTabState extends State<_FollowedTab> {
                                     // Unfollow Button Action
                                     IconButton(
                                       icon: const Icon(
-                                        Icons.favorite,
-                                        color: Colors.red,
+                                        Icons.bookmark_remove_rounded,
+                                        color: Color(0xFF1E88E5),
                                         size: 22,
                                       ),
                                       tooltip: 'ยกเลิกการติดตาม',
+                                      visualDensity: VisualDensity.compact,
+                                      padding: const EdgeInsets.all(6),
+                                      constraints: const BoxConstraints(),
                                       onPressed: () => _unfollowShop(shop),
                                     ),
                                   ],

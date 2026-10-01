@@ -25,7 +25,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   Future<void> _resetPassword() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final String email = _emailController.text.trim();
+    final String email = _emailController.text.trim().toLowerCase();
     setState(() => _isLoading = true);
 
     final authService = Provider.of<AuthService>(context, listen: false);

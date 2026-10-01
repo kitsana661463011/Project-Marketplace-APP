@@ -1988,10 +1988,10 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
                                     horizontal: 10,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFFFEF2F2),
+                                    color: const Color(0xFFEFF6FF),
                                     borderRadius: BorderRadius.circular(16),
                                     border: Border.all(
-                                      color: const Color(0xFFFECACA),
+                                      color: const Color(0xFFDBEAFE),
                                     ),
                                   ),
                                   child: Column(
@@ -2001,8 +2001,8 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
                                             MainAxisAlignment.center,
                                         children: [
                                           const Icon(
-                                            Icons.favorite_rounded,
-                                            color: Colors.redAccent,
+                                            Icons.bookmark_rounded,
+                                            color: Color(0xFF1E88E5),
                                             size: 15,
                                           ),
                                           const SizedBox(width: 4),
@@ -2011,7 +2011,7 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
                                             style: GoogleFonts.outfit(
                                               fontSize: 16,
                                               fontWeight: FontWeight.bold,
-                                              color: const Color(0xFF991B1B),
+                                              color: const Color(0xFF1E40AF),
                                             ),
                                           ),
                                         ],
@@ -2021,7 +2021,7 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
                                         'ผู้ติดตาม',
                                         style: GoogleFonts.outfit(
                                           fontSize: 11,
-                                          color: const Color(0xFF991B1B),
+                                          color: const Color(0xFF1D4ED8),
                                           fontWeight: FontWeight.w600,
                                         ),
                                       ),
@@ -2366,12 +2366,12 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
               ),
               NavigationDestination(
                 icon: Icon(
-                  Icons.favorite_outline,
+                  Icons.bookmark_border_rounded,
                   size: 24,
                   color: Color(0xFF64748B),
                 ),
                 selectedIcon: Icon(
-                  Icons.favorite,
+                  Icons.bookmark_rounded,
                   size: 24,
                   color: Color(0xFF1E88E5),
                 ),
@@ -2631,12 +2631,16 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
   }
 
   void _showEditItemDialog(Item item) {
+    final nameCtrl = TextEditingController(text: item.itemName);
     final priceCtrl = TextEditingController(
       text: item.price.toStringAsFixed(2),
     );
+    final descCtrl = TextEditingController(text: item.description ?? '');
     int? selectedCatId = item.categoryId;
     List<ItemCategory> availableCategories = [];
     bool isLoadingCats = true;
+    Uint8List? pickedImageBytes;
+    String? pickedImageName;
 
     showDialog(
       context: context,
@@ -2677,7 +2681,7 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'แก้ไขเมนู: ${item.itemName}',
+                      'แก้ไขเมนู / สินค้า',
                       style: GoogleFonts.outfit(
                         fontWeight: FontWeight.bold,
                         fontSize: 17,
@@ -2688,54 +2692,158 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
                   ),
                 ],
               ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TextFormField(
-                    controller: priceCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Product Image Picker & Preview
+                    Center(
+                      child: Column(
+                        children: [
+                          GestureDetector(
+                            onTap: () async {
+                              try {
+                                final result = await FilePicker.platform.pickFiles(
+                                  type: FileType.image,
+                                  allowMultiple: false,
+                                  withData: true,
+                                );
+                                if (result != null && result.files.isNotEmpty) {
+                                  final file = result.files.first;
+                                  if (file.bytes != null) {
+                                    setDialogState(() {
+                                      pickedImageBytes = file.bytes;
+                                      pickedImageName = file.name;
+                                    });
+                                  }
+                                }
+                              } catch (e) {
+                                debugPrint('Error picking item image: $e');
+                              }
+                            },
+                            child: Stack(
+                              children: [
+                                Container(
+                                  width: 110,
+                                  height: 110,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF1F5F9),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                      color: const Color(0xFFE2E8F0),
+                                      width: 2,
+                                    ),
+                                  ),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(14),
+                                    child: pickedImageBytes != null
+                                        ? Image.memory(
+                                            pickedImageBytes!,
+                                            fit: BoxFit.cover,
+                                            width: 110,
+                                            height: 110,
+                                          )
+                                        : (item.itemImage != null &&
+                                                item.itemImage!.isNotEmpty)
+                                            ? Image.network(
+                                                ApiService.getImagePath(
+                                                    item.itemImage),
+                                                fit: BoxFit.cover,
+                                                width: 110,
+                                                height: 110,
+                                                errorBuilder:
+                                                    (context, error, stackTrace) =>
+                                                        const Icon(
+                                                  Icons.image_outlined,
+                                                  size: 40,
+                                                  color: Color(0xFF94A3B8),
+                                                ),
+                                              )
+                                            : const Icon(
+                                                Icons.image_outlined,
+                                                size: 40,
+                                                color: Color(0xFF94A3B8),
+                                              ),
+                                  ),
+                                ),
+                                Positioned(
+                                  bottom: 4,
+                                  right: 4,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(6),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF2563EB),
+                                      shape: BoxShape.circle,
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withValues(alpha: 0.15),
+                                          blurRadius: 4,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ],
+                                    ),
+                                    child: const Icon(
+                                      Icons.camera_alt,
+                                      size: 16,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          TextButton.icon(
+                            onPressed: () async {
+                              try {
+                                final result = await FilePicker.platform.pickFiles(
+                                  type: FileType.image,
+                                  allowMultiple: false,
+                                  withData: true,
+                                );
+                                if (result != null && result.files.isNotEmpty) {
+                                  final file = result.files.first;
+                                  if (file.bytes != null) {
+                                    setDialogState(() {
+                                      pickedImageBytes = file.bytes;
+                                      pickedImageName = file.name;
+                                    });
+                                  }
+                                }
+                              } catch (e) {
+                                debugPrint('Error picking item image: $e');
+                              }
+                            },
+                            icon: const Icon(
+                              Icons.photo_library_outlined,
+                              size: 16,
+                              color: Color(0xFF2563EB),
+                            ),
+                            label: Text(
+                              pickedImageBytes != null
+                                  ? 'เปลี่ยนรูปใหม่แล้ว (แตะเพื่อเลือกอีก)'
+                                  : 'แตะเพื่อเปลี่ยนรูปสินค้า',
+                              style: GoogleFonts.outfit(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFF2563EB),
+                              ),
+                            ),
+                            style: TextButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+                      ),
                     ),
-                    style: GoogleFonts.outfit(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFF0F172A),
-                    ),
-                    decoration: InputDecoration(
-                      labelText: 'ราคา (บาท)',
-                      labelStyle: GoogleFonts.outfit(color: const Color(0xFF64748B)),
-                      filled: true,
-                      fillColor: const Color(0xFFF8FAFC),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.8),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  if (isLoadingCats)
-                    const Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(8.0),
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Color(0xFF2563EB),
-                        ),
-                      ),
-                    )
-                  else if (availableCategories.isNotEmpty) ...[
                     Text(
-                      'ประเภทเมนู/สินค้า',
+                      'ชื่อเมนู / สินค้า',
                       style: GoogleFonts.outfit(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
@@ -2743,17 +2851,16 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    DropdownButtonFormField<int>(
-                      initialValue: availableCategories.any((c) => c.categoryId == selectedCatId)
-                          ? selectedCatId
-                          : (availableCategories.isNotEmpty ? availableCategories.first.categoryId : null),
-                      dropdownColor: Colors.white,
+                    TextFormField(
+                      controller: nameCtrl,
                       style: GoogleFonts.outfit(
-                        fontSize: 14,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
                         color: const Color(0xFF0F172A),
-                        fontWeight: FontWeight.w500,
                       ),
                       decoration: InputDecoration(
+                        hintText: 'ระบุชื่อเมนู',
+                        hintStyle: GoogleFonts.outfit(color: const Color(0xFF94A3B8)),
                         filled: true,
                         fillColor: const Color(0xFFF8FAFC),
                         border: OutlineInputBorder(
@@ -2770,26 +2877,153 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
                         ),
                         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                       ),
-                      items: availableCategories.map((c) {
-                        return DropdownMenuItem<int>(
-                          value: c.categoryId,
-                          child: Text(
-                            c.categoryName,
-                            style: GoogleFonts.outfit(
-                              fontSize: 14,
-                              color: const Color(0xFF0F172A),
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                      onChanged: (val) {
-                        setDialogState(() {
-                          selectedCatId = val;
-                        });
-                      },
                     ),
+                    const SizedBox(height: 14),
+                    Text(
+                      'ราคา (บาท)',
+                      style: GoogleFonts.outfit(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF334155),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    TextFormField(
+                      controller: priceCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      style: GoogleFonts.outfit(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF0F172A),
+                      ),
+                      decoration: InputDecoration(
+                        hintText: '0.00',
+                        hintStyle: GoogleFonts.outfit(color: const Color(0xFF94A3B8)),
+                        filled: true,
+                        fillColor: const Color(0xFFF8FAFC),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.8),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      'รายละเอียด (ไม่บังคับ)',
+                      style: GoogleFonts.outfit(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF334155),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    TextFormField(
+                      controller: descCtrl,
+                      maxLines: 2,
+                      style: GoogleFonts.outfit(
+                        fontSize: 14,
+                        color: const Color(0xFF0F172A),
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'คำอธิบายหรือส่วนประกอบของเมนู',
+                        hintStyle: GoogleFonts.outfit(color: const Color(0xFF94A3B8)),
+                        filled: true,
+                        fillColor: const Color(0xFFF8FAFC),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.8),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    if (isLoadingCats)
+                      const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(8.0),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Color(0xFF2563EB),
+                          ),
+                        ),
+                      )
+                    else if (availableCategories.isNotEmpty) ...[
+                      Text(
+                        'ประเภทเมนู/สินค้า',
+                        style: GoogleFonts.outfit(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF334155),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      DropdownButtonFormField<int>(
+                        initialValue: availableCategories.any((c) => c.categoryId == selectedCatId)
+                            ? selectedCatId
+                            : (availableCategories.isNotEmpty ? availableCategories.first.categoryId : null),
+                        dropdownColor: Colors.white,
+                        style: GoogleFonts.outfit(
+                          fontSize: 14,
+                          color: const Color(0xFF0F172A),
+                          fontWeight: FontWeight.w500,
+                        ),
+                        decoration: InputDecoration(
+                          filled: true,
+                          fillColor: const Color(0xFFF8FAFC),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.8),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        ),
+                        items: availableCategories.map((c) {
+                          return DropdownMenuItem<int>(
+                            value: c.categoryId,
+                            child: Text(
+                              c.categoryName,
+                              style: GoogleFonts.outfit(
+                                fontSize: 14,
+                                color: const Color(0xFF0F172A),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          setDialogState(() {
+                            selectedCatId = val;
+                          });
+                        },
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
               actions: [
                 TextButton(
@@ -2807,11 +3041,20 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
                   onPressed: isSaving
                       ? null
                       : () async {
+                          final name = nameCtrl.text.trim();
+                          if (name.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('กรุณากรอกชื่อเมนู / สินค้า'),
+                              ),
+                            );
+                            return;
+                          }
                           final raw = priceCtrl.text.trim();
                           final parsed = double.tryParse(
                             raw.replaceAll(',', ''),
                           );
-                          if (parsed == null) {
+                          if (parsed == null || parsed < 0) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
                                 content: Text('กรุณากรอกราคาที่ถูกต้อง'),
@@ -2821,7 +3064,9 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
                           }
                           setDialogState(() => isSaving = true);
                           final updatePayload = <String, dynamic>{
+                            'item_name': name,
                             'price': parsed.toStringAsFixed(2),
+                            'description': descCtrl.text.trim(),
                           };
                           if (selectedCatId != null) {
                             updatePayload['category_id'] = selectedCatId;
@@ -2830,6 +3075,8 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
                           final updated = await ItemService.updateItem(
                             item.itemId ?? 0,
                             updatePayload,
+                            imageBytes: pickedImageBytes,
+                            imageName: pickedImageName,
                           );
                           setDialogState(() => isSaving = false);
                           if (updated != null) {
@@ -3070,10 +3317,23 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
                                 Navigator.pop(context);
                                 _showEditItemDialog(item);
                               },
-                              icon: const Icon(Icons.edit, size: 18),
-                              label: const Text('แก้ไข'),
+                              icon: const Icon(
+                                Icons.edit_outlined,
+                                size: 18,
+                                color: Colors.white,
+                              ),
+                              label: Text(
+                                'แก้ไข',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFF2563EB),
+                                foregroundColor: Colors.white,
+                                elevation: 0,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(14),
                                 ),

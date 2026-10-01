@@ -1,35 +1,81 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../config/api_config.dart';
 import '../models/market_map_item.dart' as model;
 import '../models/shop.dart';
+import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../services/market_map_service.dart';
+import '../services/shop_service.dart';
 
 class MarketMapScreen extends StatefulWidget {
   final bool isEmbedded;
+  static final GlobalKey<MarketMapScreenState> mapKey =
+      GlobalKey<MarketMapScreenState>();
+  static Shop? globalPendingTargetShop;
+  static String? globalPendingTargetStall;
+
   const MarketMapScreen({super.key, this.isEmbedded = false});
 
   @override
-  State<MarketMapScreen> createState() => _MarketMapScreenState();
+  State<MarketMapScreen> createState() => MarketMapScreenState();
 }
 
-class _MarketMapScreenState extends State<MarketMapScreen>
+class MarketMapScreenState extends State<MarketMapScreen>
     with TickerProviderStateMixin {
   model.MarketMap? _map;
+  List<Shop> _shops = [];
   bool _isLoading = true;
   String? _error;
   model.MarketMapItem? _selectedItem;
   String? _targetStallNum;
   bool _hasFocusedTarget = false;
+  Shop? _pendingTargetShop;
+  bool _isShowingStallSheet = false;
+  Timer? _stallDetailTimer;
+
+  /// Public method to focus camera, highlight, and show detail for a shop on the map
+  void focusShopOnMap(Shop shop) {
+    if (_map == null || _isLoading) {
+      _pendingTargetShop = shop;
+      return;
+    }
+    _onShopSelected(shop);
+  }
+
+  /// Public method to focus camera, highlight, and show detail for a specific stall label
+  void focusStallOnMap(String stallNumber) {
+    _targetStallNum = stallNumber;
+    _hasFocusedTarget = false;
+    if (_map != null && !_isLoading) {
+      _checkAndFocusTargetStall();
+    }
+  }
+
+  final TextEditingController _searchController = TextEditingController();
+  OverlayEntry? _searchOverlayEntry;
+  final LayerLink _searchLayerLink = LayerLink();
+  String _searchQuery = '';
 
   late AnimationController _blinkController;
   late Animation<double> _blinkAnimation;
 
+  // Animation controller for smooth pan/zoom camera
+  late AnimationController _mapAnimationController;
+  Animation<Matrix4>? _mapMatrixAnimation;
+
   // Transform controller for zoom/pan
   final TransformationController _transformationController =
       TransformationController();
+
+  // Cached layout sizes to center stall animations accurately
+  Size? _lastScreenSize;
+  double? _lastBaseScale;
+  double? _lastMinX;
+  double? _lastMinY;
+  model.MarketMapItem? _pendingFocusItem;
 
   // Filters
   String _filterStatus =
@@ -42,6 +88,15 @@ class _MarketMapScreenState extends State<MarketMapScreen>
   @override
   void initState() {
     super.initState();
+    if (MarketMapScreen.globalPendingTargetShop != null) {
+      _pendingTargetShop = MarketMapScreen.globalPendingTargetShop;
+      MarketMapScreen.globalPendingTargetShop = null;
+    }
+    if (MarketMapScreen.globalPendingTargetStall != null) {
+      _targetStallNum = MarketMapScreen.globalPendingTargetStall;
+      MarketMapScreen.globalPendingTargetStall = null;
+    }
+
     _blinkController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 750),
@@ -50,6 +105,15 @@ class _MarketMapScreenState extends State<MarketMapScreen>
     _blinkAnimation = Tween<double>(begin: 0.25, end: 1.0).animate(
       CurvedAnimation(parent: _blinkController, curve: Curves.easeInOut),
     );
+
+    _mapAnimationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 650),
+    )..addListener(() {
+      if (_mapMatrixAnimation != null) {
+        _transformationController.value = _mapMatrixAnimation!.value;
+      }
+    });
 
     _loadMap();
   }
@@ -80,6 +144,10 @@ class _MarketMapScreenState extends State<MarketMapScreen>
 
   @override
   void dispose() {
+    _stallDetailTimer?.cancel();
+    _hideSearchOverlay();
+    _searchController.dispose();
+    _mapAnimationController.dispose();
     _blinkController.dispose();
     _transformationController.dispose();
     super.dispose();
@@ -91,15 +159,75 @@ class _MarketMapScreenState extends State<MarketMapScreen>
       _error = null;
     });
     try {
-      final map = await MarketMapService.getMainMap();
+      final results = await Future.wait([
+        MarketMapService.getMainMap(),
+        ShopService.getShops(),
+      ]);
+      final map = results[0] as model.MarketMap?;
+      final shops = List<Shop>.from(results[1] as List<Shop>);
+
+      // Merge any shops appearing in map stall seller info
+      if (map != null) {
+        final existingShopNames =
+            shops.map((s) => s.shopName.trim().toLowerCase()).toSet();
+        for (final item in map.items) {
+          if (!item.isBlock || !item.hasShop || item.seller == null) continue;
+          final sName = item.seller!['shop_name']?.toString().trim();
+          final sId = int.tryParse(
+            item.seller!['shop_id']?.toString() ??
+                item.seller!['id']?.toString() ??
+                '',
+          );
+          if (sName != null &&
+              sName.isNotEmpty &&
+              !existingShopNames.contains(sName.toLowerCase())) {
+            existingShopNames.add(sName.toLowerCase());
+            shops.add(Shop(
+              shopId: sId,
+              shopName: sName,
+              stallNumber: item.label,
+              category: item.seller!['category'] is Map
+                  ? Map<String, dynamic>.from(item.seller!['category'])
+                  : null,
+              description: item.seller!['description']?.toString(),
+              shopPhone: item.seller!['shop_phone']?.toString() ??
+                  item.seller!['phone']?.toString(),
+              shopImage: item.seller!['shop_image']?.toString(),
+              status: item.isShopOpen ? 'เปิดบริการอยู่' : 'ปิดบริการชั่วคราว',
+            ));
+          }
+        }
+      }
+
       if (mounted) {
         setState(() {
           _map = map;
+          _shops = shops;
           _isLoading = false;
           if (map == null) {
             _error = 'ไม่สามารถโหลดแผนที่ได้';
           } else {
-            _checkAndFocusTargetStall();
+            final shopToFocus =
+                MarketMapScreen.globalPendingTargetShop ?? _pendingTargetShop;
+            MarketMapScreen.globalPendingTargetShop = null;
+            _pendingTargetShop = null;
+
+            final stallToFocus = MarketMapScreen.globalPendingTargetStall;
+            MarketMapScreen.globalPendingTargetStall = null;
+            if (stallToFocus != null && stallToFocus.isNotEmpty) {
+              _targetStallNum = stallToFocus;
+              _hasFocusedTarget = false;
+            }
+
+            if (shopToFocus != null) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) {
+                  _onShopSelected(shopToFocus);
+                }
+              });
+            } else {
+              _checkAndFocusTargetStall();
+            }
           }
         });
       }
@@ -113,40 +241,55 @@ class _MarketMapScreenState extends State<MarketMapScreen>
     }
   }
 
+  String _normStall(String? s) {
+    if (s == null) return '';
+    return s
+        .replaceAll(RegExp(r'[^a-zA-Z0-9]'), '')
+        .toUpperCase()
+        .replaceAll('O', '0');
+  }
+
   void _checkAndFocusTargetStall() {
     if (_map == null || _targetStallNum == null || _hasFocusedTarget) return;
 
-    final String targetClean = _targetStallNum!
-        .replaceAll(RegExp(r'[^a-zA-Z0-9]'), '')
-        .toUpperCase();
-    if (targetClean.isEmpty) return;
+    final String targetNorm = _normStall(_targetStallNum);
+    if (targetNorm.isEmpty) return;
 
     model.MarketMapItem? matchedItem;
     for (final item in _map!.items) {
       if (!item.isBlock) continue;
-      final labelClean = item.label
-          .replaceAll(RegExp(r'[^a-zA-Z0-9]'), '')
-          .toUpperCase();
-      final itemIdClean = item.mapItemId
-          .replaceAll(RegExp(r'[^a-zA-Z0-9]'), '')
-          .toUpperCase();
-      final stallIdClean = item.stallId?.toString() ?? '';
+      final labelNorm = _normStall(item.label);
+      final itemIdNorm = _normStall(item.mapItemId);
+      final stallIdNorm = _normStall(item.stallId?.toString());
 
-      if (labelClean == targetClean ||
-          itemIdClean == targetClean ||
-          stallIdClean == targetClean ||
-          (labelClean.isNotEmpty && targetClean.contains(labelClean)) ||
-          (targetClean.isNotEmpty && labelClean.contains(targetClean))) {
+      if (labelNorm == targetNorm ||
+          itemIdNorm == targetNorm ||
+          stallIdNorm == targetNorm ||
+          (labelNorm.isNotEmpty && targetNorm.contains(labelNorm)) ||
+          (targetNorm.isNotEmpty && labelNorm.contains(targetNorm))) {
         matchedItem = item;
         break;
       }
     }
 
     if (matchedItem != null) {
-      _selectedItem = matchedItem;
-      _filterStatus = 'all';
-      _filterRentalType = 'all';
+      setState(() {
+        _selectedItem = matchedItem;
+        _filterStatus = 'all';
+        _filterRentalType = 'all';
+      });
       _hasFocusedTarget = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _animateToStall(matchedItem!);
+          _stallDetailTimer?.cancel();
+          _stallDetailTimer = Timer(const Duration(milliseconds: 600), () {
+            if (mounted && _selectedItem == matchedItem && !_isShowingStallSheet) {
+              _showStallDetail(matchedItem!);
+            }
+          });
+        }
+      });
     }
   }
 
@@ -312,6 +455,8 @@ class _MarketMapScreenState extends State<MarketMapScreen>
 
   void _showStallDetail(model.MarketMapItem item) {
     if (!item.isBlock) return;
+    if (_isShowingStallSheet) return;
+
     final authService = Provider.of<AuthService>(context, listen: false);
     final isSeller =
         authService.currentUser?.role == 'seller' ||
@@ -320,6 +465,7 @@ class _MarketMapScreenState extends State<MarketMapScreen>
     // ลูกค้าทั่วไปดูได้เฉพาะแผงที่มีร้านค้าเปิดอยู่เท่านั้น
     if (!isSeller && !item.hasShop) return;
 
+    _isShowingStallSheet = true;
     setState(() => _selectedItem = item);
 
     final bool hasShop = (item.isApproved || item.isPending) &&
@@ -341,6 +487,7 @@ class _MarketMapScreenState extends State<MarketMapScreen>
         }
       },
     ).whenComplete(() {
+      _isShowingStallSheet = false;
       if (mounted) setState(() => _selectedItem = null);
     });
   }
@@ -618,7 +765,7 @@ class _MarketMapScreenState extends State<MarketMapScreen>
                   const SizedBox(height: 12),
                   _infoRow(
                     Icons.person_outline,
-                    'ผู้เช่า',
+                    item.isPending ? 'ผู้จอง' : 'ผู้เช่า',
                     item.seller!['user_name'] ?? item.seller!['name'] ?? 'ไม่ระบุ',
                   ),
                   if (item.seller!['shop_name'] != null &&
@@ -1169,6 +1316,61 @@ class _MarketMapScreenState extends State<MarketMapScreen>
     });
   }
 
+  void _animateToMatrix(Matrix4 target) {
+    _mapAnimationController.stop();
+    final current = _transformationController.value;
+    _mapMatrixAnimation = Matrix4Tween(
+      begin: current,
+      end: target,
+    ).animate(CurvedAnimation(
+      parent: _mapAnimationController,
+      curve: Curves.fastOutSlowIn,
+    ));
+    _mapAnimationController.reset();
+    _mapAnimationController.forward();
+  }
+
+  void _animateToStall(model.MarketMapItem item) {
+    if (_lastScreenSize == null ||
+        _lastBaseScale == null ||
+        _lastMinX == null ||
+        _lastMinY == null) {
+      _pendingFocusItem = item;
+      return;
+    }
+
+    final screenW = _lastScreenSize!.width;
+    final screenH = _lastScreenSize!.height;
+    final baseScale = _lastBaseScale!;
+    final minX = _lastMinX!;
+    final minY = _lastMinY!;
+
+    // Stall coordinates inside InteractiveViewer container (which has 24 margin)
+    final stallX = 24.0 + (item.x - minX) * baseScale;
+    final stallY = 24.0 + (item.y - minY) * baseScale;
+    final stallW = item.width * baseScale;
+    final stallH = item.height * baseScale;
+
+    final stallCenterX = stallX + (stallW / 2);
+    final stallCenterY = stallY + (stallH / 2);
+
+    // Zoom scale to clearly view the stall and its surroundings
+    const double targetScale = 1.85;
+
+    // Center stall at upper-middle (40% height) so stall remains visible when bottom sheet appears
+    final viewportCenterX = screenW / 2;
+    final viewportCenterY = screenH * 0.40;
+
+    final tx = viewportCenterX - (stallCenterX * targetScale);
+    final ty = viewportCenterY - (stallCenterY * targetScale);
+
+    final targetMatrix = Matrix4.identity()
+      ..scaleByDouble(targetScale, targetScale, 1.0, 1.0)
+      ..setTranslationRaw(tx, ty, 0.0);
+
+    _animateToMatrix(targetMatrix);
+  }
+
   void _showLegendDialog() {
     final authService = Provider.of<AuthService>(context, listen: false);
     final isSeller =
@@ -1429,6 +1631,456 @@ class _MarketMapScreenState extends State<MarketMapScreen>
     );
   }
 
+  void _showAllShopsModal() {
+    _hideSearchOverlay();
+    FocusScope.of(context).unfocus();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (modalCtx) {
+        String modalSearch = '';
+        String selectedCategory = 'ทั้งหมด';
+
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            final allCategories = <String>{'ทั้งหมด'};
+            for (final s in _shops) {
+              if (s.categoryName.isNotEmpty && s.categoryName != 'ทั่วไป') {
+                allCategories.add(s.categoryName);
+              }
+            }
+
+            final filteredList = _shops.where((s) {
+              final q = modalSearch.trim().toLowerCase();
+              final matchQuery = q.isEmpty ||
+                  s.shopName.toLowerCase().contains(q) ||
+                  s.categoryName.toLowerCase().contains(q) ||
+                  (s.stallNumber != null &&
+                      s.stallNumber!.toLowerCase().contains(q));
+              final matchCategory = selectedCategory == 'ทั้งหมด' ||
+                  s.categoryName == selectedCategory;
+              return matchQuery && matchCategory;
+            }).toList();
+
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.84,
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: Column(
+                children: [
+                  Container(
+                    margin: const EdgeInsets.only(top: 10, bottom: 6),
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFCBD5E1),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 6, 12, 10),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEFF6FF),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(
+                            Icons.storefront_rounded,
+                            color: Color(0xFF2563EB),
+                            size: 22,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'ร้านค้าทั้งหมดในตลาด',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: const Color(0xFF0F172A),
+                                ),
+                              ),
+                              Text(
+                                'แสดง ${_shops.length} ร้านค้า · แตะเพื่อดูตำแหน่งบนผังตลาด',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 12.5,
+                                  color: const Color(0xFF64748B),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, color: Color(0xFF64748B)),
+                          onPressed: () => Navigator.pop(modalCtx),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                    child: Container(
+                      height: 42,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(21),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      child: TextField(
+                        onChanged: (val) {
+                          setModalState(() {
+                            modalSearch = val;
+                          });
+                        },
+                        style: GoogleFonts.outfit(
+                          fontSize: 13.5,
+                          color: const Color(0xFF0F172A),
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'ค้นหาชื่อร้าน หรือหมายเลขแผง...',
+                          hintStyle: GoogleFonts.outfit(
+                            color: const Color(0xFF94A3B8),
+                            fontSize: 13,
+                          ),
+                          prefixIcon: const Icon(
+                            Icons.search,
+                            size: 18,
+                            color: Color(0xFF64748B),
+                          ),
+                          isDense: true,
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 11,
+                            horizontal: 12,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (allCategories.length > 1)
+                    SizedBox(
+                      height: 38,
+                      child: ListView.separated(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        scrollDirection: Axis.horizontal,
+                        itemCount: allCategories.length,
+                        separatorBuilder: (_, _) => const SizedBox(width: 6),
+                        itemBuilder: (ctx, i) {
+                          final cat = allCategories.elementAt(i);
+                          final isSel = selectedCategory == cat;
+                          return ChoiceChip(
+                            label: Text(cat),
+                            selected: isSel,
+                            onSelected: (_) {
+                              setModalState(() {
+                                selectedCategory = cat;
+                              });
+                            },
+                            labelStyle: GoogleFonts.outfit(
+                              fontSize: 12,
+                              fontWeight:
+                                  isSel ? FontWeight.bold : FontWeight.w500,
+                              color:
+                                  isSel ? Colors.white : const Color(0xFF475569),
+                            ),
+                            selectedColor: const Color(0xFF2563EB),
+                            backgroundColor: const Color(0xFFF1F5F9),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            showCheckmark: false,
+                            visualDensity: VisualDensity.compact,
+                          );
+                        },
+                      ),
+                    ),
+                  const SizedBox(height: 6),
+                  Expanded(
+                    child: filteredList.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.storefront_outlined,
+                                  size: 48,
+                                  color: Color(0xFFCBD5E1),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'ไม่พบร้านค้าที่ค้นหา',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 14,
+                                    color: const Color(0xFF64748B),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : ListView.separated(
+                            padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                            itemCount: filteredList.length,
+                            separatorBuilder: (_, _) =>
+                                const SizedBox(height: 8),
+                            itemBuilder: (ctx, index) {
+                              final shop = filteredList[index];
+                              final hasRating = shop.avgRating != null &&
+                                  shop.avgRating! > 0;
+                              final ratingText = hasRating
+                                  ? shop.avgRating!.toStringAsFixed(1)
+                                  : 'ใหม่';
+                              final stallText = shop.stallNumber != null &&
+                                      shop.stallNumber!.isNotEmpty
+                                  ? 'แผง ${shop.stallNumber}'
+                                  : 'โซนตลาด';
+                              final isOpen = shop.status == 'เปิดบริการอยู่';
+
+                              return InkWell(
+                                onTap: () {
+                                  Navigator.pop(modalCtx);
+                                  _onShopSelected(shop);
+                                },
+                                borderRadius: BorderRadius.circular(16),
+                                child: Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                      color: const Color(0xFFE2E8F0),
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black
+                                            .withValues(alpha: 0.02),
+                                        blurRadius: 6,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(12),
+                                        child: Container(
+                                          width: 52,
+                                          height: 52,
+                                          color: const Color(0xFFF1F5F9),
+                                          child: shop.shopImage != null &&
+                                                  shop.shopImage!.isNotEmpty
+                                              ? Image.network(
+                                                  shop.shopImage!
+                                                          .startsWith('http')
+                                                      ? shop.shopImage!
+                                                      : ApiService.getImagePath(
+                                                          shop.shopImage,
+                                                        ),
+                                                  fit: BoxFit.cover,
+                                                  errorBuilder: (_, _, _) =>
+                                                      const Icon(
+                                                    Icons.storefront,
+                                                    color: Color(0xFF64748B),
+                                                    size: 26,
+                                                  ),
+                                                )
+                                              : const Icon(
+                                                  Icons.storefront,
+                                                  color: Color(0xFF64748B),
+                                                  size: 26,
+                                                ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                Expanded(
+                                                  child: Text(
+                                                    shop.shopName,
+                                                    style: GoogleFonts.outfit(
+                                                      fontSize: 14.5,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: const Color(
+                                                        0xFF0F172A,
+                                                      ),
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                                Container(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                    horizontal: 6,
+                                                    vertical: 2,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    color: isOpen
+                                                        ? const Color(0xFFDCFCE7)
+                                                        : const Color(
+                                                            0xFFFEE2E2,
+                                                          ),
+                                                    borderRadius:
+                                                        BorderRadius.circular(6),
+                                                  ),
+                                                  child: Text(
+                                                    isOpen ? '🟢 เปิด' : '🔴 ปิด',
+                                                    style: GoogleFonts.outfit(
+                                                      fontSize: 10.5,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: isOpen
+                                                          ? const Color(
+                                                              0xFF16A34A,
+                                                            )
+                                                          : const Color(
+                                                              0xFFDC2626,
+                                                            ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Row(
+                                              children: [
+                                                Container(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                    horizontal: 6,
+                                                    vertical: 2,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    color:
+                                                        const Color(0xFFEFF6FF),
+                                                    borderRadius:
+                                                        BorderRadius.circular(6),
+                                                  ),
+                                                  child: Text(
+                                                    stallText,
+                                                    style: GoogleFonts.outfit(
+                                                      fontSize: 11,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: const Color(
+                                                        0xFF2563EB,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 6),
+                                                Expanded(
+                                                  child: Text(
+                                                    shop.categoryName,
+                                                    style: GoogleFonts.outfit(
+                                                      fontSize: 12,
+                                                      color: const Color(
+                                                        0xFF64748B,
+                                                      ),
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.end,
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 6,
+                                              vertical: 2,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFFFFBEB),
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                              border: Border.all(
+                                                color: const Color(0xFFFDE68A),
+                                              ),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(
+                                                  Icons.star_rounded,
+                                                  size: 13,
+                                                  color: Color(0xFFF59E0B),
+                                                ),
+                                                const SizedBox(width: 2),
+                                                Text(
+                                                  ratingText,
+                                                  style: GoogleFonts.outfit(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: const Color(
+                                                      0xFFB45309,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Text(
+                                                'ดูบนผัง',
+                                                style: GoogleFonts.outfit(
+                                                  fontSize: 11.5,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: const Color(
+                                                    0xFF2563EB,
+                                                  ),
+                                                ),
+                                              ),
+                                              const Icon(
+                                                Icons.chevron_right_rounded,
+                                                size: 15,
+                                                color: Color(0xFF2563EB),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final availableCount =
@@ -1452,6 +2104,7 @@ class _MarketMapScreenState extends State<MarketMapScreen>
 
     return Scaffold(
       backgroundColor: const Color(0xFFF1F5F9),
+      resizeToAvoidBottomInset: false,
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
@@ -1492,6 +2145,15 @@ class _MarketMapScreenState extends State<MarketMapScreen>
         actions: [
           IconButton(
             icon: const Icon(
+              Icons.storefront_rounded,
+              color: Color(0xFF2563EB),
+              size: 22,
+            ),
+            onPressed: _showAllShopsModal,
+            tooltip: 'ร้านค้าทั้งหมด',
+          ),
+          IconButton(
+            icon: const Icon(
               Icons.info_outline_rounded,
               color: Color(0xFF2563EB),
               size: 22,
@@ -1511,8 +2173,14 @@ class _MarketMapScreenState extends State<MarketMapScreen>
           const SizedBox(width: 4),
         ],
         bottom: PreferredSize(
-          preferredSize: Size.fromHeight(isSeller ? 84 : 48),
-          child: _buildFilterBar(isSeller: isSeller),
+          preferredSize: Size.fromHeight((isSeller ? 84 : 48) + 52),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildSearchBar(),
+              _buildFilterBar(isSeller: isSeller),
+            ],
+          ),
         ),
       ),
       body: _isLoading
@@ -1523,6 +2191,538 @@ class _MarketMapScreenState extends State<MarketMapScreen>
           ? _buildError()
           : _buildMapCanvas(),
     );
+  }
+
+  // Search bar placed at the top of the market map
+  Widget _buildSearchBar() {
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(12, 2, 12, 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: CompositedTransformTarget(
+              link: _searchLayerLink,
+              child: Container(
+                height: 42,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(21),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: (val) {
+                    setState(() => _searchQuery = val);
+                    _updateSearchOverlay();
+                  },
+                  style: GoogleFonts.outfit(
+                    fontSize: 14,
+                    color: const Color(0xFF0F172A),
+                  ),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    hintText: 'ค้นหาร้านค้า เช่น ข้าว, ชานม, แผง A1...',
+                    hintStyle: GoogleFonts.outfit(
+                      color: const Color(0xFF94A3B8),
+                      fontSize: 13,
+                    ),
+                    prefixIcon: const Icon(
+                      Icons.search,
+                      color: Color(0xFF64748B),
+                      size: 20,
+                    ),
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(
+                              Icons.clear,
+                              color: Color(0xFF94A3B8),
+                              size: 18,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _searchQuery = '';
+                                _searchController.clear();
+                              });
+                              _hideSearchOverlay();
+                            },
+                          )
+                        : null,
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(
+                      vertical: 10,
+                      horizontal: 12,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          InkWell(
+            onTap: _showAllShopsModal,
+            borderRadius: BorderRadius.circular(21),
+            child: Container(
+              height: 42,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEFF6FF),
+                borderRadius: BorderRadius.circular(21),
+                border: Border.all(color: const Color(0xFFBFDBFE)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.storefront_rounded,
+                    size: 16,
+                    color: Color(0xFF2563EB),
+                  ),
+                  const SizedBox(width: 5),
+                  Text(
+                    'ร้านค้า (${_shops.length})',
+                    style: GoogleFonts.outfit(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF2563EB),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Shop> get _searchResultShops {
+    final q = _searchQuery.trim();
+    if (q.isEmpty) return [];
+
+    final List<MapEntry<Shop, double>> scoredShops = [];
+
+    for (final shop in _shops) {
+      final nameScore = _FuzzySearch.matchScore(q, shop.shopName);
+      final categoryScore = _FuzzySearch.matchScore(q, shop.categoryName);
+      final descScore = shop.description != null
+          ? _FuzzySearch.matchScore(q, shop.description!) * 0.7
+          : 0.0;
+      final stallScore = shop.stallNumber != null
+          ? _FuzzySearch.matchScore(q, 'แผง ${shop.stallNumber}')
+          : 0.0;
+      final stallRawScore = shop.stallNumber != null
+          ? _FuzzySearch.matchScore(q, shop.stallNumber!)
+          : 0.0;
+      final tagScore = shop.tags.isNotEmpty
+          ? shop.tags
+                  .map((t) => _FuzzySearch.matchScore(q, t))
+                  .reduce((a, b) => a > b ? a : b) *
+              0.8
+          : 0.0;
+
+      final maxScore = [
+        nameScore,
+        categoryScore,
+        descScore,
+        stallScore,
+        stallRawScore,
+        tagScore,
+      ].reduce((a, b) => a > b ? a : b);
+
+      if (maxScore >= 0.35) {
+        scoredShops.add(MapEntry(shop, maxScore));
+      }
+    }
+
+    scoredShops.sort((a, b) => b.value.compareTo(a.value));
+    return scoredShops.map((e) => e.key).toList();
+  }
+
+  void _updateSearchOverlay() {
+    if (_searchQuery.trim().isEmpty) {
+      _hideSearchOverlay();
+      return;
+    }
+    if (_searchOverlayEntry != null) {
+      _searchOverlayEntry!.markNeedsBuild();
+    } else {
+      _showSearchOverlay();
+    }
+  }
+
+  void _showSearchOverlay() {
+    _hideSearchOverlay();
+    if (!mounted) return;
+
+    final renderBox = context.findRenderObject() as RenderBox?;
+    final size = renderBox?.size ?? Size.zero;
+    final overlayWidth = size.width > 30
+        ? size.width - 24
+        : MediaQuery.of(context).size.width - 24;
+
+    _searchOverlayEntry = OverlayEntry(
+      builder: (context) => Stack(
+        children: [
+          // Transparent barrier to dismiss dropdown on tap outside
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: () {
+                _hideSearchOverlay();
+                FocusScope.of(context).unfocus();
+              },
+            ),
+          ),
+          Positioned(
+            width: overlayWidth,
+            child: CompositedTransformFollower(
+              link: _searchLayerLink,
+              showWhenUnlinked: false,
+              offset: const Offset(0, 46),
+              child: Material(
+                color: Colors.transparent,
+                child: _buildSearchDropdown(),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    Overlay.of(context).insert(_searchOverlayEntry!);
+  }
+
+  void _hideSearchOverlay() {
+    _searchOverlayEntry?.remove();
+    _searchOverlayEntry = null;
+  }
+
+  Widget _buildSearchDropdown() {
+    final results = _searchResultShops;
+
+    return Material(
+      color: Colors.transparent,
+      elevation: 0,
+      child: Container(
+        constraints: const BoxConstraints(maxHeight: 340),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF0F172A).withValues(alpha: 0.15),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
+            ),
+          ],
+          border: Border.all(
+            color: const Color(0xFFE2E8F0),
+            width: 1,
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'ผลการค้นหาร้านค้า',
+                    style: GoogleFonts.outfit(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF64748B),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE0F2FE),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      '${results.length} รายการ',
+                      style: GoogleFonts.outfit(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF0284C7),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1, color: Color(0xFFF1F5F9)),
+            if (results.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.search_off_rounded,
+                        size: 36,
+                        color: Color(0xFF94A3B8),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'ไม่พบร้านค้าที่ตรงกับ "$_searchQuery"',
+                        style: GoogleFonts.outfit(
+                          fontSize: 14,
+                          color: const Color(0xFF64748B),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              Flexible(
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  itemCount: results.length > 6 ? 6 : results.length,
+                  separatorBuilder: (ctx, i) => const Divider(
+                    height: 1,
+                    color: Color(0xFFF8FAFC),
+                    indent: 68,
+                  ),
+                  itemBuilder: (context, index) {
+                    final shop = results[index];
+                    final hasRating =
+                        shop.avgRating != null && shop.avgRating! > 0;
+                    final ratingText =
+                        hasRating ? shop.avgRating!.toStringAsFixed(1) : 'ใหม่';
+                    final stallInfo =
+                        shop.stallNumber != null && shop.stallNumber!.isNotEmpty
+                            ? 'แผง ${shop.stallNumber}'
+                            : 'โซนตลาด';
+
+                    return InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () => _onShopSelected(shop),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
+                        child: Row(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: Container(
+                                width: 44,
+                                height: 44,
+                                color: const Color(0xFFF1F5F9),
+                                child: shop.shopImage != null &&
+                                        shop.shopImage!.isNotEmpty
+                                    ? (shop.shopImage!.startsWith('http')
+                                        ? Image.network(
+                                            shop.shopImage!,
+                                            fit: BoxFit.cover,
+                                          )
+                                        : Image.network(
+                                            ApiService.getImagePath(
+                                              shop.shopImage,
+                                            ),
+                                            fit: BoxFit.cover,
+                                            errorBuilder:
+                                                (ctx, err, stack) => const Icon(
+                                                  Icons.storefront,
+                                                  color: Color(0xFF64748B),
+                                                  size: 24,
+                                                ),
+                                          ))
+                                    : const Icon(
+                                        Icons.storefront,
+                                        color: Color(0xFF64748B),
+                                        size: 24,
+                                      ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    shop.shopName,
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      color: const Color(0xFF0F172A),
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '${shop.categoryName} • $stallInfo',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 12,
+                                      color: const Color(0xFF64748B),
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 7,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFFFBEB),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: const Color(0xFFFCD34D),
+                                  width: 1,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.star_rounded,
+                                    color: Color(0xFFF59E0B),
+                                    size: 14,
+                                  ),
+                                  const SizedBox(width: 2),
+                                  Text(
+                                    ratingText,
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: const Color(0xFFB45309),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            const Icon(
+                              Icons.arrow_forward_ios_rounded,
+                              size: 12,
+                              color: Color(0xFFCBD5E1),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _onShopSelected(Shop shop) {
+    _hideSearchOverlay();
+    FocusScope.of(context).unfocus();
+    _searchController.text = shop.shopName;
+    _searchQuery = shop.shopName;
+
+    // 1. Locate corresponding stall on map
+    model.MarketMapItem? matchedItem;
+    if (_map != null) {
+      for (final item in _map!.items) {
+        if (!item.isBlock) continue;
+
+        // Match by shopId
+        final itemShopId = item.seller?['shop_id'] ?? item.seller?['id'];
+        if (shop.shopId != null &&
+            itemShopId != null &&
+            itemShopId.toString() == shop.shopId.toString()) {
+          matchedItem = item;
+          break;
+        }
+
+        // Match by shopName
+        final itemShopName =
+            item.seller?['shop_name']?.toString().trim().toLowerCase();
+        final currentShopName = shop.shopName.trim().toLowerCase();
+        if (itemShopName != null &&
+            currentShopName.isNotEmpty &&
+            (itemShopName == currentShopName ||
+                itemShopName.contains(currentShopName) ||
+                currentShopName.contains(itemShopName))) {
+          matchedItem = item;
+          break;
+        }
+
+        // Match by stallNumber / label (normalized to handle O vs 0, spaces, and punctuation)
+        if (shop.stallNumber != null && shop.stallNumber!.trim().isNotEmpty) {
+          final stallNorm = _normStall(shop.stallNumber);
+          final labelNorm = _normStall(item.label);
+          final itemIdNorm = _normStall(item.mapItemId);
+          final stallIdNorm = _normStall(item.stallId?.toString());
+
+          if (stallNorm.isNotEmpty &&
+              (labelNorm == stallNorm ||
+                  itemIdNorm == stallNorm ||
+                  stallIdNorm == stallNorm ||
+                  (labelNorm.isNotEmpty && stallNorm.contains(labelNorm)) ||
+                  (stallNorm.isNotEmpty && labelNorm.contains(stallNorm)))) {
+            matchedItem = item;
+            break;
+          }
+        }
+      }
+    }
+
+    if (matchedItem != null) {
+      setState(() {
+        _selectedItem = matchedItem;
+        _filterStatus = 'all';
+        _filterRentalType = 'all';
+      });
+
+      // Camera smoothly animates and centers on the stall
+      _animateToStall(matchedItem);
+
+      // Bounce and pop up the stall/shop detail sheet after smooth camera gliding
+      _stallDetailTimer?.cancel();
+      _stallDetailTimer = Timer(const Duration(milliseconds: 600), () {
+        if (mounted && _selectedItem == matchedItem && !_isShowingStallSheet) {
+          _showStallDetail(matchedItem!);
+        }
+      });
+    } else {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.info_outline, color: Colors.white, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'ร้าน "${shop.shopName}" ยังไม่ได้ระบุตำแหน่งบนแผนที่',
+                  style: GoogleFonts.outfit(color: Colors.white, fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: const Color(0xFF0F172A),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        ),
+      );
+    }
   }
 
   Widget _buildFilterBar({bool isSeller = false}) {
@@ -1816,6 +3016,27 @@ class _MarketMapScreenState extends State<MarketMapScreen>
         final contentW = rawW * baseScale;
         final contentH = rawH * baseScale;
 
+        _lastScreenSize = Size(screenW, screenH);
+        _lastBaseScale = baseScale;
+        _lastMinX = minX;
+        _lastMinY = minY;
+
+        if (_pendingFocusItem != null) {
+          final itemToFocus = _pendingFocusItem!;
+          _pendingFocusItem = null;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _animateToStall(itemToFocus);
+              _stallDetailTimer?.cancel();
+              _stallDetailTimer = Timer(const Duration(milliseconds: 600), () {
+                if (mounted && _selectedItem == itemToFocus && !_isShowingStallSheet) {
+                  _showStallDetail(itemToFocus);
+                }
+              });
+            }
+          });
+        }
+
         return Stack(
           children: [
             // Interactive Map Canvas with full pan/zoom support
@@ -1826,6 +3047,7 @@ class _MarketMapScreenState extends State<MarketMapScreen>
               scaleEnabled: true,
               minScale: 0.35,
               maxScale: 4.5,
+              onInteractionStart: (_) => _hideSearchOverlay(),
               boundaryMargin: EdgeInsets.symmetric(
                 horizontal: screenW * 0.5,
                 vertical: screenH * 0.5,
@@ -1867,25 +3089,44 @@ class _MarketMapScreenState extends State<MarketMapScreen>
                         ),
                       ),
                     ),
-                    // Map items
-                    ...visibleItems.map((item) {
-                      final x = (item.x - minX) * baseScale;
-                      final y = (item.y - minY) * baseScale;
-                      final w = item.width * baseScale;
-                      final h = item.height * baseScale;
+                    // Map items sorted by layer:
+                    // Layer 0: Zones (background)
+                    // Layer 1: Roads & Entrances (walkways)
+                    // Layer 2: Blocks & Special Facilities (regular stalls)
+                    // Layer 3 (Topmost): Selected stall (badge and glow always stay above roads and everything)
+                    ...() {
+                      final sortedVisibleItems =
+                          List<model.MarketMapItem>.from(visibleItems);
+                      sortedVisibleItems.sort((a, b) {
+                        int getLayer(model.MarketMapItem item) {
+                          if (_selectedItem?.mapItemId == item.mapItemId) return 3;
+                          if (item.isBlock || item.isSpecialFacility) return 2;
+                          if (item.isRoad || item.isEntrance) return 1;
+                          if (item.isZone) return 0;
+                          return 1;
+                        }
+                        return getLayer(a).compareTo(getLayer(b));
+                      });
 
-                      return Positioned(
-                        left: x,
-                        top: y,
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: item.isBlock
-                              ? () => _showStallDetail(item)
-                              : null,
-                          child: _buildMapElement(item, w, h),
-                        ),
-                      );
-                    }),
+                      return sortedVisibleItems.map((item) {
+                        final x = (item.x - minX) * baseScale;
+                        final y = (item.y - minY) * baseScale;
+                        final w = item.width * baseScale;
+                        final h = item.height * baseScale;
+
+                        return Positioned(
+                          left: x,
+                          top: y,
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: item.isBlock
+                                ? () => _showStallDetail(item)
+                                : null,
+                            child: _buildMapElement(item, w, h),
+                          ),
+                        );
+                      });
+                    }(),
                   ],
                 ),
               ),
@@ -2265,51 +3506,72 @@ class _MarketMapScreenState extends State<MarketMapScreen>
               ),
             ),
             blockWidget,
-            // Floating pin location badge above stall - perfectly centered horizontally
-            Positioned(
-              top: -34,
-              left: -50,
-              right: -50,
-              child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0F172A),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: const Color(0xFF60A5FA).withValues(alpha: opacity),
-                      width: 1.5,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.25),
-                        blurRadius: 6,
-                        offset: const Offset(0, 2),
+            // Floating pin location badge above stall - perfectly centered horizontally with bounce animation
+            () {
+              final shopNameText =
+                  item.seller?['shop_name']?.toString().trim();
+              final hasShopName =
+                  shopNameText != null && shopNameText.isNotEmpty;
+              final badgeLabel = hasShopName
+                  ? '$shopNameText (${item.label})'
+                  : 'แผง ${item.label}';
+
+              return Positioned(
+                top: -38,
+                left: -130,
+                right: -130,
+                child: Center(
+                  child: Transform.scale(
+                    scale: 0.95 + (opacity * 0.1),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 11,
+                        vertical: 4.5,
                       ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.location_on,
-                        color: Color(0xFF38BDF8),
-                        size: 13,
-                      ),
-                      const SizedBox(width: 3),
-                      Text(
-                        'แผง ${item.label}',
-                        style: GoogleFonts.outfit(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0F172A),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: const Color(0xFF60A5FA).withValues(alpha: opacity),
+                          width: 1.5,
                         ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF2563EB)
+                                .withValues(alpha: opacity * 0.4),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                       ),
-                    ],
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.location_on,
+                            color: Color(0xFF38BDF8),
+                            size: 13,
+                          ),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              badgeLabel,
+                              style: GoogleFonts.outfit(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            ),
+              );
+            }(),
           ],
         );
       },
@@ -2337,3 +3599,76 @@ class _GridPainter extends CustomPainter {
   @override
   bool shouldRepaint(_GridPainter oldDelegate) => false;
 }
+
+class _FuzzySearch {
+  static String normalize(String str) {
+    return str
+        .toLowerCase()
+        .replaceAll(RegExp(r'[\u0E48-\u0E4C\u0E4D\u0E3A]'), '')
+        .trim();
+  }
+
+  static int levenshtein(String s1, String s2) {
+    if (s1 == s2) return 0;
+    if (s1.isEmpty) return s2.length;
+    if (s2.isEmpty) return s1.length;
+
+    List<int> v0 = List<int>.generate(s2.length + 1, (i) => i);
+    List<int> v1 = List<int>.filled(s2.length + 1, 0);
+
+    for (int i = 0; i < s1.length; i++) {
+      v1[0] = i + 1;
+      for (int j = 0; j < s2.length; j++) {
+        int cost = (s1[i] == s2[j]) ? 0 : 1;
+        v1[j + 1] = [
+          v1[j] + 1,
+          v0[j + 1] + 1,
+          v0[j] + cost,
+        ].reduce((a, b) => a < b ? a : b);
+      }
+      for (int j = 0; j <= s2.length; j++) {
+        v0[j] = v1[j];
+      }
+    }
+    return v1[s2.length];
+  }
+
+  static double matchScore(String rawQuery, String rawTarget) {
+    final q = normalize(rawQuery);
+    final target = normalize(rawTarget);
+
+    if (q.isEmpty || target.isEmpty) return 0.0;
+
+    if (target.contains(q)) {
+      return target.startsWith(q) ? 1.0 : 0.9;
+    }
+
+    double bestScore = 0.0;
+    final qLen = q.length;
+
+    final words = target.split(RegExp(r'[\s,\.\-\/\(\)]+'));
+    for (final word in words) {
+      if (word.isEmpty) continue;
+      if (word.contains(q)) return 0.85;
+
+      final dist = levenshtein(q, word);
+      final maxLen = qLen > word.length ? qLen : word.length;
+      final sim = 1.0 - (dist / maxLen);
+      if (sim > bestScore) bestScore = sim;
+    }
+
+    final targetLen = target.length;
+    for (int len = qLen - 1; len <= qLen + 2; len++) {
+      if (len <= 0) continue;
+      for (int i = 0; i <= targetLen - len; i++) {
+        final sub = target.substring(i, i + len);
+        final dist = levenshtein(q, sub);
+        final sim = 1.0 - (dist / qLen);
+        if (sim > bestScore) bestScore = sim;
+      }
+    }
+
+    return bestScore;
+  }
+}
+

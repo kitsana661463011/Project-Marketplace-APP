@@ -25,31 +25,37 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
   Uint8List? _uploadedFileBytes;
   String? _uploadedFilePath;
   final ImagePicker _picker = ImagePicker();
+  bool _isLoadingUser = true;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       final auth = Provider.of<AuthService>(context, listen: false);
+      // Fetch latest user details from server to ensure all fields are populated
+      await auth.fetchUserProfile();
       final user = auth.currentUser;
-      if (user != null) {
-        if (user.username.isNotEmpty && _fullNameController.text.isEmpty) {
-          _fullNameController.text = user.username;
+      if (mounted) {
+        if (user != null) {
+          if (user.username.isNotEmpty) {
+            _fullNameController.text = user.username;
+          }
+          if (user.phone != null && user.phone!.isNotEmpty) {
+            _phoneController.text = user.phone!;
+          }
+          if (user.citizenId != null && user.citizenId!.isNotEmpty) {
+            _citizenIdController.text = user.citizenId!;
+          }
+          if (user.address != null && user.address!.isNotEmpty) {
+            _addressController.text = user.address!;
+          }
+          if (user.documentImage != null && user.documentImage!.isNotEmpty) {
+            _uploadedFileName = user.documentImage;
+          }
         }
-        if (user.phone != null && user.phone!.isNotEmpty) {
-          _phoneController.text = user.phone!;
-        }
-        if (user.citizenId != null && user.citizenId!.isNotEmpty) {
-          _citizenIdController.text = user.citizenId!;
-        }
-        if (user.address != null && user.address!.isNotEmpty) {
-          _addressController.text = user.address!;
-        }
-        if (user.documentImage != null && user.documentImage!.isNotEmpty) {
-          setState(() {
-            _uploadedFileName = user.documentImage!;
-          });
-        }
+        setState(() {
+          _isLoadingUser = false;
+        });
       }
     });
   }
@@ -183,7 +189,7 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
                   style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
                 ),
                 subtitle: Text(
-                  'เลือกรูปถ่ายบัตรประชาชนจากแกลเลอรีรูปภาพ',
+                  'เลือกรูปถ่ายสำเนาบัตรประชาชนจากแกลเลอรีรูปภาพ',
                   style: GoogleFonts.outfit(
                     fontSize: 12,
                     color: const Color(0xFF64748B),
@@ -221,7 +227,7 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
                 leading: const Icon(Icons.camera_alt, color: Color(0xFF1E88E5)),
                 title: Text('ถ่ายรูปด้วยกล้อง (Camera)', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
                 subtitle: Text(
-                  'เปิดกล้องเพื่อถ่ายรูปบัตรประชาชนทันที',
+                  'เปิดกล้องเพื่อถ่ายรูปสำเนาบัตรประชาชนทันที',
                   style: GoogleFonts.outfit(
                     fontSize: 12,
                     color: const Color(0xFF64748B),
@@ -250,7 +256,7 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
       AppDialog.showError(
         context,
         title: 'ข้อผิดพลาด',
-        message: 'กรุณากรอกชื่อจริง-นามสกุลจริงตามบัตรประชาชน',
+        message: 'กรุณากรอกชื่อจริง-นามสกุลจริงตามสำเนาบัตรประชาชน',
       );
       return;
     }
@@ -274,7 +280,7 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
       AppDialog.showError(
         context,
         title: 'ข้อผิดพลาด',
-        message: 'กรุณาอัปโหลดรูปถ่ายบัตรประชาชนเพื่อทำการยืนยันตน',
+        message: 'กรุณาอัปโหลดรูปถ่ายสำเนาบัตรประชาชน (พร้อมเซ็นสำเนาถูกต้อง)',
       );
       return;
     }
@@ -309,6 +315,9 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
       if (phone.isNotEmpty) {
         payload['phone'] = phone;
       }
+      if (_uploadedFileBytes == null && _uploadedFileName != null) {
+        payload['document_image'] = _uploadedFileName;
+      }
       final response = await authService.updateProfile(
         payload,
         fileKey: 'document_image_file',
@@ -322,6 +331,8 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
       }
 
       if (response['status'] == true) {
+        // Refresh user profile from server so currentUser contains fresh submission data
+        await authService.fetchUserProfile();
         if (mounted) {
           AppDialog.showSuccess(
             context,
@@ -359,10 +370,191 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
     }
   }
 
+  String _formatThaiDateTime(String? dateStr) {
+    if (dateStr == null || dateStr.isEmpty) return '-';
+    try {
+      final date = DateTime.parse(dateStr);
+      final months = [
+        'ม.ค.',
+        'ก.พ.',
+        'มี.ค.',
+        'เม.ย.',
+        'พ.ค.',
+        'มิ.ย.',
+        'ก.ค.',
+        'ส.ค.',
+        'ก.ย.',
+        'ต.ค.',
+        'พ.ย.',
+        'ธ.ค.',
+      ];
+      final hour = date.hour.toString().padLeft(2, '0');
+      final minute = date.minute.toString().padLeft(2, '0');
+      return '${date.day} ${months[date.month - 1]} ${date.year + 543} เวลา $hour:$minute น.';
+    } catch (_) {
+      return dateStr;
+    }
+  }
+
+  void _viewFullScreenImage(String imageUrl) {
+    if (imageUrl.isEmpty) return;
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(12),
+        child: Stack(
+          alignment: Alignment.topRight,
+          children: [
+            InteractiveViewer(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Image.network(
+                  imageUrl,
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Text('ไม่สามารถโหลดรูปภาพได้', style: GoogleFonts.outfit()),
+                  ),
+                ),
+              ),
+            ),
+            IconButton(
+              icon: const CircleAvatar(
+                backgroundColor: Colors.black54,
+                child: Icon(Icons.close, color: Colors.white, size: 20),
+              ),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _cancelApplication() async {
+    AppDialog.showConfirm(
+      context,
+      title: 'ยกเลิกคำขอสมัครเป็นผู้ค้า',
+      message:
+          'คุณต้องการยกเลิกคำขอสมัครเป็นผู้ค้าและลบใบสมัครนี้ใช่หรือไม่?\nข้อมูลและเอกสารสำเนาที่เคยส่งไปจะถูกลบออกจากระบบ',
+      confirmText: 'ยกเลิกคำขอสมัคร',
+      cancelText: 'ย้อนกลับ',
+      onConfirm: () async {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const Center(
+            child: CircularProgressIndicator(color: Color(0xFFDC2626)),
+          ),
+        );
+
+        try {
+          final authService = Provider.of<AuthService>(context, listen: false);
+          final response = await authService.cancelVendorApplication();
+
+          if (mounted) {
+            Navigator.pop(context); // Close loading dialog
+          }
+
+          if (response['status'] == true) {
+            if (mounted) {
+              setState(() {
+                _citizenIdController.clear();
+                _addressController.clear();
+                _uploadedFileName = null;
+                _uploadedFileBytes = null;
+                _uploadedFilePath = null;
+              });
+              AppDialog.showSuccess(
+                context,
+                title: 'ยกเลิกคำขอสำเร็จ',
+                message: 'ยกเลิกคำขอสมัครเป็นผู้ค้าและลบข้อมูลเอกสารเรียบร้อยแล้ว',
+                onConfirm: () {
+                  if (mounted) {
+                    if (Navigator.canPop(context)) {
+                      Navigator.pop(context);
+                    } else {
+                      Navigator.pushReplacementNamed(context, '/home');
+                    }
+                  }
+                },
+              );
+            }
+          } else {
+            if (mounted) {
+              AppDialog.showError(
+                context,
+                title: 'เกิดข้อผิดพลาด',
+                message: response['message'] ?? 'ไม่สามารถยกเลิกคำขอได้ในขณะนี้',
+              );
+            }
+          }
+        } catch (e) {
+          if (mounted) {
+            Navigator.pop(context);
+            AppDialog.showError(
+              context,
+              title: 'เกิดข้อผิดพลาด',
+              message: e.toString(),
+            );
+          }
+        }
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = Provider.of<AuthService>(context);
     final user = auth.currentUser;
+
+    if (_isLoadingUser) {
+      return Scaffold(
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          centerTitle: true,
+          leading: IconButton(
+            icon: const Icon(
+              Icons.arrow_back_ios_new,
+              color: Color(0xFF0F172A),
+              size: 20,
+            ),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: Text(
+            'สมัครเป็นผู้ค้า',
+            style: GoogleFonts.outfit(
+              color: const Color(0xFF0F172A),
+              fontWeight: FontWeight.bold,
+              fontSize: 18,
+            ),
+          ),
+        ),
+        body: const Center(
+          child: CircularProgressIndicator(color: Color(0xFF1E88E5)),
+        ),
+      );
+    }
+
+    final bool hasPendingApplication = user != null &&
+        user.documentStatus == 'pending' &&
+        (user.submissionDate != null ||
+            user.documentImage != null ||
+            (user.citizenId != null && user.citizenId!.isNotEmpty));
+
+    final bool canCancel = hasPendingApplication ||
+        (user != null &&
+            (user.documentStatus == 'rejected' ||
+                user.submissionDate != null ||
+                user.documentImage != null ||
+                (user.citizenId != null && user.citizenId!.isNotEmpty)));
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -379,7 +571,7 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          'Sign Up',
+          hasPendingApplication ? 'ตรวจสอบใบสมัครผู้ค้า' : 'สมัครเป็นผู้ค้า',
           style: GoogleFonts.outfit(
             color: const Color(0xFF0F172A),
             fontWeight: FontWeight.bold,
@@ -403,13 +595,83 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
               ),
               const SizedBox(height: 6),
               Text(
-                'กรุณากรอกข้อมูลส่วนตัวของคุณเพื่อเริ่มต้นการใช้งาน',
+                hasPendingApplication
+                    ? 'ตรวจสอบข้อมูลที่คุณยื่นสมัครไว้ด้านล่างนี้'
+                    : 'กรุณากรอกข้อมูลส่วนตัวของคุณเพื่อเริ่มต้นการใช้งาน',
                 style: GoogleFonts.outfit(
                   fontSize: 14,
                   color: const Color(0xFF64748B),
                 ),
               ),
-              if (user?.documentStatus == 'rejected') ...[
+              if (hasPendingApplication) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFFBEB),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFFDE68A), width: 1.5),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFEF3C7),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(
+                              Icons.hourglass_top_rounded,
+                              color: Color(0xFFD97706),
+                              size: 22,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'อยู่ระหว่างรอการตรวจสอบและอนุมัติ',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.bold,
+                                    color: const Color(0xFF92400E),
+                                  ),
+                                ),
+                                if (user.submissionDate != null) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'ยื่นเรื่องเมื่อ: ${_formatThaiDateTime(user.submissionDate)}',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: const Color(0xFFB45309),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        'ข้อมูลและเอกสารที่คุณเคยส่งถูกนำมาแสดงในแบบฟอร์มด้านล่างแล้ว เพื่อให้คุณตรวจสอบความถูกต้อง หากต้องการเปลี่ยนแปลงสามารถพิมพ์แก้ไขข้อมูลและกดบันทึกส่งใหม่ได้',
+                        style: GoogleFonts.outfit(
+                          fontSize: 12.5,
+                          color: const Color(0xFF78350F),
+                          height: 1.45,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ] else if (user?.documentStatus == 'rejected') ...[
                 const SizedBox(height: 16),
                 Container(
                   padding: const EdgeInsets.all(14),
@@ -448,7 +710,7 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
                       ],
                       const SizedBox(height: 6),
                       Text(
-                        'กรุณาตรวจสอบความถูกต้องของข้อมูลและรูปถ่ายบัตรประชาชน แล้วกดยื่นเรื่องใหม่อีกครั้ง',
+                        'กรุณาตรวจสอบความถูกต้องของข้อมูลและสำเนาบัตรประชาชน แล้วกดยื่นเรื่องใหม่อีกครั้ง',
                         style: GoogleFonts.outfit(
                           fontSize: 12,
                           color: const Color(0xFF7F1D1D),
@@ -461,7 +723,7 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
               const SizedBox(height: 24),
 
               Text(
-                'ชื่อจริง-นามสกุลจริง(ตามบัตรประชาชน)',
+                'ชื่อจริง-นามสกุลจริง (ตามสำเนาบัตรประชาชน)',
                 style: GoogleFonts.outfit(
                   fontSize: 14,
                   color: const Color(0xFF334155),
@@ -479,7 +741,7 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
                   controller: _fullNameController,
                   style: GoogleFonts.outfit(color: Colors.black),
                   decoration: InputDecoration(
-                    hintText: 'ระบุชื่อ-นามสกุลตามบัตรประชาชน',
+                    hintText: 'ระบุชื่อ-นามสกุลตามสำเนาบัตรประชาชน',
                     hintStyle: GoogleFonts.outfit(
                       color: const Color(0xFF94A3B8),
                       fontSize: 14,
@@ -530,7 +792,7 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
               const SizedBox(height: 20),
 
               Text(
-                'เลขบัตรประชาชน',
+                'เลขประจำตัวประชาชน (ตามสำเนาบัตรประชาชน)',
                 style: GoogleFonts.outfit(
                   fontSize: 14,
                   color: const Color(0xFF334155),
@@ -568,7 +830,7 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
               const SizedBox(height: 20),
 
               Text(
-                'รูปถ่ายบัตรประชาชน',
+                'รูปถ่ายสำเนาบัตรประชาชน (พร้อมเซ็นสำเนาถูกต้อง)',
                 style: GoogleFonts.outfit(
                   fontSize: 14,
                   color: const Color(0xFF334155),
@@ -603,7 +865,7 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
                           borderRadius: BorderRadius.circular(10),
                           child: Image.memory(
                             _uploadedFileBytes!,
-                            height: 100,
+                            height: 120,
                             fit: BoxFit.contain,
                           ),
                         ),
@@ -612,14 +874,61 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
                           _uploadedFileName != null &&
                           _uploadedFileName!.isNotEmpty &&
                           !_uploadedFileName!.endsWith('.pdf')) ...[
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(10),
-                          child: Image.network(
-                            ApiService.getImagePath(_uploadedFileName),
-                            height: 100,
-                            fit: BoxFit.contain,
-                            errorBuilder: (context, error, stackTrace) =>
-                                const SizedBox.shrink(),
+                        GestureDetector(
+                          onTap: () {
+                            _viewFullScreenImage(
+                              ApiService.getImagePath(_uploadedFileName),
+                            );
+                          },
+                          child: Stack(
+                            alignment: Alignment.bottomRight,
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(10),
+                                child: Image.network(
+                                  ApiService.getImagePath(_uploadedFileName),
+                                  height: 120,
+                                  width: double.infinity,
+                                  fit: BoxFit.contain,
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      const Icon(
+                                    Icons.broken_image_outlined,
+                                    size: 48,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ),
+                              Container(
+                                margin: const EdgeInsets.all(6),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.65),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.zoom_in,
+                                      color: Colors.white,
+                                      size: 14,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'แตะเพื่อดูรูปเต็ม',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 11,
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                         const SizedBox(height: 10),
@@ -645,7 +954,11 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
                         const SizedBox(height: 12),
                       ],
                       Text(
-                        _uploadedFileName ?? 'คลิกเพื่ออัปโหลดรูปบัตรประชาชน',
+                        _uploadedFileName != null
+                            ? (_uploadedFileBytes != null
+                                ? 'เลือกไฟล์ใหม่เรียบร้อยแล้ว'
+                                : 'สำเนาบัตรประชาชนที่เคยส่งไว้')
+                            : 'คลิกเพื่ออัปโหลดสำเนาบัตรประชาชน',
                         style: GoogleFonts.outfit(
                           fontSize: 15,
                           fontWeight: FontWeight.bold,
@@ -657,22 +970,44 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'PNG, JPG หรือ PDF (สูงสุด 5MB)',
+                        _uploadedFileName != null
+                            ? (_uploadedFileBytes != null
+                                ? _uploadedFileName!
+                                : 'แตะที่นี่เพื่อเปลี่ยนรูปถ่ายสำเนาบัตรประชาชน')
+                            : 'PNG, JPG หรือ PDF (สูงสุด 5MB)',
                         style: GoogleFonts.outfit(
                           fontSize: 12,
                           color: const Color(0xFF64748B),
                         ),
+                        textAlign: TextAlign.center,
                       ),
                     ],
                   ),
                 ),
               ),
               const SizedBox(height: 8),
-              Text(
-                'ตรวจสอบให้แน่ใจว่ารูปถ่ายชัดเจนและเห็นข้อความครบถ้วน',
-                style: GoogleFonts.outfit(
-                  fontSize: 12,
-                  color: const Color(0xFF64748B),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.info_outline, size: 16, color: Color(0xFF64748B)),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'คำแนะนำเพื่อความปลอดภัย (PDPA): กรุณาใช้สำเนาบัตรประชาชน ขีดคร่อมเขียนข้อความ "สำเนาถูกต้อง ใช้สำหรับสมัครเป็นผู้ค้าตลาดเท่านั้น" พร้อมลงลายมือชื่อกำกับ',
+                        style: GoogleFonts.outfit(
+                          fontSize: 11,
+                          color: const Color(0xFF475569),
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 20),
@@ -727,7 +1062,11 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
-                        'ส่งข้อมูล',
+                        hasPendingApplication
+                            ? 'บันทึกและส่งข้อมูลแก้ไข'
+                            : (user?.documentStatus == 'rejected'
+                                ? 'ยื่นคำขอสมัครใหม่อีกครั้ง'
+                                : 'ส่งข้อมูล'),
                         style: GoogleFonts.outfit(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -739,6 +1078,38 @@ class _VendorRegistrationScreenState extends State<VendorRegistrationScreen> {
                   ),
                 ),
               ),
+              if (canCancel) ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: OutlinedButton.icon(
+                    onPressed: _cancelApplication,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFFDC2626),
+                      backgroundColor: const Color(0xFFFEF2F2),
+                      side: const BorderSide(color: Color(0xFFFCA5A5), width: 1.5),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    icon: const Icon(
+                      Icons.delete_outline_rounded,
+                      size: 20,
+                      color: Color(0xFFDC2626),
+                    ),
+                    label: Text(
+                      'ยกเลิกคำขอสมัครเป็นผู้ค้า (ลบใบสมัคร)',
+                      style: GoogleFonts.outfit(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFFDC2626),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: 24),
             ],
           ),

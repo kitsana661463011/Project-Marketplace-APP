@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import '../config/api_config.dart';
 import '../models/item.dart';
 import 'api_service.dart';
@@ -21,13 +22,41 @@ class ItemService {
     return null;
   }
 
-  static Future<Item?> updateItem(int id, Map<String, dynamic> body) async {
+  static Future<Item?> updateItem(
+    int id,
+    Map<String, dynamic> body, {
+    Uint8List? imageBytes,
+    String? imageName,
+  }) async {
     try {
-      final response = await ApiService.put('${ApiConfig.items}/$id', body);
-      if (response['status'] == true && response['data'] != null) {
-        return Item.fromJson(response['data']);
+      if (imageBytes != null && imageBytes.isNotEmpty) {
+        final fields = <String, String>{};
+        body.forEach((key, value) {
+          if (value != null) {
+            fields[key] = value.toString();
+          }
+        });
+        fields['_method'] = 'PUT';
+
+        final response = await ApiService.postMultipart(
+          '${ApiConfig.items}/$id',
+          fields,
+          fileKey: 'item_image_file',
+          fileBytes: imageBytes,
+          fileName: imageName ?? 'item_${DateTime.now().millisecondsSinceEpoch}.jpg',
+        );
+
+        if (response['status'] == true && response['data'] != null) {
+          return Item.fromJson(response['data']);
+        }
+        return null;
+      } else {
+        final response = await ApiService.put('${ApiConfig.items}/$id', body);
+        if (response['status'] == true && response['data'] != null) {
+          return Item.fromJson(response['data']);
+        }
+        return null;
       }
-      return null;
     } catch (_) {
       return null;
     }

@@ -18,6 +18,10 @@ class _RegisterScreenState extends State<RegisterScreen>
   final _usernameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+  bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
+  String? _emailErrorText;
   static const int _maxInterests = 5;
   List<String> _interests = [];
   bool _isLoadingInterests = true;
@@ -102,17 +106,31 @@ class _RegisterScreenState extends State<RegisterScreen>
     _usernameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     _fadeController.dispose();
     super.dispose();
   }
 
   Future<void> _register() async {
+    setState(() {
+      _emailErrorText = null;
+    });
+
     if (!_formKey.currentState!.validate()) return;
+
+    if (_passwordController.text != _confirmPasswordController.text) {
+      AppDialog.showError(
+        context,
+        title: 'รหัสผ่านไม่ตรงกัน',
+        message: 'กรุณากรอกรหัสผ่านและยืนยันรหัสผ่านให้ตรงกัน',
+      );
+      return;
+    }
 
     final authService = Provider.of<AuthService>(context, listen: false);
     final result = await authService.register(
       username: _usernameController.text.trim(),
-      email: _emailController.text.trim(),
+      email: _emailController.text.trim().toLowerCase(),
       password: _passwordController.text,
       role: 'buyer',
       interests: _selectedInterests.join(','),
@@ -130,11 +148,28 @@ class _RegisterScreenState extends State<RegisterScreen>
         },
       );
     } else {
-      AppDialog.showError(
-        context,
-        title: 'สมัครสมาชิกไม่สำเร็จ',
-        message: result['message'] ?? 'เกิดข้อผิดพลาดในการลงทะเบียน',
-      );
+      if (result['isDuplicateEmail'] == true) {
+        setState(() {
+          _emailErrorText = 'อีเมลนี้มีผู้ใช้งานแล้วในระบบ';
+        });
+        AppDialog.showConfirm(
+          context,
+          title: 'อีเมลนี้ถูกใช้งานแล้ว',
+          message:
+              'อีเมล "${_emailController.text.trim()}" มีบัญชีในระบบแล้ว หากเป็นบัญชีของคุณ สามารถเข้าสู่ระบบได้ทันที',
+          confirmText: 'เข้าสู่ระบบ',
+          cancelText: 'เปลี่ยนอีเมล',
+          onConfirm: () {
+            Navigator.pop(context);
+          },
+        );
+      } else {
+        AppDialog.showError(
+          context,
+          title: 'สมัครสมาชิกไม่สำเร็จ',
+          message: result['message'] ?? 'เกิดข้อผิดพลาดในการลงทะเบียน',
+        );
+      }
     }
   }
 
@@ -241,13 +276,22 @@ class _RegisterScreenState extends State<RegisterScreen>
                       color: Colors.black,
                       fontWeight: FontWeight.w500,
                     ),
+                    onChanged: (val) {
+                      if (_emailErrorText != null) {
+                        setState(() {
+                          _emailErrorText = null;
+                        });
+                      }
+                    },
                     decoration: _buildInputDecoration(
                       'กรอกอีเมล',
                       Icons.mail_outline,
+                      errorText: _emailErrorText,
                     ),
                     validator: (v) {
                       if (v == null || v.isEmpty) return 'กรุณากรอกอีเมล';
                       if (!v.contains('@')) return 'อีเมลไม่ถูกต้อง';
+                      if (_emailErrorText != null) return _emailErrorText;
                       return null;
                     },
                   ),
@@ -265,19 +309,80 @@ class _RegisterScreenState extends State<RegisterScreen>
                   const SizedBox(height: 8),
                   TextFormField(
                     controller: _passwordController,
-                    obscureText: true,
+                    obscureText: _obscurePassword,
                     style: GoogleFonts.outfit(
                       color: Colors.black,
                       fontWeight: FontWeight.w500,
                     ),
                     decoration: _buildInputDecoration(
-                      'กรอกรหัสผ่าน',
+                      'กรอกรหัสผ่าน (อย่างน้อย 6 ตัวอักษร)',
                       Icons.lock_outline,
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscurePassword
+                              ? Icons.visibility_off_outlined
+                              : Icons.visibility_outlined,
+                          color: const Color(0xFF94A3B8),
+                          size: 20,
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _obscurePassword = !_obscurePassword;
+                          });
+                        },
+                      ),
                     ),
                     validator: (v) {
                       if (v == null || v.isEmpty) return 'กรุณากรอกรหัสผ่าน';
                       if (v.length < 6) {
                         return 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Confirm Password field
+                  Text(
+                    'ยืนยันรหัสผ่าน',
+                    style: GoogleFonts.outfit(
+                      color: const Color(0xFF1E293B),
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: _confirmPasswordController,
+                    obscureText: _obscureConfirmPassword,
+                    style: GoogleFonts.outfit(
+                      color: Colors.black,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    decoration: _buildInputDecoration(
+                      'กรอกรหัสผ่านอีกครั้งเพื่อยืนยัน',
+                      Icons.lock_clock_outlined,
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscureConfirmPassword
+                              ? Icons.visibility_off_outlined
+                              : Icons.visibility_outlined,
+                          color: const Color(0xFF94A3B8),
+                          size: 20,
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _obscureConfirmPassword = !_obscureConfirmPassword;
+                          });
+                        },
+                      ),
+                    ),
+                    validator: (v) {
+                      if (v == null || v.isEmpty) {
+                        return 'กรุณากรอกยืนยันรหัสผ่าน';
+                      }
+                      if (v != _passwordController.text) {
+                        return 'รหัสผ่านทั้งสองช่องไม่ตรงกัน';
                       }
                       return null;
                     },
@@ -578,14 +683,21 @@ class _RegisterScreenState extends State<RegisterScreen>
     );
   }
 
-  InputDecoration _buildInputDecoration(String hint, IconData prefixIcon) {
+  InputDecoration _buildInputDecoration(
+    String hint,
+    IconData prefixIcon, {
+    Widget? suffixIcon,
+    String? errorText,
+  }) {
     return InputDecoration(
       hintText: hint,
+      errorText: errorText,
       hintStyle: GoogleFonts.outfit(
         color: const Color(0xFF94A3B8),
         fontSize: 15,
       ),
       prefixIcon: Icon(prefixIcon, color: const Color(0xFF94A3B8), size: 20),
+      suffixIcon: suffixIcon,
       filled: true,
       fillColor: const Color(0xFFF8FAFC),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),

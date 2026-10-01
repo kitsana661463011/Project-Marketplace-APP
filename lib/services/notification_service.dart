@@ -107,7 +107,17 @@ class NotificationService {
     required int daysLeft,
     int? bookingId,
   }) async {
-    final title = '⚠️ แผงค้า $stallNumber ใกล้หมดสัญญา!';
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final todayStr = DateTime.now().toIso8601String().substring(0, 10);
+      final key = 'stall_expiring_${bookingId ?? stallNumber}_$todayStr';
+      if (prefs.getBool(key) == true) {
+        return; // Already notified today
+      }
+      await prefs.setBool(key, true);
+    } catch (_) {}
+
+    final title = 'แผงค้า $stallNumber ใกล้หมดสัญญา!';
     final body = daysLeft == 0
         ? 'สัญญาเช่าแผงค้า $stallNumber หมดอายุวันนี้ กรุณากดต่อสัญญาเพื่อรักษาสิทธิ์'
         : 'สัญญาเช่าแผงค้า $stallNumber จะหมดอายุในอีก $daysLeft วัน กรุณากดต่อสัญญาล่วงหน้า';
@@ -126,7 +136,7 @@ class NotificationService {
     required String type,
     int? announcementId,
   }) async {
-    final prefix = type == 'urgent' ? '🚨 [ด่วน] ' : '📢 ';
+    final prefix = type == 'urgent' ? '[ด่วน] ' : '';
     await showNotification(
       id: announcementId ?? (title.hashCode & 0x7FFFFFFF),
       title: '$prefixประกาศใหม่จากตลาด',
@@ -150,13 +160,14 @@ class NotificationService {
       final newUnread = notifications.where((n) => !n.isRead && !shownIds.contains(n.notificationId.toString())).toList();
 
       for (final notif in newUnread) {
+        final cleanMsg = notif.message.replaceFirst(RegExp(r'^[^\w\s\u0E00-\u0E7F]+'), '').trim();
         await showNotification(
           id: notif.notificationId,
-          title: '📢 ${notif.typeTitle}',
-          body: notif.message,
+          title: notif.displayTitle,
+          body: cleanMsg,
           payload: 'notification_${notif.notificationId}',
         );
-        onNotificationReceived?.call('📢 ${notif.typeTitle}', notif.message);
+        onNotificationReceived?.call(notif.displayTitle, cleanMsg);
         shownIds.add(notif.notificationId.toString());
       }
 

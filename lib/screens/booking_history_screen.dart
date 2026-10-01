@@ -1236,7 +1236,66 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
                       ),
                       child: Column(
                         children: [
-                          _detailItemRow('รหัสแผงค้า', b.stallNumber ?? 'A01'),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'รหัสแผงค้า',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 13.5,
+                                  color: const Color(0xFF64748B),
+                                ),
+                              ),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    b.stallNumber ?? 'A01',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      color: const Color(0xFF0F172A),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  InkWell(
+                                    onTap: () {
+                                      Navigator.pop(context);
+                                      Navigator.pushNamed(
+                                        context,
+                                        '/market_map',
+                                        arguments: {'stall_number': b.stallNumber ?? 'A01'},
+                                      );
+                                    },
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFEFF6FF),
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(color: const Color(0xFFBFDBFE)),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(Icons.map_outlined, size: 13, color: Color(0xFF2563EB)),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            'ดูผังตลาด',
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 11.5,
+                                              fontWeight: FontWeight.bold,
+                                              color: const Color(0xFF2563EB),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                           const Divider(height: 16, color: Color(0xFFE2E8F0)),
                           _detailItemRow(
                             'โซนพื้นที่',
@@ -2191,6 +2250,46 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
                   ],
                 ),
               ),
+              InkWell(
+                onTap: () {
+                  Navigator.pushNamed(
+                    context,
+                    '/market_map',
+                    arguments: {'stall_number': b.stallNumber ?? stallCode},
+                  );
+                },
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFF6FF),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFBFDBFE)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.map_outlined,
+                        size: 14,
+                        color: Color(0xFF2563EB),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'ดูผังแผง',
+                        style: GoogleFonts.outfit(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFF2563EB),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -2606,25 +2705,59 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
                   color: const Color(0xFF94A3B8),
                 ),
               ),
-              GestureDetector(
-                onTap: () => _showBillDetailsSheet(b),
-                child: Row(
-                  children: [
-                    Text(
-                      'ดูใบเสร็จ',
-                      style: GoogleFonts.outfit(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.bold,
-                        color: const Color(0xFF2563EB),
-                      ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.pushNamed(
+                        context,
+                        '/market_map',
+                        arguments: {'stall_number': b.stallNumber ?? stallCode},
+                      );
+                    },
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.map_outlined,
+                          size: 13,
+                          color: Color(0xFF64748B),
+                        ),
+                        const SizedBox(width: 3),
+                        Text(
+                          'ดูผัง',
+                          style: GoogleFonts.outfit(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF64748B),
+                          ),
+                        ),
+                      ],
                     ),
-                    const Icon(
-                      Icons.chevron_right_rounded,
-                      size: 16,
-                      color: Color(0xFF2563EB),
+                  ),
+                  const SizedBox(width: 12),
+                  GestureDetector(
+                    onTap: () => _showBillDetailsSheet(b),
+                    child: Row(
+                      children: [
+                        Text(
+                          'ดูใบเสร็จ',
+                          style: GoogleFonts.outfit(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF2563EB),
+                          ),
+                        ),
+                        const Icon(
+                          Icons.chevron_right_rounded,
+                          size: 16,
+                          color: Color(0xFF2563EB),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -3056,12 +3189,12 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
               ),
               NavigationDestination(
                 icon: const Icon(
-                  Icons.favorite_outline,
+                  Icons.bookmark_border_rounded,
                   size: 24,
                   color: Color(0xFF64748B),
                 ),
                 selectedIcon: const Icon(
-                  Icons.favorite,
+                  Icons.bookmark_rounded,
                   size: 24,
                   color: Color(0xFF1E88E5),
                 ),

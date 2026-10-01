@@ -33,8 +33,9 @@ class AuthService extends ChangeNotifier {
 
       if (response['status'] == true && response['data'] != null) {
         final users = response['data'] as List;
+        final cleanEmail = email.trim().toLowerCase();
         final matchingUser = users.firstWhere(
-          (u) => u['email'] == email,
+          (u) => (u['email'] ?? '').toString().trim().toLowerCase() == cleanEmail,
           orElse: () => null,
         );
 
@@ -78,7 +79,7 @@ class AuthService extends ChangeNotifier {
     try {
       final payload = <String, dynamic>{
         'username': username,
-        'email': email,
+        'email': email.trim().toLowerCase(),
         'password': password,
         'phone': phone,
         'role': role,
@@ -99,9 +100,39 @@ class AuthService extends ChangeNotifier {
       } else {
         _isLoading = false;
         notifyListeners();
+        String errorMessage =
+            response['message']?.toString() ?? 'สมัครสมาชิกไม่สำเร็จ';
+        bool isDuplicateEmail = false;
+
+        if (response['data'] is Map) {
+          final errors = response['data'] as Map<String, dynamic>;
+          if (errors.containsKey('email')) {
+            isDuplicateEmail = true;
+            final emailErr = errors['email'];
+            if (emailErr is List && emailErr.isNotEmpty) {
+              errorMessage = emailErr.first.toString();
+            } else if (emailErr is String && emailErr.isNotEmpty) {
+              errorMessage = emailErr;
+            }
+          }
+        }
+
+        final lowerMsg = errorMessage.toLowerCase();
+        if (isDuplicateEmail ||
+            lowerMsg.contains('already been taken') ||
+            lowerMsg.contains('unique') ||
+            lowerMsg.contains('ซ้ำ') ||
+            errorMessage.contains('ถูกใช้งานแล้ว') ||
+            errorMessage.contains('มีผู้ใช้งานแล้ว')) {
+          isDuplicateEmail = true;
+          errorMessage =
+              'อีเมลนี้มีผู้ใช้งานแล้วในระบบ กรุณาใช้อีเมลอื่นหรือเข้าสู่ระบบ';
+        }
+
         return {
           'status': false,
-          'message': response['message'] ?? 'สมัครสมาชิกไม่สำเร็จ',
+          'message': errorMessage,
+          'isDuplicateEmail': isDuplicateEmail,
           'errors': response['data'],
         };
       }
@@ -159,6 +190,43 @@ class AuthService extends ChangeNotifier {
     return response;
   }
 
+  Future<UserModel?> fetchUserProfile() async {
+    if (_currentUser?.userId == null) return _currentUser;
+    try {
+      final response = await ApiService.get('${ApiConfig.users}/${_currentUser!.userId}');
+      if (response['status'] == true && response['data'] != null) {
+        _currentUser = UserModel.fromJson(response['data']);
+        await _saveUserData();
+        notifyListeners();
+        return _currentUser;
+      }
+    } catch (e) {
+      debugPrint('Error fetching user profile: $e');
+    }
+    return _currentUser;
+  }
+
+  Future<Map<String, dynamic>> cancelVendorApplication() async {
+    if (_currentUser?.userId == null) {
+      return {'status': false, 'message': 'ไม่ได้เข้าสู่ระบบ'};
+    }
+    try {
+      final userId = _currentUser!.userId;
+      final response = await ApiService.post(
+        '${ApiConfig.users}/$userId/cancel-vendor-application',
+        {},
+      );
+      if (response['status'] == true && response['data'] != null) {
+        _currentUser = UserModel.fromJson(response['data']);
+        await _saveUserData();
+        notifyListeners();
+      }
+      return response;
+    } catch (e) {
+      return {'status': false, 'message': 'เกิดข้อผิดพลาดในการยกเลิกคำขอ: $e'};
+    }
+  }
+
   Future<void> updateUserData(Map<String, dynamic> userData) async {
     _currentUser = UserModel.fromJson(userData);
     await _saveUserData();
@@ -176,7 +244,7 @@ class AuthService extends ChangeNotifier {
     try {
       final response = await ApiService.post(
         ApiConfig.forgotPassword,
-        {'email': email},
+        {'email': email.trim().toLowerCase()},
       );
       return response;
     } catch (e) {
@@ -188,7 +256,7 @@ class AuthService extends ChangeNotifier {
     try {
       final response = await ApiService.post(
         ApiConfig.verifyResetCode,
-        {'email': email, 'code': code},
+        {'email': email.trim().toLowerCase(), 'code': code.trim()},
       );
       return response;
     } catch (e) {
@@ -205,8 +273,8 @@ class AuthService extends ChangeNotifier {
       final response = await ApiService.post(
         ApiConfig.resetPassword,
         {
-          'email': email,
-          'code': code,
+          'email': email.trim().toLowerCase(),
+          'code': code.trim(),
           'password': password,
         },
       );

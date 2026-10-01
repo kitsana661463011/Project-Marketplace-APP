@@ -899,6 +899,50 @@ class _BookStallScreenState extends State<BookStallScreen> {
               ),
             ],
           ),
+          const SizedBox(height: 14),
+          InkWell(
+            onTap: () {
+              Navigator.pushNamed(
+                context,
+                '/market_map',
+                arguments: {'stall_number': item.label},
+              );
+            },
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEFF6FF),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFBFDBFE)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.map_outlined,
+                    size: 16,
+                    color: Color(0xFF2563EB),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'ตรวจสอบตำแหน่งแผงนี้บนผังตลาด',
+                    style: GoogleFonts.outfit(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF2563EB),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  const Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    size: 12,
+                    color: Color(0xFF2563EB),
+                  ),
+                ],
+              ),
+            ),
+          ),
           if (item.hasImages) ...[
             const SizedBox(height: 14),
             SizedBox(

@@ -9,6 +9,7 @@ import 'screens/register_screen.dart';
 import 'screens/forgot_password_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/announcement_screen.dart';
+import 'screens/notification_screen.dart';
 import 'screens/vendor_registration_screen.dart';
 import 'screens/shop_detail_screen.dart';
 import 'screens/shop_reviews_screen.dart';
@@ -121,6 +122,7 @@ class MyApp extends StatelessWidget {
           return HomeScreen(initialIndex: initialIndex);
         },
         '/announcements': (context) => const AnnouncementScreen(),
+        '/notifications': (context) => const NotificationScreen(),
         '/vendor_register': (context) => const VendorRegistrationScreen(),
         '/shop_detail': (context) => const ShopDetailScreen(),
         '/shop_reviews': (context) => const ShopReviewsScreen(),

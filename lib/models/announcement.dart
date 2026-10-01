@@ -75,6 +75,41 @@ class Announcement {
     return !isExpired && !isScheduled;
   }
 
+  static String formatThaiDate(String? dateStr) {
+    if (dateStr == null || dateStr.trim().isEmpty) return '';
+    try {
+      final clean = dateStr.split('T')[0];
+      final parts = clean.split('-');
+      if (parts.length != 3) return dateStr;
+      final year = int.parse(parts[0]) + 543;
+      final month = int.parse(parts[1]);
+      final day = int.parse(parts[2]);
+      const monthsThai = [
+        '', 'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
+        'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'
+      ];
+      final monthName = month >= 1 && month <= 12 ? monthsThai[month] : parts[1];
+      return '$day $monthName ${year % 100}';
+    } catch (_) {
+      return dateStr;
+    }
+  }
+
+  String get thaiDateRangeText {
+    final start = formatThaiDate(publishDate);
+    final end = formatThaiDate(endDate);
+    if (start.isNotEmpty && end.isNotEmpty) {
+      return '$start - $end';
+    } else if (start.isNotEmpty) {
+      return 'เริ่ม $start';
+    }
+    return '';
+  }
+
+  String get cleanTitle {
+    return title.replaceFirst(RegExp(r'^[^\w\s\u0E00-\u0E7F\[\]]+'), '').trim();
+  }
+
   String get dateRangeText {
     final start = publishDate != null ? publishDate!.split('T')[0] : '';
     final end = endDate != null ? endDate!.split('T')[0] : '';

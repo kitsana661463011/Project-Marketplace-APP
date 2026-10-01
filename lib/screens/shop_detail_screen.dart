@@ -853,10 +853,10 @@ class _ShopDetailScreenState extends State<ShopDetailScreen> {
                       child: IconButton(
                         icon: Icon(
                           _isFavorite
-                              ? Icons.favorite
-                              : Icons.favorite_border,
+                              ? Icons.bookmark_rounded
+                              : Icons.bookmark_border_rounded,
                           color: _isFavorite
-                              ? Colors.red
+                              ? const Color(0xFF1E88E5)
                               : const Color(0xFF475569),
                           size: 20,
                         ),
@@ -1259,22 +1259,19 @@ class _ShopDetailScreenState extends State<ShopDetailScreen> {
                                   ),
                                   decoration: BoxDecoration(
                                     color: _isFavorite
-                                        ? const Color(0xFFFEF2F2)
-                                        : const Color(0xFFEFF6FF),
+                                        ? const Color(0xFFEFF6FF)
+                                        : const Color(0xFFF8FAFC),
                                     borderRadius: BorderRadius.circular(12),
                                     border: Border.all(
                                       color: _isFavorite
-                                          ? const Color(0xFFFECACA)
-                                          : const Color(0xFFBFDBFE),
+                                          ? const Color(0xFFBFDBFE)
+                                          : const Color(0xFFE2E8F0),
                                       width: 1.2,
                                     ),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: _isFavorite
-                                            ? const Color(0xFFE11D48)
-                                                .withValues(alpha: 0.08)
-                                            : const Color(0xFF2563EB)
-                                                .withValues(alpha: 0.08),
+                                        color: const Color(0xFF2563EB)
+                                            .withValues(alpha: 0.08),
                                         blurRadius: 4,
                                         offset: const Offset(0, 2),
                                       ),
@@ -1285,11 +1282,11 @@ class _ShopDetailScreenState extends State<ShopDetailScreen> {
                                     children: [
                                       Icon(
                                         _isFavorite
-                                            ? Icons.favorite_rounded
-                                            : Icons.favorite_border_rounded,
+                                            ? Icons.bookmark_rounded
+                                            : Icons.bookmark_border_rounded,
                                         color: _isFavorite
-                                            ? const Color(0xFFE11D48)
-                                            : const Color(0xFF2563EB),
+                                            ? const Color(0xFF1E88E5)
+                                            : const Color(0xFF64748B),
                                         size: 16,
                                       ),
                                       const SizedBox(width: 5),
@@ -1297,8 +1294,8 @@ class _ShopDetailScreenState extends State<ShopDetailScreen> {
                                         _isFavorite ? 'กำลังติดตาม' : 'ติดตาม',
                                         style: GoogleFonts.outfit(
                                           color: _isFavorite
-                                              ? const Color(0xFFE11D48)
-                                              : const Color(0xFF1D4ED8),
+                                              ? const Color(0xFF1E88E5)
+                                              : const Color(0xFF0F172A),
                                           fontSize: 13,
                                           fontWeight: FontWeight.bold,
                                         ),
@@ -1311,8 +1308,8 @@ class _ShopDetailScreenState extends State<ShopDetailScreen> {
                                         ),
                                         decoration: BoxDecoration(
                                           color: _isFavorite
-                                              ? const Color(0xFFFEE2E2)
-                                              : const Color(0xFFDBEAFE),
+                                              ? const Color(0xFFDBEAFE)
+                                              : const Color(0xFFF1F5F9),
                                           borderRadius:
                                               BorderRadius.circular(10),
                                         ),
@@ -1320,8 +1317,8 @@ class _ShopDetailScreenState extends State<ShopDetailScreen> {
                                           '$_followerCount',
                                           style: GoogleFonts.outfit(
                                             color: _isFavorite
-                                                ? const Color(0xFFBE123C)
-                                                : const Color(0xFF1E40AF),
+                                                ? const Color(0xFF1D4ED8)
+                                                : const Color(0xFF64748B),
                                             fontSize: 11,
                                             fontWeight: FontWeight.bold,
                                           ),
@@ -1591,12 +1588,12 @@ class _ShopDetailScreenState extends State<ShopDetailScreen> {
               ),
               NavigationDestination(
                 icon: Icon(
-                  Icons.favorite_outline_rounded,
+                  Icons.bookmark_border_rounded,
                   size: 24,
                   color: Color(0xFF64748B),
                 ),
                 selectedIcon: Icon(
-                  Icons.favorite_rounded,
+                  Icons.bookmark_rounded,
                   size: 24,
                   color: Color(0xFF1E88E5),
                 ),
