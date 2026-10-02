@@ -1156,16 +1156,15 @@ class _HomeTabState extends State<_HomeTab> {
                       ),
                     ],
                   ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Announcement button
-                      GestureDetector(
-                        onTap: () async {
-                          await Navigator.pushNamed(context, '/announcements');
-                          _loadAnnouncements();
-                        },
-                        child: Container(
+                  // Notification bell
+                  GestureDetector(
+                    onTap: () async {
+                      await Navigator.pushNamed(context, '/notifications');
+                      _loadNotificationCount();
+                    },
+                    child: Stack(
+                      children: [
+                        Container(
                           width: 38,
                           height: 38,
                           decoration: const BoxDecoration(
@@ -1173,34 +1172,11 @@ class _HomeTabState extends State<_HomeTab> {
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(
-                            Icons.campaign_outlined,
+                            Icons.notifications,
                             color: Color(0xFF475569),
-                            size: 21,
+                            size: 20,
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      // Notification bell
-                      GestureDetector(
-                        onTap: () async {
-                          await Navigator.pushNamed(context, '/notifications');
-                          _loadNotificationCount();
-                        },
-                        child: Stack(
-                          children: [
-                            Container(
-                              width: 38,
-                              height: 38,
-                              decoration: const BoxDecoration(
-                                color: Colors.white,
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.notifications,
-                                color: Color(0xFF475569),
-                                size: 20,
-                              ),
-                            ),
                         if (_unreadNotificationCount > 0)
                           Positioned(
                             right: 2,
@@ -1237,8 +1213,6 @@ class _HomeTabState extends State<_HomeTab> {
                   ),
                 ],
               ),
-            ],
-          ),
               const SizedBox(height: 20),
 
               // Search Bar with Floating Autocomplete Dropdown Overlay and All Shops Button
