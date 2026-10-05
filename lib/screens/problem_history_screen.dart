@@ -810,12 +810,12 @@ class _ProblemHistoryScreenState extends State<ProblemHistoryScreen> {
               ),
               NavigationDestination(
                 icon: const Icon(
-                  Icons.bookmark_border_rounded,
+                  Icons.favorite_border_rounded,
                   size: 24,
                   color: Color(0xFF64748B),
                 ),
                 selectedIcon: const Icon(
-                  Icons.bookmark_rounded,
+                  Icons.favorite_rounded,
                   size: 24,
                   color: Color(0xFF1E88E5),
                 ),

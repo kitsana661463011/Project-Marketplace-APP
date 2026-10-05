@@ -2001,7 +2001,7 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
                                             MainAxisAlignment.center,
                                         children: [
                                           const Icon(
-                                            Icons.bookmark_rounded,
+                                            Icons.favorite_rounded,
                                             color: Color(0xFF1E88E5),
                                             size: 15,
                                           ),
@@ -2366,12 +2366,12 @@ class _ManageShopScreenState extends State<ManageShopScreen> {
               ),
               NavigationDestination(
                 icon: Icon(
-                  Icons.bookmark_border_rounded,
+                  Icons.favorite_border_rounded,
                   size: 24,
                   color: Color(0xFF64748B),
                 ),
                 selectedIcon: Icon(
-                  Icons.bookmark_rounded,
+                  Icons.favorite_rounded,
                   size: 24,
                   color: Color(0xFF1E88E5),
                 ),

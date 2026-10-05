@@ -2173,7 +2173,7 @@ class MarketMapScreenState extends State<MarketMapScreen>
           const SizedBox(width: 4),
         ],
         bottom: PreferredSize(
-          preferredSize: Size.fromHeight((isSeller ? 84 : 48) + 52),
+          preferredSize: const Size.fromHeight(102),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -2740,195 +2740,511 @@ class MarketMapScreenState extends State<MarketMapScreen>
     final closedShopsCount =
         _map?.items.where((i) => i.isBlock && i.isShopClosed).length ?? 0;
 
+    if (!isSeller) {
+      final customerStatusItems = <DropdownMenuItem<String>>[
+        DropdownMenuItem(
+          value: 'all',
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.storefront_rounded, size: 16, color: Color(0xFF475569)),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  'ร้านค้าทั้งหมด (${openShopsCount + closedShopsCount})',
+                  style: GoogleFonts.outfit(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF0F172A),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+        DropdownMenuItem(
+          value: 'open',
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: const BoxDecoration(
+                  color: Color(0xFF10B981),
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  '🟢 ร้านที่เปิด ($openShopsCount)',
+                  style: GoogleFonts.outfit(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF065F46),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+        DropdownMenuItem(
+          value: 'closed',
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFEF4444),
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  '🔴 ร้านที่ปิด ($closedShopsCount)',
+                  style: GoogleFonts.outfit(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF991B1B),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ];
+
+      final effectiveStatus = customerStatusItems.any((i) => i.value == _filterStatus)
+          ? _filterStatus
+          : 'all';
+
+      Color statusActiveColor;
+      if (effectiveStatus == 'open') {
+        statusActiveColor = const Color(0xFF10B981);
+      } else if (effectiveStatus == 'closed') {
+        statusActiveColor = const Color(0xFFEF4444);
+      } else {
+        statusActiveColor = const Color(0xFF2563EB);
+      }
+
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          border: Border(
+            bottom: BorderSide(color: Color(0xFFE2E8F0), width: 1),
+          ),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: _buildDropdownFilter<String>(
+                value: effectiveStatus,
+                items: customerStatusItems,
+                isFiltered: effectiveStatus != 'all',
+                activeColor: statusActiveColor,
+                onChanged: (val) {
+                  if (val != null) setState(() => _filterStatus = val);
+                },
+              ),
+            ),
+            if (effectiveStatus != 'all') ...[
+              const SizedBox(width: 8),
+              _buildClearFilterButton(onTap: () {
+                setState(() => _filterStatus = 'all');
+              }),
+            ],
+          ],
+        ),
+      );
+    }
+
+    // ── Seller / Admin: 2 Dropdown filters side by side ──
+    final statusItems = <DropdownMenuItem<String>>[
+      DropdownMenuItem(
+        value: 'all',
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.grid_view_rounded, size: 15, color: Color(0xFF64748B)),
+            const SizedBox(width: 7),
+            Flexible(
+              child: Text(
+                'สถานะทั้งหมด',
+                style: GoogleFonts.outfit(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF0F172A),
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+      DropdownMenuItem(
+        value: 'available',
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              decoration: const BoxDecoration(
+                color: Color(0xFF10B981),
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 7),
+            Flexible(
+              child: Text(
+                '🟢 ว่าง ($availableCount)',
+                style: GoogleFonts.outfit(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF065F46),
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+      DropdownMenuItem(
+        value: 'occupied',
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              decoration: const BoxDecoration(
+                color: Color(0xFF3B82F6),
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 7),
+            Flexible(
+              child: Text(
+                '🔵 จอง ($pendingCount)',
+                style: GoogleFonts.outfit(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF1E40AF),
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+      DropdownMenuItem(
+        value: 'approved',
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              decoration: const BoxDecoration(
+                color: Color(0xFFEF4444),
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 7),
+            Flexible(
+              child: Text(
+                '🔴 เช่า ($approvedCount)',
+                style: GoogleFonts.outfit(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF991B1B),
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+      if (repairCount > 0)
+        DropdownMenuItem(
+          value: 'repair',
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFF59E0B),
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 7),
+              Flexible(
+                child: Text(
+                  '🟠 ปรับปรุง ($repairCount)',
+                  style: GoogleFonts.outfit(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF92400E),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+    ];
+
+    final effectiveStatus = statusItems.any((i) => i.value == _filterStatus)
+        ? _filterStatus
+        : 'all';
+
+    Color statusActiveColor;
+    switch (effectiveStatus) {
+      case 'available':
+        statusActiveColor = const Color(0xFF10B981);
+        break;
+      case 'occupied':
+        statusActiveColor = const Color(0xFF3B82F6);
+        break;
+      case 'approved':
+        statusActiveColor = const Color(0xFFEF4444);
+        break;
+      case 'repair':
+        statusActiveColor = const Color(0xFFF59E0B);
+        break;
+      default:
+        statusActiveColor = const Color(0xFF2563EB);
+    }
+
+    final rentalItems = <DropdownMenuItem<String>>[
+      DropdownMenuItem(
+        value: 'all',
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('🏢', style: TextStyle(fontSize: 14)),
+            const SizedBox(width: 7),
+            Flexible(
+              child: Text(
+                'ทุกสัญญา',
+                style: GoogleFonts.outfit(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF0F172A),
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+      DropdownMenuItem(
+        value: 'daily',
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('📅', style: TextStyle(fontSize: 14)),
+            const SizedBox(width: 7),
+            Flexible(
+              child: Text(
+                'รายวัน',
+                style: GoogleFonts.outfit(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF4338CA),
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+      DropdownMenuItem(
+        value: 'monthly',
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('📆', style: TextStyle(fontSize: 14)),
+            const SizedBox(width: 7),
+            Flexible(
+              child: Text(
+                'รายเดือน',
+                style: GoogleFonts.outfit(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF6B21A8),
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    ];
+
+    final effectiveRental = rentalItems.any((i) => i.value == _filterRentalType)
+        ? _filterRentalType
+        : 'all';
+
+    Color rentalActiveColor;
+    switch (effectiveRental) {
+      case 'daily':
+        rentalActiveColor = const Color(0xFF6366F1);
+        break;
+      case 'monthly':
+        rentalActiveColor = const Color(0xFF8B5CF6);
+        break;
+      default:
+        rentalActiveColor = const Color(0xFF475569);
+    }
+
+    final isAnyFiltered = effectiveStatus != 'all' || effectiveRental != 'all';
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: const BoxDecoration(
         color: Colors.white,
         border: Border(
           bottom: BorderSide(color: Color(0xFFE2E8F0), width: 1),
         ),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      child: Row(
         children: [
-          if (!isSeller)
-            // Customer: 3 equal pills (ทั้งหมด, ร้านที่เปิด, ร้านที่ปิด)
-            Row(
-              children: [
-                _buildFilterPill(
-                  label: 'ทั้งหมด',
-                  isActive: _filterStatus == 'all',
-                  color: const Color(0xFF2563EB),
-                  onTap: () => setState(() => _filterStatus = 'all'),
-                ),
-                const SizedBox(width: 6),
-                _buildFilterPill(
-                  label: '🟢 ร้านที่เปิด ($openShopsCount)',
-                  isActive: _filterStatus == 'open',
-                  color: const Color(0xFF10B981),
-                  onTap: () => setState(
-                    () => _filterStatus = (_filterStatus == 'open')
-                        ? 'all'
-                        : 'open',
-                  ),
-                ),
-                const SizedBox(width: 6),
-                _buildFilterPill(
-                  label: '🔴 ร้านที่ปิด ($closedShopsCount)',
-                  isActive: _filterStatus == 'closed',
-                  color: const Color(0xFFEF4444),
-                  onTap: () => setState(
-                    () => _filterStatus = (_filterStatus == 'closed')
-                        ? 'all'
-                        : 'closed',
-                  ),
-                ),
-              ],
-            )
-          else ...[
-            // Seller / Admin: Row 1: Status Filters
-            Row(
-              children: [
-                _buildFilterPill(
-                  label: 'ทั้งหมด',
-                  isActive: _filterStatus == 'all',
-                  color: const Color(0xFF2563EB),
-                  onTap: () => setState(() => _filterStatus = 'all'),
-                ),
-                const SizedBox(width: 6),
-                _buildFilterPill(
-                  label: '🟢 ว่าง ($availableCount)',
-                  isActive: _filterStatus == 'available',
-                  color: const Color(0xFF10B981),
-                  onTap: () => setState(
-                    () => _filterStatus = (_filterStatus == 'available')
-                        ? 'all'
-                        : 'available',
-                  ),
-                ),
-                const SizedBox(width: 6),
-                _buildFilterPill(
-                  label: '🔵 จอง ($pendingCount)',
-                  isActive: _filterStatus == 'occupied',
-                  color: const Color(0xFF3B82F6),
-                  onTap: () => setState(
-                    () => _filterStatus = (_filterStatus == 'occupied')
-                        ? 'all'
-                        : 'occupied',
-                  ),
-                ),
-                const SizedBox(width: 6),
-                _buildFilterPill(
-                  label: '🔴 เช่า ($approvedCount)',
-                  isActive: _filterStatus == 'approved',
-                  color: const Color(0xFFEF4444),
-                  onTap: () => setState(
-                    () => _filterStatus = (_filterStatus == 'approved')
-                        ? 'all'
-                        : 'approved',
-                  ),
-                ),
-              ],
+          // Dropdown 1: Stall Status
+          Expanded(
+            child: _buildDropdownFilter<String>(
+              value: effectiveStatus,
+              items: statusItems,
+              isFiltered: effectiveStatus != 'all',
+              activeColor: statusActiveColor,
+              onChanged: (val) {
+                if (val != null) setState(() => _filterStatus = val);
+              },
             ),
-            const SizedBox(height: 6),
-            // Row 2: Rental Type Filters (For Sellers / Admins)
-            Row(
-              children: [
-                _buildFilterPill(
-                  label: '🏢 ทุกสัญญา',
-                  isActive: _filterRentalType == 'all' && _filterStatus != 'repair',
-                  color: const Color(0xFF475569),
-                  onTap: () => setState(() {
-                    _filterRentalType = 'all';
+          ),
+          const SizedBox(width: 8),
+          // Dropdown 2: Rental Type
+          Expanded(
+            child: _buildDropdownFilter<String>(
+              value: effectiveRental,
+              items: rentalItems,
+              isFiltered: effectiveRental != 'all',
+              activeColor: rentalActiveColor,
+              onChanged: (val) {
+                if (val != null) {
+                  setState(() {
+                    _filterRentalType = val;
                     if (_filterStatus == 'repair') _filterStatus = 'all';
-                  }),
-                ),
-                const SizedBox(width: 6),
-                _buildFilterPill(
-                  label: '📅 รายวัน',
-                  isActive: _filterRentalType == 'daily',
-                  color: const Color(0xFF6366F1),
-                  onTap: () => setState(
-                    () => _filterRentalType = (_filterRentalType == 'daily')
-                        ? 'all'
-                        : 'daily',
-                  ),
-                ),
-                const SizedBox(width: 6),
-                _buildFilterPill(
-                  label: '📆 รายเดือน',
-                  isActive: _filterRentalType == 'monthly',
-                  color: const Color(0xFF8B5CF6),
-                  onTap: () => setState(
-                    () => _filterRentalType = (_filterRentalType == 'monthly')
-                        ? 'all'
-                        : 'monthly',
-                  ),
-                ),
-                if (repairCount > 0) ...[
-                  const SizedBox(width: 6),
-                  _buildFilterPill(
-                    label: '🟠 ปรับปรุง ($repairCount)',
-                    isActive: _filterStatus == 'repair',
-                    color: const Color(0xFFF59E0B),
-                    onTap: () => setState(
-                      () => _filterStatus = (_filterStatus == 'repair')
-                          ? 'all'
-                          : 'repair',
-                    ),
-                  ),
-                ],
-              ],
+                  });
+                }
+              },
             ),
+          ),
+          if (isAnyFiltered) ...[
+            const SizedBox(width: 6),
+            _buildClearFilterButton(onTap: () {
+              setState(() {
+                _filterStatus = 'all';
+                _filterRentalType = 'all';
+              });
+            }),
           ],
         ],
       ),
     );
   }
 
-  Widget _buildFilterPill({
-    required String label,
-    required bool isActive,
-    required Color color,
-    required VoidCallback onTap,
+  Widget _buildDropdownFilter<T>({
+    required T value,
+    required List<DropdownMenuItem<T>> items,
+    required ValueChanged<T?> onChanged,
+    Color activeColor = const Color(0xFF2563EB),
+    bool isFiltered = false,
   }) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          decoration: BoxDecoration(
-            color: isActive
-                ? color.withValues(alpha: 0.12)
-                : const Color(0xFFF8FAFC),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: isActive ? color : const Color(0xFFCBD5E1),
-              width: isActive ? 1.5 : 1.0,
-            ),
-            boxShadow: isActive
-                ? [
-                    BoxShadow(
-                      color: color.withValues(alpha: 0.2),
-                      blurRadius: 4,
-                      offset: const Offset(0, 1),
-                    ),
-                  ]
-                : null,
+    return Container(
+      height: 38,
+      decoration: BoxDecoration(
+        color: isFiltered
+            ? activeColor.withValues(alpha: 0.08)
+            : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isFiltered ? activeColor : const Color(0xFFCBD5E1),
+          width: isFiltered ? 1.5 : 1.0,
+        ),
+        boxShadow: isFiltered
+            ? [
+                BoxShadow(
+                  color: activeColor.withValues(alpha: 0.15),
+                  blurRadius: 4,
+                  offset: const Offset(0, 1),
+                ),
+              ]
+            : null,
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<T>(
+          value: value,
+          isExpanded: true,
+          icon: Icon(
+            Icons.keyboard_arrow_down_rounded,
+            color: isFiltered ? activeColor : const Color(0xFF64748B),
+            size: 20,
           ),
-          child: Center(
-            child: Text(
-              label,
-              style: GoogleFonts.outfit(
-                fontSize: 11.5,
-                fontWeight: isActive ? FontWeight.bold : FontWeight.w600,
-                color: isActive ? color : const Color(0xFF475569),
+          dropdownColor: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          elevation: 6,
+          style: GoogleFonts.outfit(
+            fontSize: 12,
+            fontWeight: isFiltered ? FontWeight.bold : FontWeight.w600,
+            color: isFiltered ? activeColor : const Color(0xFF334155),
+          ),
+          items: items,
+          onChanged: onChanged,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildClearFilterButton({required VoidCallback onTap}) {
+    return Tooltip(
+      message: 'ล้างตัวกรองทั้งหมด',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          height: 38,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFEE2E2),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFFFCA5A5)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.close_rounded, size: 14, color: Color(0xFFDC2626)),
+              const SizedBox(width: 2),
+              Text(
+                'ล้าง',
+                style: GoogleFonts.outfit(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFFDC2626),
+                ),
               ),
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+            ],
           ),
         ),
       ),

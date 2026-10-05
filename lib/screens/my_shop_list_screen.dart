@@ -631,12 +631,12 @@ class _MyShopListScreenState extends State<MyShopListScreen> {
               ),
               NavigationDestination(
                 icon: Icon(
-                  Icons.bookmark_border_rounded,
+                  Icons.favorite_border_rounded,
                   size: 24,
                   color: Color(0xFF64748B),
                 ),
                 selectedIcon: Icon(
-                  Icons.bookmark_rounded,
+                  Icons.favorite_rounded,
                   size: 24,
                   color: Color(0xFF1E88E5),
                 ),

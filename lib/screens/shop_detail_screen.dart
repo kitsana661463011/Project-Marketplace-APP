@@ -853,8 +853,8 @@ class _ShopDetailScreenState extends State<ShopDetailScreen> {
                       child: IconButton(
                         icon: Icon(
                           _isFavorite
-                              ? Icons.bookmark_rounded
-                              : Icons.bookmark_border_rounded,
+                              ? Icons.favorite_rounded
+                              : Icons.favorite_border_rounded,
                           color: _isFavorite
                               ? const Color(0xFF1E88E5)
                               : const Color(0xFF475569),
@@ -1282,8 +1282,8 @@ class _ShopDetailScreenState extends State<ShopDetailScreen> {
                                     children: [
                                       Icon(
                                         _isFavorite
-                                            ? Icons.bookmark_rounded
-                                            : Icons.bookmark_border_rounded,
+                                            ? Icons.favorite_rounded
+                                            : Icons.favorite_border_rounded,
                                         color: _isFavorite
                                             ? const Color(0xFF1E88E5)
                                             : const Color(0xFF64748B),
@@ -1317,7 +1317,7 @@ class _ShopDetailScreenState extends State<ShopDetailScreen> {
                                           '$_followerCount',
                                           style: GoogleFonts.outfit(
                                             color: _isFavorite
-                                                ? const Color(0xFF1D4ED8)
+                                                ? const Color(0xFF1E40AF)
                                                 : const Color(0xFF64748B),
                                             fontSize: 11,
                                             fontWeight: FontWeight.bold,
@@ -1588,16 +1588,16 @@ class _ShopDetailScreenState extends State<ShopDetailScreen> {
               ),
               NavigationDestination(
                 icon: Icon(
-                  Icons.bookmark_border_rounded,
+                  Icons.favorite_border_rounded,
                   size: 24,
                   color: Color(0xFF64748B),
                 ),
                 selectedIcon: Icon(
-                  Icons.bookmark_rounded,
+                  Icons.favorite_rounded,
                   size: 24,
                   color: Color(0xFF1E88E5),
                 ),
-                label: 'ติดตามแล้ว',
+                label: 'ติดตาม',
               ),
               NavigationDestination(
                 icon: Icon(

@@ -588,12 +588,12 @@ class _AnnouncementScreenState extends State<AnnouncementScreen>
               ),
               NavigationDestination(
                 icon: const Icon(
-                  Icons.bookmark_border_rounded,
+                  Icons.favorite_border_rounded,
                   size: 24,
                   color: Color(0xFF64748B),
                 ),
                 selectedIcon: const Icon(
-                  Icons.bookmark_rounded,
+                  Icons.favorite_rounded,
                   size: 24,
                   color: Color(0xFF1E88E5),
                 ),
@@ -711,7 +711,7 @@ class _AnnouncementScreenState extends State<AnnouncementScreen>
                     const SizedBox(width: 6),
                     Flexible(
                       child: Text(
-                        'ประวัติประกาศ (${_historyAnnouncements.length})',
+                        'ประกาศย้อนหลัง (${_historyAnnouncements.length})',
                         style: GoogleFonts.outfit(
                           fontWeight: _showingHistory ? FontWeight.bold : FontWeight.w500,
                           color: _showingHistory ? const Color(0xFF0F172A) : const Color(0xFF64748B),
@@ -735,7 +735,7 @@ class _AnnouncementScreenState extends State<AnnouncementScreen>
       return Center(
         child: Text(
           _showingHistory
-              ? 'ไม่มีประวัติประกาศที่สิ้นสุดแล้ว'
+              ? 'ไม่มีประกาศย้อนหลังในขณะนี้'
               : 'ไม่มีรายการประกาศในขณะนี้',
           style: GoogleFonts.outfit(
             color: const Color(0xFF94A3B8),

@@ -178,69 +178,87 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         ),
         child: ClipRRect(
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          child: NavigationBar(
-            selectedIndex: _currentIndex,
-            onDestinationSelected: (index) {
-              setState(() => _currentIndex = index);
-            },
-            backgroundColor: Colors.white,
-            indicatorColor: const Color(0xFF1E88E5).withValues(alpha: 0.12),
-            height: 70,
-            labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-            destinations: [
-              NavigationDestination(
-                icon: const Icon(
-                  Icons.home_outlined,
-                  size: 24,
-                  color: Color(0xFF64748B),
+          child: NavigationBarTheme(
+            data: NavigationBarThemeData(
+              labelTextStyle: WidgetStateProperty.resolveWith((states) {
+                if (states.contains(WidgetState.selected)) {
+                  return GoogleFonts.outfit(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF1E88E5),
+                  );
+                }
+                return GoogleFonts.outfit(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: const Color(0xFF64748B),
+                );
+              }),
+            ),
+            child: NavigationBar(
+              selectedIndex: _currentIndex,
+              onDestinationSelected: (index) {
+                setState(() => _currentIndex = index);
+              },
+              backgroundColor: Colors.white,
+              indicatorColor: const Color(0xFF1E88E5).withValues(alpha: 0.12),
+              height: 70,
+              labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+              destinations: [
+                NavigationDestination(
+                  icon: const Icon(
+                    Icons.home_outlined,
+                    size: 24,
+                    color: Color(0xFF64748B),
+                  ),
+                  selectedIcon: const Icon(
+                    Icons.home,
+                    size: 24,
+                    color: Color(0xFF1E88E5),
+                  ),
+                  label: 'หน้าหลัก',
                 ),
-                selectedIcon: const Icon(
-                  Icons.home,
-                  size: 24,
-                  color: Color(0xFF1E88E5),
+                NavigationDestination(
+                  icon: const Icon(
+                    Icons.explore_outlined,
+                    size: 24,
+                    color: Color(0xFF64748B),
+                  ),
+                  selectedIcon: const Icon(
+                    Icons.explore,
+                    size: 24,
+                    color: Color(0xFF1E88E5),
+                  ),
+                  label: 'แผนที่ตลาด',
                 ),
-                label: 'หน้าหลัก',
-              ),
-              NavigationDestination(
-                icon: const Icon(
-                  Icons.explore_outlined,
-                  size: 24,
-                  color: Color(0xFF64748B),
+                NavigationDestination(
+                  icon: const Icon(
+                    Icons.favorite_border_rounded,
+                    size: 24,
+                    color: Color(0xFF64748B),
+                  ),
+                  selectedIcon: const Icon(
+                    Icons.favorite_rounded,
+                    size: 24,
+                    color: Color(0xFF1E88E5),
+                  ),
+                  label: 'ติดตาม',
                 ),
-                selectedIcon: const Icon(
-                  Icons.explore,
-                  size: 24,
-                  color: Color(0xFF1E88E5),
+                NavigationDestination(
+                  icon: const Icon(
+                    Icons.person_outline,
+                    size: 24,
+                    color: Color(0xFF64748B),
+                  ),
+                  selectedIcon: const Icon(
+                    Icons.person,
+                    size: 24,
+                    color: Color(0xFF1E88E5),
+                  ),
+                  label: 'โปรไฟล์',
                 ),
-                label: 'แผนที่ตลาด',
-              ),
-              NavigationDestination(
-                icon: const Icon(
-                  Icons.bookmark_border_rounded,
-                  size: 24,
-                  color: Color(0xFF64748B),
-                ),
-                selectedIcon: const Icon(
-                  Icons.bookmark_rounded,
-                  size: 24,
-                  color: Color(0xFF1E88E5),
-                ),
-                label: 'ติดตาม',
-              ),
-              NavigationDestination(
-                icon: const Icon(
-                  Icons.person_outline,
-                  size: 24,
-                  color: Color(0xFF64748B),
-                ),
-                selectedIcon: const Icon(
-                  Icons.person,
-                  size: 24,
-                  color: Color(0xFF1E88E5),
-                ),
-                label: 'โปรไฟล์',
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -626,6 +644,79 @@ class _HomeTabState extends State<_HomeTab> {
       final homeState = context.findAncestorStateOfType<_HomeScreenState>();
       if (homeState != null) {
         homeState.setIndex(result);
+      }
+    }
+  }
+
+  Future<void> _toggleFollowShopFromCard(Shop shop) async {
+    final auth = Provider.of<AuthService>(context, listen: false);
+    final user = auth.currentUser;
+    if (user == null || user.userId == null) {
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'กรุณาเข้าสู่ระบบก่อนกดติดตามร้านค้า',
+            style: GoogleFonts.outfit(),
+          ),
+          backgroundColor: Colors.orangeAccent,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+    if (shop.shopId == null) return;
+
+    final isFollowed = _followedShops.any((f) => f.shopId == shop.shopId);
+    setState(() {
+      if (isFollowed) {
+        _followedShops.removeWhere((f) => f.shopId == shop.shopId);
+      } else {
+        _followedShops.add(shop);
+      }
+    });
+
+    final res = await ShopService.toggleFollowShop(
+      userId: user.userId!,
+      shopId: shop.shopId!,
+    );
+
+    if (mounted) {
+      if (res['status'] == true) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              res['message'] ?? (isFollowed ? 'ยกเลิกการติดตามเรียบร้อยแล้ว' : 'ติดตามร้านค้าเรียบร้อยแล้ว'),
+              style: GoogleFonts.outfit(),
+            ),
+            backgroundColor: isFollowed ? const Color(0xFF475569) : const Color(0xFF1E88E5),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+        _loadShops();
+      } else {
+        setState(() {
+          if (isFollowed) {
+            _followedShops.add(shop);
+          } else {
+            _followedShops.removeWhere((f) => f.shopId == shop.shopId);
+          }
+        });
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              res['message'] ?? 'เกิดข้อผิดพลาดในการดำเนินการ',
+              style: GoogleFonts.outfit(),
+            ),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+          ),
+        );
       }
     }
   }
@@ -1682,46 +1773,60 @@ class _HomeTabState extends State<_HomeTab> {
                             ),
                           ),
                           const SizedBox(width: 6),
-                          // Follower Count Badge (Blue when followed by user, Subtle Slate when not)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 9,
-                              vertical: 4.5,
-                            ),
-                            decoration: BoxDecoration(
-                              color: isFollowed
-                                  ? const Color(0xFF1E88E5)
-                                  : const Color(0xFF64748B),
-                              borderRadius: BorderRadius.circular(20),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: (isFollowed
-                                          ? const Color(0xFF1E88E5)
-                                          : const Color(0xFF64748B))
-                                      .withValues(alpha: 0.3),
-                                  blurRadius: 6,
-                                  offset: const Offset(0, 2),
+                          // Follow Status Button: Blue & "กำลังติดตาม" when followed, Slate & "ติดตาม" when not
+                          GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => _toggleFollowShopFromCard(shop),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4.5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: isFollowed
+                                    ? const Color(0xFF1E88E5)
+                                    : const Color(0xFF334155).withValues(alpha: 0.85),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: isFollowed
+                                      ? Colors.white.withValues(alpha: 0.35)
+                                      : Colors.white.withValues(alpha: 0.2),
+                                  width: 1,
                                 ),
-                              ],
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(
-                                  Icons.bookmark_rounded,
-                                  color: Colors.white,
-                                  size: 12,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  '${shop.followerCount}',
-                                  style: GoogleFonts.outfit(
-                                    color: Colors.white,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: (isFollowed
+                                            ? const Color(0xFF1E88E5)
+                                            : const Color(0xFF0F172A))
+                                        .withValues(alpha: 0.35),
+                                    blurRadius: 6,
+                                    offset: const Offset(0, 2),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    isFollowed
+                                        ? Icons.favorite_rounded
+                                        : Icons.favorite_border_rounded,
+                                    color: Colors.white,
+                                    size: 12,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    isFollowed ? 'กำลังติดตาม' : 'ติดตาม',
+                                    style: GoogleFonts.outfit(
+                                      color: Colors.white,
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.1,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ],
@@ -4543,23 +4648,7 @@ class _ProfileTabState extends State<_ProfileTab> {
                   },
                 ),
               ],
-              const SizedBox(height: 16),
-              _buildMenuItem(
-                icon: Icons.campaign_outlined,
-                title: 'ประกาศจากตลาด',
-                onTap: () {
-                  Navigator.pushNamed(context, '/announcements');
-                },
-              ),
-              const SizedBox(height: 16),
-              _buildMenuItem(
-                icon: Icons.notifications_outlined,
-                title: 'การแจ้งเตือน',
-                onTap: () {
-                  Navigator.pushNamed(context, '/notifications');
-                },
-              ),
-              const SizedBox(height: 48),
+              const SizedBox(height: 32),
 
               GestureDetector(
                 onTap: () {
@@ -4729,6 +4818,7 @@ class _FollowedTabState extends State<_FollowedTab> {
   Map<int, double> _shopRatings = {};
   bool _isLoading = true;
   String _searchQuery = '';
+  final TextEditingController _searchController = TextEditingController();
   String _selectedSort = 'latest'; // 'latest', 'rating', 'name'
   int _unreadNotificationCount = 0;
 
@@ -4737,6 +4827,12 @@ class _FollowedTabState extends State<_FollowedTab> {
     super.initState();
     _loadShops();
     _loadNotificationCount();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadNotificationCount() async {
@@ -4814,7 +4910,7 @@ class _FollowedTabState extends State<_FollowedTab> {
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const Icon(
-                Icons.bookmark_remove_rounded,
+                Icons.favorite_border_rounded,
                 color: Color(0xFF1E88E5),
                 size: 20,
               ),
@@ -4933,18 +5029,28 @@ class _FollowedTabState extends State<_FollowedTab> {
         }
       },
       borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5.5),
         decoration: BoxDecoration(
           color: isSelected
-              ? const Color(0xFF2563EB)
+              ? const Color(0xFF1E88E5)
               : const Color(0xFFF1F5F9),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: isSelected
-                ? const Color(0xFF2563EB)
+                ? const Color(0xFF1E88E5)
                 : const Color(0xFFE2E8F0),
           ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: const Color(0xFF1E88E5).withValues(alpha: 0.25),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
         ),
         child: Text(
           label,
@@ -4973,6 +5079,19 @@ class _FollowedTabState extends State<_FollowedTab> {
       }
     }
     return Row(mainAxisSize: MainAxisSize.min, children: stars);
+  }
+
+  Widget _buildItemPlaceholder() {
+    return Container(
+      color: const Color(0xFFF1F5F9),
+      child: const Center(
+        child: Icon(
+          Icons.storefront_rounded,
+          color: Color(0xFF94A3B8),
+          size: 32,
+        ),
+      ),
+    );
   }
 
   @override
@@ -5090,7 +5209,13 @@ class _FollowedTabState extends State<_FollowedTab> {
                 Container(
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(24),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: _searchQuery.isNotEmpty
+                          ? const Color(0xFF93C5FD)
+                          : const Color(0xFFE2E8F0),
+                      width: 1,
+                    ),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withValues(alpha: 0.03),
@@ -5100,19 +5225,33 @@ class _FollowedTabState extends State<_FollowedTab> {
                     ],
                   ),
                   child: TextField(
+                    controller: _searchController,
                     onChanged: (val) => setState(() => _searchQuery = val),
-                    style: GoogleFonts.outfit(color: Colors.black),
+                    style: GoogleFonts.outfit(color: const Color(0xFF0F172A)),
                     decoration: InputDecoration(
                       hintText: 'ค้นหาร้านค้าที่ติดตาม...',
                       hintStyle: GoogleFonts.outfit(
                         color: const Color(0xFF94A3B8),
-                        fontSize: 15,
+                        fontSize: 14.5,
                       ),
                       prefixIcon: const Icon(
-                        Icons.search,
+                        Icons.search_rounded,
                         color: Color(0xFF94A3B8),
                         size: 22,
                       ),
+                      suffixIcon: _searchQuery.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(
+                                Icons.clear_rounded,
+                                size: 18,
+                                color: Color(0xFF94A3B8),
+                              ),
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() => _searchQuery = '');
+                              },
+                            )
+                          : null,
                       border: InputBorder.none,
                       contentPadding: const EdgeInsets.symmetric(
                         vertical: 14,
@@ -5143,14 +5282,29 @@ class _FollowedTabState extends State<_FollowedTab> {
                       decoration: BoxDecoration(
                         color: const Color(0xFFEFF6FF),
                         borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        '${_shops.length} ร้านค้า',
-                        style: GoogleFonts.outfit(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: const Color(0xFF2563EB),
+                        border: Border.all(
+                          color: const Color(0xFFDBEAFE),
+                          width: 1,
                         ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.favorite_rounded,
+                            color: Color(0xFF1E88E5),
+                            size: 13,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${_shops.length} ร้านค้า',
+                            style: GoogleFonts.outfit(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.bold,
+                              color: const Color(0xFF1E88E5),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -5216,12 +5370,16 @@ class _FollowedTabState extends State<_FollowedTab> {
                               Container(
                                 width: 80,
                                 height: 80,
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFFEFF6FF),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFEFF6FF),
                                   shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: const Color(0xFFDBEAFE),
+                                    width: 1.5,
+                                  ),
                                 ),
                                 child: const Icon(
-                                  Icons.bookmark_border_rounded,
+                                  Icons.favorite_border_rounded,
                                   color: Color(0xFF1E88E5),
                                   size: 40,
                                 ),
@@ -5257,7 +5415,7 @@ class _FollowedTabState extends State<_FollowedTab> {
                                     homeState.setIndex(0);
                                   }
                                 },
-                                icon: const Icon(Icons.storefront, size: 18),
+                                icon: const Icon(Icons.storefront_rounded, size: 18),
                                 label: Text(
                                   'สำรวจร้านค้าในตลาด',
                                   style: GoogleFonts.outfit(
@@ -5271,8 +5429,9 @@ class _FollowedTabState extends State<_FollowedTab> {
                                     horizontal: 20,
                                     vertical: 12,
                                   ),
+                                  elevation: 0,
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
+                                    borderRadius: BorderRadius.circular(14),
                                   ),
                                 ),
                               ),
@@ -5293,132 +5452,84 @@ class _FollowedTabState extends State<_FollowedTab> {
                           return Container(
                             decoration: BoxDecoration(
                               color: Colors.white,
-                              borderRadius: BorderRadius.circular(16),
+                              borderRadius: BorderRadius.circular(18),
+                              border: Border.all(
+                                color: const Color(0xFFF1F5F9),
+                                width: 1.2,
+                              ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.04),
+                                  color: const Color(0xFF0F172A).withValues(alpha: 0.04),
                                   blurRadius: 10,
-                                  offset: const Offset(0, 4),
+                                  offset: const Offset(0, 3),
                                 ),
                               ],
                             ),
                             child: InkWell(
                               onTap: () => _navigateToShopDetail(shop),
-                              borderRadius: BorderRadius.circular(16),
+                              borderRadius: BorderRadius.circular(18),
                               child: Padding(
                                 padding: const EdgeInsets.all(12),
                                 child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
                                   children: [
-                                    // Shop Image Avatar with Heart Icon
-                                    Stack(
-                                      children: [
-                                        ClipRRect(
-                                          borderRadius: BorderRadius.circular(
-                                            14,
-                                          ),
-                                          child: SizedBox(
-                                            width: 68,
-                                            height: 68,
-                                            child:
-                                                shop.shopImage != null &&
-                                                    shop.shopImage!.isNotEmpty
-                                                ? (shop.shopImage!.startsWith(
-                                                        'http',
-                                                      )
-                                                      ? Image.network(
-                                                          shop.shopImage!,
-                                                          fit: BoxFit.cover,
-                                                        )
-                                                      : Image.network(
-                                                          ApiService.getImagePath(
-                                                            shop.shopImage,
-                                                          ),
-                                                          fit: BoxFit.cover,
-                                                        ))
-                                                : Container(
-                                                    color: const Color(
-                                                      0xFFF1F5F9,
+                                    // Shop Image Avatar
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(14),
+                                      child: SizedBox(
+                                        width: 72,
+                                        height: 72,
+                                        child: shop.shopImage != null &&
+                                                shop.shopImage!.isNotEmpty
+                                            ? (shop.shopImage!.startsWith('http')
+                                                ? Image.network(
+                                                    shop.shopImage!,
+                                                    fit: BoxFit.cover,
+                                                    errorBuilder: (_, _, _) =>
+                                                        _buildItemPlaceholder(),
+                                                  )
+                                                : Image.network(
+                                                    ApiService.getImagePath(
+                                                      shop.shopImage,
                                                     ),
-                                                    child: const Icon(
-                                                      Icons.storefront,
-                                                      color: Color(0xFF94A3B8),
-                                                      size: 32,
-                                                    ),
-                                                  ),
-                                          ),
-                                        ),
-                                        Positioned(
-                                          right: 2,
-                                          top: 2,
-                                          child: Container(
-                                            padding: const EdgeInsets.all(4),
-                                            decoration: const BoxDecoration(
-                                              color: Colors.white,
-                                              shape: BoxShape.circle,
-                                            ),
-                                            child: const Icon(
-                                              Icons.bookmark_rounded,
-                                              color: Color(0xFF1E88E5),
-                                              size: 14,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
+                                                    fit: BoxFit.cover,
+                                                    errorBuilder: (_, _, _) =>
+                                                        _buildItemPlaceholder(),
+                                                  ))
+                                            : _buildItemPlaceholder(),
+                                      ),
                                     ),
-                                    const SizedBox(width: 14),
+                                    const SizedBox(width: 12),
                                     // Shop Details Info
                                     Expanded(
                                       child: Column(
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
                                         children: [
                                           Text(
                                             shop.shopName,
                                             style: GoogleFonts.outfit(
-                                              fontSize: 16,
+                                              fontSize: 15.5,
                                               fontWeight: FontWeight.bold,
                                               color: const Color(0xFF0F172A),
                                             ),
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                           ),
-                                          const SizedBox(height: 4),
+                                          const SizedBox(height: 5),
                                           Wrap(
                                             spacing: 6,
                                             runSpacing: 4,
                                             crossAxisAlignment:
                                                 WrapCrossAlignment.center,
                                             children: [
-                                              if (shop.stallNumber != null &&
-                                                  shop.stallNumber!.isNotEmpty)
-                                                Container(
-                                                  padding:
-                                                      const EdgeInsets.symmetric(
-                                                    horizontal: 6,
-                                                    vertical: 2,
-                                                  ),
-                                                  decoration: BoxDecoration(
-                                                    color: const Color(
-                                                      0xFFEFF6FF),
-                                                    borderRadius:
-                                                        BorderRadius.circular(6),
-                                                  ),
-                                                  child: Text(
-                                                    'แผง ${shop.stallNumber}',
-                                                    style: GoogleFonts.outfit(
-                                                      fontSize: 10.5,
-                                                      fontWeight: FontWeight.bold,
-                                                      color: const Color(
-                                                        0xFF2563EB),
-                                                    ),
-                                                  ),
-                                                ),
                                               Container(
                                                 padding:
                                                     const EdgeInsets.symmetric(
-                                                      horizontal: 8,
-                                                      vertical: 2,
-                                                    ),
+                                                  horizontal: 7,
+                                                  vertical: 2.5,
+                                                ),
                                                 decoration: BoxDecoration(
                                                   color: const Color(
                                                     0xFFF1F5F9,
@@ -5439,11 +5550,37 @@ class _FollowedTabState extends State<_FollowedTab> {
                                                   overflow: TextOverflow.ellipsis,
                                                 ),
                                               ),
+                                              if (shop.stallNumber != null &&
+                                                  shop.stallNumber!.isNotEmpty)
+                                                Container(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                    horizontal: 6,
+                                                    vertical: 2.5,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(
+                                                      0xFFEEF2FF,
+                                                    ),
+                                                    borderRadius:
+                                                      BorderRadius.circular(6),
+                                                  ),
+                                                  child: Text(
+                                                    'แผง ${shop.stallNumber}',
+                                                    style: GoogleFonts.outfit(
+                                                      fontSize: 10.5,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: const Color(
+                                                        0xFF4F46E5,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
                                               Row(
                                                 mainAxisSize: MainAxisSize.min,
                                                 children: [
                                                   _buildRatingStars(rating),
-                                                  const SizedBox(width: 4),
+                                                  const SizedBox(width: 3.5),
                                                   Text(
                                                     rating.toStringAsFixed(1),
                                                     style: GoogleFonts.outfit(
@@ -5460,7 +5597,7 @@ class _FollowedTabState extends State<_FollowedTab> {
                                           ),
                                           if (shop.description != null &&
                                               shop.description!.isNotEmpty) ...[
-                                            const SizedBox(height: 4),
+                                            const SizedBox(height: 4.5),
                                             Text(
                                               shop.description!,
                                               style: GoogleFonts.outfit(
@@ -5474,18 +5611,53 @@ class _FollowedTabState extends State<_FollowedTab> {
                                         ],
                                       ),
                                     ),
-                                    // Unfollow Button Action
-                                    IconButton(
-                                      icon: const Icon(
-                                        Icons.bookmark_remove_rounded,
-                                        color: Color(0xFF1E88E5),
-                                        size: 22,
+                                    const SizedBox(width: 8),
+                                    // "กำลังติดตาม" Action Button in Blue
+                                    GestureDetector(
+                                      behavior: HitTestBehavior.opaque,
+                                      onTap: () => _unfollowShop(shop),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 5.5,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFEFF6FF),
+                                          borderRadius:
+                                              BorderRadius.circular(20),
+                                          border: Border.all(
+                                            color: const Color(0xFFBFDBFE),
+                                            width: 1.2,
+                                          ),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: const Color(0xFF1E88E5)
+                                                  .withValues(alpha: 0.08),
+                                              blurRadius: 4,
+                                              offset: const Offset(0, 2),
+                                            ),
+                                          ],
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Icon(
+                                              Icons.favorite_rounded,
+                                              color: Color(0xFF1E88E5),
+                                              size: 13,
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              'กำลังติดตาม',
+                                              style: GoogleFonts.outfit(
+                                                color: const Color(0xFF1E88E5),
+                                                fontSize: 11.5,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
-                                      tooltip: 'ยกเลิกการติดตาม',
-                                      visualDensity: VisualDensity.compact,
-                                      padding: const EdgeInsets.all(6),
-                                      constraints: const BoxConstraints(),
-                                      onPressed: () => _unfollowShop(shop),
                                     ),
                                   ],
                                 ),

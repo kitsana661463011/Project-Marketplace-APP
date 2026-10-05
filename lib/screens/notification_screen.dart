@@ -16,7 +16,51 @@ class NotificationScreen extends StatefulWidget {
 class _NotificationScreenState extends State<NotificationScreen> {
   List<AppNotification> _notifications = [];
   bool _isLoading = true;
-  String _selectedFilter = 'all'; // all, booking, seller, refund, problem
+  String _selectedFilter = 'all'; // all, booking, seller, refund, problem, announcement
+
+  static const List<Map<String, dynamic>> _filterCategories = [
+    {
+      'key': 'all',
+      'label': 'ทั้งหมด',
+      'icon': Icons.all_inbox_rounded,
+      'color': Color(0xFF2563EB),
+    },
+    {
+      'key': 'booking',
+      'label': 'การจองแผงค้า',
+      'icon': Icons.store_rounded,
+      'color': Color(0xFF059669),
+    },
+    {
+      'key': 'seller',
+      'label': 'ผลสมัครผู้ค้า',
+      'icon': Icons.storefront_rounded,
+      'color': Color(0xFF2563EB),
+    },
+    {
+      'key': 'refund',
+      'label': 'การโอนเงินคืน',
+      'icon': Icons.account_balance_wallet_rounded,
+      'color': Color(0xFF0284C7),
+    },
+    {
+      'key': 'problem',
+      'label': 'การแจ้งปัญหา',
+      'icon': Icons.report_problem_rounded,
+      'color': Color(0xFFEA580C),
+    },
+    {
+      'key': 'announcement',
+      'label': 'ประกาศตลาด',
+      'icon': Icons.campaign_rounded,
+      'color': Color(0xFF7C3AED),
+    },
+  ];
+
+  int _getCountForFilter(String key) {
+    if (key == 'all') return _notifications.length;
+    return _notifications.where((n) => n.type == key).length;
+  }
 
   @override
   void initState() {
@@ -440,28 +484,214 @@ class _NotificationScreenState extends State<NotificationScreen> {
       ),
       body: Column(
         children: [
-          // Filter Chips
+          // Filter Bar (1-Tap Dropdown)
           Container(
             color: Colors.white,
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              physics: const BouncingScrollPhysics(),
-              child: Row(
-                children: [
-                  _buildFilterChip('all', 'ทั้งหมด', Icons.all_inbox_rounded),
-                  const SizedBox(width: 8),
-                  _buildFilterChip('booking', 'การจองแผงค้า', Icons.store_rounded),
-                  const SizedBox(width: 8),
-                  _buildFilterChip('seller', 'ผลสมัครผู้ค้า', Icons.storefront_rounded),
-                  const SizedBox(width: 8),
-                  _buildFilterChip('refund', 'การโอนเงินคืน', Icons.account_balance_wallet_rounded),
-                  const SizedBox(width: 8),
-                  _buildFilterChip('problem', 'การแจ้งปัญหา', Icons.report_problem_rounded),
-                  const SizedBox(width: 8),
-                  _buildFilterChip('announcement', 'ประกาศตลาด', Icons.campaign_rounded),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                // Filter Dropdown
+                Expanded(
+                  child: Container(
+                    height: 46,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: _selectedFilter != 'all'
+                          ? const Color(0xFFEFF6FF)
+                          : const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: _selectedFilter != 'all'
+                            ? const Color(0xFF93C5FD)
+                            : const Color(0xFFE2E8F0),
+                        width: 1.2,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.02),
+                          blurRadius: 4,
+                          offset: const Offset(0, 1),
+                        ),
+                      ],
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: _selectedFilter,
+                        isExpanded: true,
+                        icon: const Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          color: Color(0xFF2563EB),
+                          size: 22,
+                        ),
+                        dropdownColor: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        elevation: 6,
+                        selectedItemBuilder: (BuildContext context) {
+                          return _filterCategories.map<Widget>((cat) {
+                            final String key = cat['key'] as String;
+                            final String label = cat['label'] as String;
+                            final IconData icon = cat['icon'] as IconData;
+                            final Color color = cat['color'] as Color;
+                            final int count = _getCountForFilter(key);
+
+                            return Row(
+                              children: [
+                                Container(
+                                  width: 28,
+                                  height: 28,
+                                  decoration: BoxDecoration(
+                                    color: color.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(7),
+                                  ),
+                                  child: Icon(icon, color: color, size: 16),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    label,
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.bold,
+                                      color: const Color(0xFF0F172A),
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 7,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: color.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    '$count',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: color,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            );
+                          }).toList();
+                        },
+                        items: _filterCategories.map((cat) {
+                          final String key = cat['key'] as String;
+                          final String label = cat['label'] as String;
+                          final IconData icon = cat['icon'] as IconData;
+                          final Color color = cat['color'] as Color;
+                          final int count = _getCountForFilter(key);
+                          final bool isItemActive = _selectedFilter == key;
+
+                          return DropdownMenuItem<String>(
+                            value: key,
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 32,
+                                  height: 32,
+                                  decoration: BoxDecoration(
+                                    color: color.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Icon(icon, color: color, size: 17),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    label,
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 13.5,
+                                      fontWeight: isItemActive
+                                          ? FontWeight.bold
+                                          : FontWeight.w500,
+                                      color: isItemActive
+                                          ? const Color(0xFF0F172A)
+                                          : const Color(0xFF334155),
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 2.5,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isItemActive
+                                        ? color.withValues(alpha: 0.15)
+                                        : const Color(0xFFF1F5F9),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    '$count',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.bold,
+                                      color: isItemActive
+                                          ? color
+                                          : const Color(0xFF64748B),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (newVal) {
+                          if (newVal != null) {
+                            setState(() => _selectedFilter = newVal);
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+
+                // Clear Filter Button (shown when a specific category is chosen)
+                if (_selectedFilter != 'all') ...[
+                  const SizedBox(width: 10),
+                  InkWell(
+                    onTap: () => setState(() => _selectedFilter = 'all'),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      height: 46,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEE2E2),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFFCA5A5)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.close_rounded,
+                            size: 16,
+                            color: Color(0xFFDC2626),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'ล้าง',
+                            style: GoogleFonts.outfit(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.bold,
+                              color: const Color(0xFFDC2626),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ],
-              ),
+              ],
             ),
           ),
           const Divider(height: 1, color: Color(0xFFE2E8F0)),
@@ -496,43 +726,6 @@ class _NotificationScreenState extends State<NotificationScreen> {
     );
   }
 
-  Widget _buildFilterChip(String key, String label, IconData icon) {
-    final isSelected = _selectedFilter == key;
-    return GestureDetector(
-      onTap: () => setState(() => _selectedFilter = key),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF2563EB) : const Color(0xFFF1F5F9),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isSelected ? const Color(0xFF2563EB) : const Color(0xFFE2E8F0),
-            width: 1,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 15,
-              color: isSelected ? Colors.white : const Color(0xFF475569),
-            ),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: GoogleFonts.outfit(
-                fontSize: 13,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                color: isSelected ? Colors.white : const Color(0xFF334155),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _buildNotificationCard(AppNotification notif) {
     final cleanMsg = _cleanMessage(notif.message);
