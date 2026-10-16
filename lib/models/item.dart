@@ -45,8 +45,12 @@ class Item {
     }
 
     return Item(
-      itemId: json['item_id'],
-      shopId: json['shop_id'],
+      itemId: json['item_id'] is int
+          ? json['item_id'] as int
+          : int.tryParse(json['item_id']?.toString() ?? ''),
+      shopId: json['shop_id'] is int
+          ? json['shop_id'] as int
+          : int.tryParse(json['shop_id']?.toString() ?? ''),
       itemName: json['item_name'] ?? '',
       price: (() {
         final raw = json['price'];
@@ -58,7 +62,9 @@ class Item {
       description: json['description'],
       itemImage: json['item_image'],
       images: parsedImages,
-      categoryId: json['category_id'],
+      categoryId: json['category_id'] is int
+          ? json['category_id'] as int
+          : int.tryParse(json['category_id']?.toString() ?? ''),
       shop: json['shop'] != null
           ? Map<String, dynamic>.from(json['shop'])
           : null,

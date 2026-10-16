@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -75,6 +76,9 @@ class MarketMapScreenState extends State<MarketMapScreen>
   double? _lastBaseScale;
   double? _lastMinX;
   double? _lastMinY;
+  double? _lastContentW;
+  double? _lastContentH;
+  bool _hasFittedInitialView = false;
   model.MarketMapItem? _pendingFocusItem;
 
   // Filters
@@ -157,6 +161,7 @@ class MarketMapScreenState extends State<MarketMapScreen>
     setState(() {
       _isLoading = true;
       _error = null;
+      _hasFittedInitialView = false;
     });
     try {
       final results = await Future.wait([
@@ -273,6 +278,7 @@ class MarketMapScreenState extends State<MarketMapScreen>
     }
 
     if (matchedItem != null) {
+      _hasFittedInitialView = true;
       setState(() {
         _selectedItem = matchedItem;
         _filterStatus = 'all';
@@ -1294,26 +1300,85 @@ class MarketMapScreenState extends State<MarketMapScreen>
     );
   }
 
+  Matrix4 _calculateFitMatrix(
+    Size screenSize,
+    double contentW,
+    double contentH,
+  ) {
+    const double margin = 24.0;
+    const double screenPadding = 16.0;
+
+    final double totalW = contentW + (margin * 2);
+    final double totalH = contentH + (margin * 2);
+
+    final double availW = screenSize.width - (screenPadding * 2);
+    final double availH = screenSize.height - (screenPadding * 2);
+
+    if (availW <= 0 || availH <= 0 || totalW <= 0 || totalH <= 0) {
+      return Matrix4.identity();
+    }
+
+    final double scaleX = availW / totalW;
+    final double scaleY = availH / totalH;
+    final double fitScale = math.min(scaleX, scaleY).clamp(0.05, 1.0);
+
+    final double fittedW = totalW * fitScale;
+    final double fittedH = totalH * fitScale;
+
+    final double tx = (screenSize.width - fittedW) / 2.0;
+    final double ty = (screenSize.height - fittedH) / 2.0;
+
+    return Matrix4.identity()
+      ..scaleByDouble(fitScale, fitScale, 1.0, 1.0)
+      ..setTranslationRaw(tx, ty, 0.0);
+  }
+
+  void _zoomBy(double factor) {
+    if (_lastScreenSize == null) return;
+    final screenW = _lastScreenSize!.width;
+    final screenH = _lastScreenSize!.height;
+    final cx = screenW / 2;
+    final cy = screenH / 2;
+
+    final current = _transformationController.value;
+    final s = current.getMaxScaleOnAxis();
+    if (s <= 0) return;
+    final tx = current.storage[12];
+    final ty = current.storage[13];
+
+    final newScale = (s * factor).clamp(0.05, 5.0);
+    final actualFactor = newScale / s;
+    final newTx = cx - actualFactor * (cx - tx);
+    final newTy = cy - actualFactor * (cy - ty);
+
+    final target = Matrix4.identity()
+      ..scaleByDouble(newScale, newScale, 1.0, 1.0)
+      ..setTranslationRaw(newTx, newTy, 0.0);
+
+    _animateToMatrix(target);
+  }
+
   void _zoomIn() {
-    final Matrix4 updated = Matrix4.copy(_transformationController.value)
-      ..scaledByDouble(1.25, 0, 0, 1);
-    setState(() {
-      _transformationController.value = updated;
-    });
+    _zoomBy(1.3);
   }
 
   void _zoomOut() {
-    final Matrix4 updated = Matrix4.copy(_transformationController.value)
-      ..scaledByDouble(0.8, 0, 0, 1);
-    setState(() {
-      _transformationController.value = updated;
-    });
+    _zoomBy(0.77);
   }
 
   void _resetZoom() {
-    setState(() {
-      _transformationController.value = Matrix4.identity();
-    });
+    if (_lastScreenSize != null &&
+        _lastContentW != null &&
+        _lastContentH != null) {
+      final fitMatrix = _calculateFitMatrix(
+        _lastScreenSize!,
+        _lastContentW!,
+        _lastContentH!,
+      );
+      _animateToMatrix(fitMatrix);
+    } else {
+      _animateToMatrix(Matrix4.identity());
+    }
   }
 
   void _animateToMatrix(Matrix4 target) {
@@ -2684,6 +2749,7 @@ class MarketMapScreenState extends State<MarketMapScreen>
     }
 
     if (matchedItem != null) {
+      _hasFittedInitialView = true;
       setState(() {
         _selectedItem = matchedItem;
         _filterStatus = 'all';
@@ -3324,10 +3390,8 @@ class MarketMapScreenState extends State<MarketMapScreen>
         final screenW = constraints.maxWidth;
         final screenH = constraints.maxHeight;
 
-        // Scale dynamically so stalls are comfortably sized and clearly readable on mobile
-        double baseScale = (screenW * 1.65) / rawW;
-        if (baseScale < 0.95) baseScale = 0.95;
-        if (baseScale > 2.5) baseScale = 2.5;
+        // Base 1:1 scale preserves natural stall proportions, crisp text, and icon spacing
+        const double baseScale = 1.0;
 
         final contentW = rawW * baseScale;
         final contentH = rawH * baseScale;
@@ -3336,10 +3400,20 @@ class MarketMapScreenState extends State<MarketMapScreen>
         _lastBaseScale = baseScale;
         _lastMinX = minX;
         _lastMinY = minY;
+        _lastContentW = contentW;
+        _lastContentH = contentH;
+
+        final fitMatrix = _calculateFitMatrix(
+          Size(screenW, screenH),
+          contentW,
+          contentH,
+        );
+        final fitScale = fitMatrix.getMaxScaleOnAxis();
 
         if (_pendingFocusItem != null) {
           final itemToFocus = _pendingFocusItem!;
           _pendingFocusItem = null;
+          _hasFittedInitialView = true;
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
               _animateToStall(itemToFocus);
@@ -3351,6 +3425,9 @@ class MarketMapScreenState extends State<MarketMapScreen>
               });
             }
           });
+        } else if (!_hasFittedInitialView && _targetStallNum == null) {
+          _hasFittedInitialView = true;
+          _transformationController.value = fitMatrix;
         }
 
         return Stack(
@@ -3361,13 +3438,10 @@ class MarketMapScreenState extends State<MarketMapScreen>
               constrained: false,
               panEnabled: true,
               scaleEnabled: true,
-              minScale: 0.35,
-              maxScale: 4.5,
+              minScale: math.min(0.08, fitScale * 0.65),
+              maxScale: 5.0,
               onInteractionStart: (_) => _hideSearchOverlay(),
-              boundaryMargin: EdgeInsets.symmetric(
-                horizontal: screenW * 0.5,
-                vertical: screenH * 0.5,
-              ),
+              boundaryMargin: const EdgeInsets.all(double.infinity),
               child: Container(
                 width: contentW,
                 height: contentH,

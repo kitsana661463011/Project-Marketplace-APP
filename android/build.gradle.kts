@@ -25,6 +25,7 @@ subprojects {
             if (project.hasProperty("android")) {
                 project.extensions.configure<com.android.build.gradle.BaseExtension>("android") {
                     compileSdkVersion(36)
+                    ndkVersion = "25.1.8937393"
                 }
             }
         }
